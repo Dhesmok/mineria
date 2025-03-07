@@ -5,11 +5,10 @@ import proj4List from 'proj4-list'
 import shpwrite from 'shp-write'
 
 // Define the coordinate systems
-proj4.defs([
-  proj4List["EPSG:4326"],
-  proj4List["EPSG:4686"],
-  proj4List["EPSG:9377"]
-]);
+proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+proj4.defs("EPSG:4686", "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs");
+proj4.defs("EPSG:9377", "+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+
 
 const URLS = [
   'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3',
@@ -279,3 +278,4 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
     </div>
   )
 }
+  
