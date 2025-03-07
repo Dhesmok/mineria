@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Interactivo ANM</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        #map {
+            width: 100%;
+            height: 600px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Mapa Interactivo ANM</h1>
+<p>Introduce el código del expediente en mayúscula:</p>
+<input type="text" id="tenure_id" placeholder="Código de Expediente">
+<button onclick="cargarMapa()">Cargar Mapa</button>
+
+<div id="map"></div>
+<div id="table-container"></div>
+
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script>
+    function cargarMapa() {
+        const tenureId = document.getElementById('tenure_id').value.toUpperCase();
+        if (!tenureId) {
+            alert("Por favor, introduce un código de expediente.");
+            return;
+        }
+
+        const url = "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3/query";
+        const params = new URLSearchParams({
+            where: `TENURE_ID='${tenureId}'`,
+            outFields: "*",
+            returnGeometry: "true",
+            f: "geojson"
+        });
+
+        fetch(`${url}?${params}`)
+            .then(response => response.json())
+            .then(data => {
+                const map = L.map('map').setView([4, -72], 5);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+
+                const features = data.features;
+                if (features.length === 0) {
+                    alert(`No se encontró un polígono con el expediente introducido '${tenureId}'.`);
+                    return;
+                }
+
+                const geoJsonLayer = L.geoJSON(features, {
+                    style: {
+                        color: "black",
+                        weight: 2,
+                        fillColor: "#A46F48",
+                        fillOpacity: 0.6
+                    }
+                }).addTo(map);
+
+                map.fitBounds(geoJsonLayer.getBounds());
+
+                // Crear la tabla de vértices
+                const tableContainer = document.getElementById('table-container');
+                tableContainer.innerHTML = "<h2>Coordenadas de los Vértices</h2>";
+                let tableHTML = "<table><thead><tr><th>Vértice</th><th>Latitud</th><th>Longitud</th></tr></thead><tbody>";
+
+                features.forEach((feature, index) => {
+                    const coordinates = feature.geometry.coordinates[0];
+                    coordinates.forEach((coord, i) => {
+                        tableHTML += `<tr><td>${i + 1}</td><td>${coord[1].toFixed(5)}</td><td>${coord[0].toFixed(5)}</td></tr>`;
+                    });
+                });
+
+                tableHTML += "</tbody></table>";
+                tableContainer.innerHTML += tableHTML;
+            })
+            .catch(error => {
+                console.error('Error al obtener los datos:', error);
+                alert("Error al obtener los datos.");
+            });
+    }
+</script>
+
+</body>
+</html>
