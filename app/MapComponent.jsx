@@ -29,6 +29,8 @@ export default function MapComponent({
   const verticesLayerRef = useRef(null)
   const titleLayerRef = useRef(null)
   const requestLayerRef = useRef(null)
+  const titleOpacityRef = useRef(titleOpacity)
+  const requestOpacityRef = useRef(requestOpacity)
   const lastSearchTriggerRef = useRef(0)
   const labelsLayerRef = useRef(null)
   const titleLabelsLayerRef = useRef(null)
@@ -42,6 +44,14 @@ export default function MapComponent({
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const layerNumbersCacheRef = useRef(null)
+
+  useEffect(() => {
+    titleOpacityRef.current = titleOpacity
+  }, [titleOpacity])
+
+  useEffect(() => {
+    requestOpacityRef.current = requestOpacity
+  }, [requestOpacity])
 
   // Determinar si las capas deben mostrarse teniendo en cuenta el valor
   // proveniente de los controles y la opacidad configurada
@@ -227,8 +237,8 @@ export default function MapComponent({
       //   }
       // }, [drawingColor])
 
-      // Manejamos la visibilidad de las etiquetas según el zoom
-      mapInstanceLocal.on("zoomend", () => {
+      // Manejamos la visibilidad de las etiquetas y la opacidad según el zoom
+      const handleZoom = () => {
         const currentZoom = mapInstanceLocal.getZoom()
         const labelsLayers = [labelsLayerRef.current, titleLabelsLayerRef.current, requestLabelsLayerRef.current]
         labelsLayers.forEach((layer) => {
@@ -244,7 +254,16 @@ export default function MapComponent({
             }
           }
         })
-      })
+
+        if (titleLayerRef.current) {
+          titleLayerRef.current.setStyle({ fillOpacity: titleOpacityRef.current })
+        }
+        if (requestLayerRef.current) {
+          requestLayerRef.current.setStyle({ fillOpacity: requestOpacityRef.current })
+        }
+      }
+
+      mapInstanceLocal.on("zoomend", handleZoom)
 
       mapRef.current = mapInstanceLocal
 
@@ -304,6 +323,9 @@ export default function MapComponent({
       labelsLayerRef.current = null
       titleLabelsLayerRef.current = null
       requestLabelsLayerRef.current = null
+      if (mapInstanceLocal) {
+        mapInstanceLocal.off("zoomend", handleZoom)
+      }
     }
   }, [onMapInitialized])
 
