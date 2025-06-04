@@ -457,10 +457,16 @@ export default function MapComponent({
     if (type === "Polygon") {
       // polylabel necesita un array de anillos: [exterior, agujeros...]
       // 'coordinates' ya es algo así: [ [ [x,y], [x,y],...], [ [x,y],...], ...]
-      // El segundo parámetro (1.0) es la precisión; a menor valor, más preciso pero más lento.
-      let bestPoint = polylabel(coordinates, 1.0)
+      // Usamos mayor precisión (0.1) para minimizar la probabilidad
+      // de que el punto caiga cerca del borde
+      let bestPoint = polylabel(coordinates, 0.1)
       // Aseguramos que realmente esté dentro del polígono
-      if (!turf.booleanPointInPolygon(turf.point(bestPoint), turf.polygon(coordinates))) {
+      if (
+        !turf.booleanPointInPolygon(
+          turf.point(bestPoint),
+          turf.polygon(coordinates),
+        )
+      ) {
         // polylabel debería estar dentro, pero si por alguna razón no lo está,
         // usamos un punto garantizado dentro del polígono
         bestPoint = turf.pointOnFeature(feature).geometry.coordinates
@@ -474,7 +480,16 @@ export default function MapComponent({
       let polygonForBestPoint = null
       for (const polygonCoords of coordinates) {
         // 'polygonCoords' es un array de anillos para ese polígono
-        const labelPoint = polylabel(polygonCoords, 1.0)
+        let labelPoint = polylabel(polygonCoords, 0.1)
+        // Verificamos que el punto obtenido esté realmente dentro del polígono
+        if (
+          !turf.booleanPointInPolygon(
+            turf.point(labelPoint),
+            turf.polygon(polygonCoords),
+          )
+        ) {
+          labelPoint = turf.pointOnFeature(turf.polygon(polygonCoords)).geometry.coordinates
+        }
         // Calculamos el área para ver cuál polígono es más grande
         const area = turf.area(turf.polygon(polygonCoords))
         if (area > largestArea) {
