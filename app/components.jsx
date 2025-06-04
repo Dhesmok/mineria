@@ -244,8 +244,8 @@ export default function Component() {
           <Button onClick={handleApply} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
             Aplicar
           </Button>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
               <Label htmlFor="titleLayer" className="text-sm">
                 Títulos Vigentes
               </Label>
@@ -260,7 +260,7 @@ export default function Component() {
                 className="w-32"
               />
             </div>
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-2">
               <Label htmlFor="requestLayer" className="text-sm">
                 Solicitudes Vigentes
               </Label>
