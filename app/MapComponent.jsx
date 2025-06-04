@@ -88,7 +88,7 @@ export default function MapComponent({
       })
 
       // Capa satelital
-      const satelliteLayer = L.tileLayer("http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
+      const satelliteLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
         maxZoom: 20,
         subdomains: ["mt0", "mt1", "mt2", "mt3"],
         attribution: "© Google",
@@ -706,7 +706,7 @@ export default function MapComponent({
     })
 
     if (baseLayer === "osm") {
-      L.tileLayer("http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}", {
+      L.tileLayer("https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}", {
         maxZoom: 22,
         subdomains: ["mt0", "mt1", "mt2", "mt3"],
         attribution: "© Google",
