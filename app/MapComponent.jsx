@@ -48,7 +48,6 @@ export default function MapComponent({
   const shouldShowTitleLayer = showTitleLayer && titleOpacity > 0
   const shouldShowRequestLayer = showRequestLayer && requestOpacity > 0
 
-
   // Función para formatear fechas
   const formatDate = (value) => {
     if (!value) {
@@ -705,6 +704,7 @@ export default function MapComponent({
     }
 
     try {
+
       updateLayer(
         shouldShowTitleLayer,
         titleLayerRef,
@@ -731,12 +731,14 @@ export default function MapComponent({
         },
       )
 
+
       // Forzamos que Leaflet refresque la vista
       mapRef.current.invalidateSize()
     } catch (error) {
       console.error("Error al actualizar las capas:", error)
       setError("Error al actualizar las capas del mapa")
     }
+
   }, [
     mapInstance,
     shouldShowTitleLayer,
@@ -745,6 +747,7 @@ export default function MapComponent({
     requestOpacity,
     findLayerNumbers,
   ])
+
 
 
   // Alternar entre capa base OSM y Satélite
