@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import dynamic from "next/dynamic"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
 import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight } from "lucide-react"
@@ -40,8 +39,8 @@ export default function Component() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const inputRef = useRef(null)
-  const [showTitleLayer, setShowTitleLayer] = useState(false)
-  const [showRequestLayer, setShowRequestLayer] = useState(false)
+  const [titleOpacity, setTitleOpacity] = useState(0.6)
+  const [requestOpacity, setRequestOpacity] = useState(0.7)
 
   const handleApply = useCallback(() => {
     if (!expedientCode) {
@@ -245,18 +244,36 @@ export default function Component() {
           <Button onClick={handleApply} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
             Aplicar
           </Button>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
               <Label htmlFor="titleLayer" className="text-sm">
                 Títulos Vigentes
               </Label>
-              <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
+              <input
+                id="titleLayer"
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={titleOpacity}
+                onChange={(e) => setTitleOpacity(parseFloat(e.target.value))}
+                className="w-32"
+              />
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <Label htmlFor="requestLayer" className="text-sm">
-                Solicitudes Vigente
+                Solicitudes Vigentes
               </Label>
-              <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
+              <input
+                id="requestLayer"
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={requestOpacity}
+                onChange={(e) => setRequestOpacity(parseFloat(e.target.value))}
+                className="w-32"
+              />
             </div>
           </div>
 
@@ -295,8 +312,8 @@ export default function Component() {
           onCoordinatesUpdate={handleCoordinatesUpdate}
           searchTrigger={searchTrigger}
           onMapInitialized={handleMapInitialized}
-          showTitleLayer={showTitleLayer}
-          showRequestLayer={showRequestLayer}
+          titleOpacity={titleOpacity}
+          requestOpacity={requestOpacity}
         />
         {!showSidebar && (
           <Button
