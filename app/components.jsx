@@ -266,7 +266,8 @@ export default function Component() {
                 step="0.1"
                 value={titleOpacity}
                 onChange={(e) => setTitleOpacity(parseFloat(e.target.value))}
-                className="w-32"
+                className="flex-1"
+
               />
               <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
             </div>
