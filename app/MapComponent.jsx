@@ -42,8 +42,9 @@ export default function MapComponent({
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
 
-  const showTitleLayer = titleOpacity > 0
-  const showRequestLayer = requestOpacity > 0
+  // Determinar si las capas deben mostrarse según su opacidad
+  const shouldShowTitleLayer = titleOpacity > 0
+  const shouldShowRequestLayer = requestOpacity > 0
 
   // Función para formatear fechas
   const formatDate = (value) => {
@@ -695,14 +696,14 @@ export default function MapComponent({
     }
 
     try {
-      updateLayer(showTitleLayer, titleLayerRef, titleLabelsLayerRef, "Título Vigente", {
+      updateLayer(shouldShowTitleLayer, titleLayerRef, titleLabelsLayerRef, "Título Vigente", {
         color: "#894444",
         weight: 2,
         fillColor: "#A46F48",
         fillOpacity: titleOpacity,
       })
 
-      updateLayer(showRequestLayer, requestLayerRef, requestLabelsLayerRef, "Solicitud Vigente", {
+      updateLayer(shouldShowRequestLayer, requestLayerRef, requestLabelsLayerRef, "Solicitud Vigente", {
         color: "#F0C567",
         weight: 2,
         fillColor: "#FFF0AF",
@@ -715,7 +716,7 @@ export default function MapComponent({
       console.error("Error al actualizar las capas:", error)
       setError("Error al actualizar las capas del mapa")
     }
-  }, [showTitleLayer, showRequestLayer, titleOpacity, requestOpacity, findLayerNumbers])
+  }, [shouldShowTitleLayer, shouldShowRequestLayer, titleOpacity, requestOpacity, findLayerNumbers])
 
 
   // Alternar entre capa base OSM y Satélite
