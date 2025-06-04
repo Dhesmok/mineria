@@ -449,14 +449,20 @@ export default function MapComponent({
       // polylabel necesita un array de anillos: [exterior, agujeros...]
       // 'coordinates' ya es algo así: [ [ [x,y], [x,y],...], [ [x,y],...], ...]
       // El segundo parámetro (1.0) es la precisión; a menor valor, más preciso pero más lento.
-      const bestPoint = polylabel(coordinates, 1.0)
-      // polylabel retorna [x, y]
+      let bestPoint = polylabel(coordinates, 1.0)
+      // Aseguramos que realmente esté dentro del polígono
+      if (!turf.booleanPointInPolygon(turf.point(bestPoint), turf.polygon(coordinates))) {
+        // polylabel debería estar dentro, pero si por alguna razón no lo está,
+        // usamos un punto garantizado dentro del polígono
+        bestPoint = turf.pointOnFeature(feature).geometry.coordinates
+      }
       return bestPoint // [long, lat]
     } else if (type === "MultiPolygon") {
       // Podríamos calcular la etiqueta para cada polígono y elegir el de mayor área,
       // o simplemente tomar el primero. Aquí tomamos el de mayor área.
       let largestArea = 0
       let bestOverallPoint = [0, 0]
+      let polygonForBestPoint = null
       for (const polygonCoords of coordinates) {
         // 'polygonCoords' es un array de anillos para ese polígono
         const labelPoint = polylabel(polygonCoords, 1.0)
@@ -465,7 +471,17 @@ export default function MapComponent({
         if (area > largestArea) {
           largestArea = area
           bestOverallPoint = labelPoint
+          polygonForBestPoint = polygonCoords
         }
+      }
+      if (
+        polygonForBestPoint &&
+        !turf.booleanPointInPolygon(
+          turf.point(bestOverallPoint),
+          turf.polygon(polygonForBestPoint),
+        )
+      ) {
+        bestOverallPoint = turf.pointOnFeature(feature).geometry.coordinates
       }
       return bestOverallPoint
     }
