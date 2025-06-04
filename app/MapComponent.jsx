@@ -41,10 +41,12 @@ export default function MapComponent({
   const [drawingColor, setDrawingColor] = useState("#f357a1")
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
+  const layerNumbersCacheRef = useRef(null)
 
-  // Determinar si las capas deben mostrarse según su opacidad
-  const shouldShowTitleLayer = titleOpacity > 0
-  const shouldShowRequestLayer = requestOpacity > 0
+  // Determinar si las capas deben mostrarse teniendo en cuenta el valor
+  // proveniente de los controles y la opacidad configurada
+  const shouldShowTitleLayer = showTitleLayer && titleOpacity > 0
+  const shouldShowRequestLayer = showRequestLayer && requestOpacity > 0
 
   // Función para formatear fechas
   const formatDate = (value) => {
@@ -419,7 +421,12 @@ export default function MapComponent({
 
   // Función para buscar los números de capa
   const findLayerNumbers = useCallback(async () => {
-    const baseUrl = "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer"
+    if (layerNumbersCacheRef.current) {
+      return layerNumbersCacheRef.current
+    }
+
+    const baseUrl =
+      "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer"
     const layerNames = ["Solicitud Vigente", "Título Vigente"]
     const foundLayers = {}
 
@@ -435,6 +442,7 @@ export default function MapComponent({
       }
     }
 
+    layerNumbersCacheRef.current = foundLayers
     return foundLayers
   }, [])
 
@@ -696,19 +704,33 @@ export default function MapComponent({
     }
 
     try {
-      updateLayer(shouldShowTitleLayer, titleLayerRef, titleLabelsLayerRef, "Título Vigente", {
-        color: "#894444",
-        weight: 2,
-        fillColor: "#A46F48",
-        fillOpacity: titleOpacity,
-      })
 
-      updateLayer(shouldShowRequestLayer, requestLayerRef, requestLabelsLayerRef, "Solicitud Vigente", {
-        color: "#F0C567",
-        weight: 2,
-        fillColor: "#FFF0AF",
-        fillOpacity: requestOpacity,
-      })
+      updateLayer(
+        shouldShowTitleLayer,
+        titleLayerRef,
+        titleLabelsLayerRef,
+        "Título Vigente",
+        {
+          color: "#894444",
+          weight: 2,
+          fillColor: "#A46F48",
+          fillOpacity: titleOpacity,
+        },
+      )
+
+      updateLayer(
+        shouldShowRequestLayer,
+        requestLayerRef,
+        requestLabelsLayerRef,
+        "Solicitud Vigente",
+        {
+          color: "#F0C567",
+          weight: 2,
+          fillColor: "#FFF0AF",
+          fillOpacity: requestOpacity,
+        },
+      )
+
 
       // Forzamos que Leaflet refresque la vista
       mapRef.current.invalidateSize()
@@ -716,7 +738,16 @@ export default function MapComponent({
       console.error("Error al actualizar las capas:", error)
       setError("Error al actualizar las capas del mapa")
     }
-  }, [shouldShowTitleLayer, shouldShowRequestLayer, titleOpacity, requestOpacity, findLayerNumbers])
+
+  }, [
+    mapInstance,
+    shouldShowTitleLayer,
+    shouldShowRequestLayer,
+    titleOpacity,
+    requestOpacity,
+    findLayerNumbers,
+  ])
+
 
 
   // Alternar entre capa base OSM y Satélite
