@@ -418,19 +418,17 @@ export default function MapComponent({
 
   // Función para buscar los números de capa
   const findLayerNumbers = useCallback(async () => {
-    const baseUrl = "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer"
-    const layerNames = ["Solicitud Vigente", "Título Vigente"]
-    const foundLayers = {}
+    const getPointInside = (polygonCoords) => {
+      const candidate = polylabel(polygonCoords, 0.1)
+      if (turf.booleanPointInPolygon(turf.point(candidate), feature)) {
+        return candidate
+      }
+      return turf.pointOnFeature(feature).geometry.coordinates
+    }
 
-    for (let i = 0; i <= 5; i++) {
-      try {
-        const response = await fetch(`${baseUrl}/${i}?f=json`)
-        const data = await response.json()
-        if (layerNames.includes(data.name)) {
-          foundLayers[data.name] = i
-        }
-      } catch (error) {
-        console.error(`Error checking layer ${i}:`, error)
+      return getPointInside(coordinates)
+        const labelPoint = getPointInside(polygonCoords)
+    return turf.pointOnFeature(feature).geometry.coordinates
       }
     }
 
