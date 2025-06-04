@@ -9,10 +9,9 @@ import { MapIcon, Satellite, User } from "lucide-react"
 import "leaflet-draw"
 import "leaflet-draw/dist/leaflet.draw.css"
 
-// Turf se sigue usando para medir áreas, si quieres, o para otras cosas.
-// Pero lo importante aquí es polylabel para colocar la etiqueta:
+// Turf se usa para mediciones y cálculos espaciales,
+// incluyendo la obtención de puntos internos para los labels.
 import * as turf from "@turf/turf"
-import polylabel from "polylabel"
 
 export default function MapComponent({
   expedientCode,
@@ -447,67 +446,59 @@ export default function MapComponent({
   }, [])
 
   /**
-   * Función auxiliar para obtener un punto interno usando polylabel
+   * Obtiene un punto interno para usar como label.
+   * Se genera una cuadrícula de puntos dentro del bbox del polígono y se elige
+   * el que quede más alejado de los bordes.
    * @param {Object} feature - GeoJSON Feature (Polygon o MultiPolygon)
    * @returns {Array} [long, lat] del punto más "interno" del polígono
    */
   const getLabelCoordinates = (feature) => {
     const { type, coordinates } = feature.geometry
 
+    // Función auxiliar que busca el punto más interno para un solo polígono
+    const findPoint = (polygonCoords) => {
+      const poly = turf.polygon(polygonCoords)
+      const bbox = turf.bbox(poly)
+      const size = Math.max(bbox[2] - bbox[0], bbox[3] - bbox[1]) / 10
+      const grid = turf.pointGrid(bbox, size, { units: "degrees" })
+      const line = turf.polygonToLine(poly)
+
+      let bestPt = null
+      let bestDist = -Infinity
+
+      grid.features.forEach((pt) => {
+        if (turf.booleanPointInPolygon(pt, poly)) {
+          const nearest = turf.nearestPointOnLine(line, pt)
+          const dist = turf.distance(pt, nearest, { units: "degrees" })
+          if (dist > bestDist) {
+            bestDist = dist
+            bestPt = pt
+          }
+        }
+      })
+
+      if (!bestPt) {
+        bestPt = turf.pointOnFeature(poly)
+      }
+
+      return bestPt.geometry.coordinates
+    }
+
     if (type === "Polygon") {
-      // polylabel necesita un array de anillos: [exterior, agujeros...]
-      // 'coordinates' ya es algo así: [ [ [x,y], [x,y],...], [ [x,y],...], ...]
-      // Usamos mayor precisión (0.1) para minimizar la probabilidad
-      // de que el punto caiga cerca del borde
-      let bestPoint = polylabel(coordinates, 0.1)
-      // Aseguramos que realmente esté dentro del polígono
-      if (
-        !turf.booleanPointInPolygon(
-          turf.point(bestPoint),
-          turf.polygon(coordinates),
-        )
-      ) {
-        // polylabel debería estar dentro, pero si por alguna razón no lo está,
-        // usamos un punto garantizado dentro del polígono
-        bestPoint = turf.pointOnFeature(feature).geometry.coordinates
-      }
-      return bestPoint // [long, lat]
-    } else if (type === "MultiPolygon") {
-      // Podríamos calcular la etiqueta para cada polígono y elegir el de mayor área,
-      // o simplemente tomar el primero. Aquí tomamos el de mayor área.
-      let largestArea = 0
-      let bestOverallPoint = [0, 0]
-      let polygonForBestPoint = null
-      for (const polygonCoords of coordinates) {
-        // 'polygonCoords' es un array de anillos para ese polígono
-        let labelPoint = polylabel(polygonCoords, 0.1)
-        // Verificamos que el punto obtenido esté realmente dentro del polígono
-        if (
-          !turf.booleanPointInPolygon(
-            turf.point(labelPoint),
-            turf.polygon(polygonCoords),
-          )
-        ) {
-          labelPoint = turf.pointOnFeature(turf.polygon(polygonCoords)).geometry.coordinates
-        }
-        // Calculamos el área para ver cuál polígono es más grande
+      return findPoint(coordinates)
+    }
+
+    if (type === "MultiPolygon") {
+      let bestArea = 0
+      let bestCoords = [0, 0]
+      coordinates.forEach((polygonCoords) => {
         const area = turf.area(turf.polygon(polygonCoords))
-        if (area > largestArea) {
-          largestArea = area
-          bestOverallPoint = labelPoint
-          polygonForBestPoint = polygonCoords
+        if (area > bestArea) {
+          bestArea = area
+          bestCoords = findPoint(polygonCoords)
         }
-      }
-      if (
-        polygonForBestPoint &&
-        !turf.booleanPointInPolygon(
-          turf.point(bestOverallPoint),
-          turf.polygon(polygonForBestPoint),
-        )
-      ) {
-        bestOverallPoint = turf.pointOnFeature(feature).geometry.coordinates
-      }
-      return bestOverallPoint
+      })
+      return bestCoords
     }
 
     // Si no es Polygon ni MultiPolygon, devolvemos algo por defecto
@@ -573,7 +564,7 @@ export default function MapComponent({
           geoJsonLayerRef.current = L.geoJSON(data, {
             style: layer.style,
             onEachFeature: (feature, layer) => {
-              // Usamos polylabel para encontrar un punto interno "lo más adentro posible"
+              // Obtenemos un punto interno para la etiqueta
               const bestPoint = getLabelCoordinates(feature)
               const [long, lat] = bestPoint
 
@@ -589,7 +580,7 @@ export default function MapComponent({
               if (!labelsLayerRef.current) {
                 labelsLayerRef.current = L.layerGroup()
               }
-              // Agregamos el marcador en la ubicación de polylabel
+              // Agregamos el marcador en la ubicación calculada
               const marker = L.marker([lat, long], { icon: label })
               labelsLayerRef.current.addLayer(marker)
 
@@ -673,7 +664,7 @@ export default function MapComponent({
             url: `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/${layerNumber}`,
             style: layerStyle,
             onEachFeature: (feature, layer) => {
-              // De nuevo, usamos polylabel para asegurar que la etiqueta quede dentro
+              // Calculamos un punto interno para asegurar que la etiqueta quede dentro
               const bestPoint = getLabelCoordinates(feature)
               const [long, lat] = bestPoint
 
