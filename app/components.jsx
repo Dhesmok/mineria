@@ -255,44 +255,35 @@ export default function Component() {
             Aplicar
           </Button>
           <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="titleLayer" className="text-sm">
-                  Títulos Vigentes
-                </Label>
-                <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
-              </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="titleLayer" className="text-sm">
+                Títulos Vigentes
+              </Label>
               <input
-              
                 type="range"
                 min="0"
                 max="1"
                 step="0.1"
                 value={titleOpacity}
                 onChange={(e) => setTitleOpacity(parseFloat(e.target.value))}
-
-                className="w-full mt-1"
+                className="w-32"
               />
+              <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
             </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="requestLayer" className="text-sm">
-                  Solicitudes Vigente
-                </Label>
-                <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
-              </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="requestLayer" className="text-sm">
+                Solicitudes Vigente
+              </Label>
               <input
-
                 type="range"
                 min="0"
                 max="1"
                 step="0.1"
                 value={requestOpacity}
                 onChange={(e) => setRequestOpacity(parseFloat(e.target.value))}
-
-                className="w-full mt-1"
-
+                className="w-32"
               />
+              <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
             </div>
           </div>
 
