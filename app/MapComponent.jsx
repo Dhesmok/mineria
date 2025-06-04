@@ -42,6 +42,9 @@ export default function MapComponent({
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
 
+  const showTitleLayer = titleOpacity > 0
+  const showRequestLayer = requestOpacity > 0
+
   // Función para formatear fechas
   const formatDate = (value) => {
     if (!value) {
@@ -697,6 +700,7 @@ export default function MapComponent({
       setError("Error al actualizar las capas del mapa")
     }
   }, [showTitleLayer, showRequestLayer, titleOpacity, requestOpacity, findLayerNumbers])
+
 
   // Alternar entre capa base OSM y Satélite
   const toggleBaseLayer = useCallback(() => {

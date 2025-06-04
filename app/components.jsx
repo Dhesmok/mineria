@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import dynamic from "next/dynamic"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
 import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight } from "lucide-react"
@@ -263,12 +262,14 @@ export default function Component() {
                 <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
               </div>
               <input
+              
                 type="range"
                 min="0"
                 max="1"
                 step="0.1"
                 value={titleOpacity}
                 onChange={(e) => setTitleOpacity(parseFloat(e.target.value))}
+
                 className="w-full mt-1"
               />
             </div>
@@ -280,13 +281,16 @@ export default function Component() {
                 <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
               </div>
               <input
+
                 type="range"
                 min="0"
                 max="1"
                 step="0.1"
                 value={requestOpacity}
                 onChange={(e) => setRequestOpacity(parseFloat(e.target.value))}
+
                 className="w-full mt-1"
+
               />
             </div>
           </div>
