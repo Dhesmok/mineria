@@ -42,6 +42,8 @@ export default function Component() {
   const inputRef = useRef(null)
   const [showTitleLayer, setShowTitleLayer] = useState(false)
   const [showRequestLayer, setShowRequestLayer] = useState(false)
+  const [titleOpacity, setTitleOpacity] = useState(0.6)
+  const [requestOpacity, setRequestOpacity] = useState(0.7)
 
   const handleApply = useCallback(() => {
     if (!expedientCode) {
@@ -245,18 +247,40 @@ export default function Component() {
           <Button onClick={handleApply} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
             Aplicar
           </Button>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="titleLayer" className="text-sm">
-                Títulos Vigentes
-              </Label>
-              <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="titleLayer" className="text-sm">
+                  Títulos Vigentes
+                </Label>
+                <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={titleOpacity}
+                onChange={(e) => setTitleOpacity(parseFloat(e.target.value))}
+                className="w-full mt-1"
+              />
             </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="requestLayer" className="text-sm">
-                Solicitudes Vigente
-              </Label>
-              <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
+            <div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="requestLayer" className="text-sm">
+                  Solicitudes Vigente
+                </Label>
+                <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={requestOpacity}
+                onChange={(e) => setRequestOpacity(parseFloat(e.target.value))}
+                className="w-full mt-1"
+              />
             </div>
           </div>
 
@@ -297,6 +321,8 @@ export default function Component() {
           onMapInitialized={handleMapInitialized}
           showTitleLayer={showTitleLayer}
           showRequestLayer={showRequestLayer}
+          titleOpacity={titleOpacity}
+          requestOpacity={requestOpacity}
         />
         {!showSidebar && (
           <Button

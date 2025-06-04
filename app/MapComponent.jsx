@@ -21,6 +21,8 @@ export default function MapComponent({
   onMapInitialized,
   showTitleLayer,
   showRequestLayer,
+  titleOpacity,
+  requestOpacity,
 }) {
   const mapRef = useRef(null)
   const geoJsonLayerRef = useRef(null)
@@ -652,11 +654,13 @@ export default function MapComponent({
             },
           }).addTo(mapRef.current)
 
-          // Mostramos etiquetas solo entre zoom 15 y 19
-          const currentZoom = mapRef.current.getZoom()
-          if (currentZoom >= 15 && currentZoom <= 19 && labelsLayerRef.current) {
-            mapRef.current.addLayer(labelsLayerRef.current)
-          }
+        // Mostramos etiquetas solo entre zoom 15 y 19
+        const currentZoom = mapRef.current.getZoom()
+        if (currentZoom >= 15 && currentZoom <= 19 && labelsLayerRef.current) {
+          mapRef.current.addLayer(labelsLayerRef.current)
+        }
+        } else {
+          layerRef.current.setStyle(layerStyle)
         }
       } else if (layerRef.current) {
         // Si ya no se va a mostrar, removemos todo
@@ -676,14 +680,14 @@ export default function MapComponent({
         color: "#894444",
         weight: 2,
         fillColor: "#A46F48",
-        fillOpacity: 0.6,
+        fillOpacity: titleOpacity,
       })
 
       updateLayer(showRequestLayer, requestLayerRef, requestLabelsLayerRef, "Solicitud Vigente", {
         color: "#F0C567",
         weight: 2,
         fillColor: "#FFF0AF",
-        fillOpacity: 0.7,
+        fillOpacity: requestOpacity,
       })
 
       // Forzamos que Leaflet refresque la vista
@@ -692,7 +696,7 @@ export default function MapComponent({
       console.error("Error al actualizar las capas:", error)
       setError("Error al actualizar las capas del mapa")
     }
-  }, [showTitleLayer, showRequestLayer, findLayerNumbers])
+  }, [showTitleLayer, showRequestLayer, titleOpacity, requestOpacity, findLayerNumbers])
 
   // Alternar entre capa base OSM y Satélite
   const toggleBaseLayer = useCallback(() => {
