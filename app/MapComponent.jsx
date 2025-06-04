@@ -44,6 +44,8 @@ export default function MapComponent({
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const layerNumbersCacheRef = useRef(null)
+  const titleOpacityRef = useRef(titleOpacity)
+  const requestOpacityRef = useRef(requestOpacity)
 
   useEffect(() => {
     titleOpacityRef.current = titleOpacity
@@ -57,6 +59,14 @@ export default function MapComponent({
   // proveniente de los controles y la opacidad configurada
   const shouldShowTitleLayer = showTitleLayer && titleOpacity > 0
   const shouldShowRequestLayer = showRequestLayer && requestOpacity > 0
+
+  useEffect(() => {
+    titleOpacityRef.current = titleOpacity
+  }, [titleOpacity])
+
+  useEffect(() => {
+    requestOpacityRef.current = requestOpacity
+  }, [requestOpacity])
 
   // Función para formatear fechas
   const formatDate = (value) => {
@@ -725,6 +735,7 @@ export default function MapComponent({
           mapRef.current.addLayer(labelsLayerRef.current)
         }
         } else {
+          layerRef.current.options.style = layerStyle
           layerRef.current.setStyle(layerStyle)
         }
       } else if (layerRef.current) {
@@ -781,9 +792,40 @@ export default function MapComponent({
     shouldShowTitleLayer,
     shouldShowRequestLayer,
     titleOpacity,
-    requestOpacity,
-    findLayerNumbers,
+  requestOpacity,
+  findLayerNumbers,
   ])
+
+  // Reaplicar opacidad según el valor de los sliders al hacer zoom
+  useEffect(() => {
+    if (!mapRef.current) return
+
+    const map = mapRef.current
+
+    const handleZoom = () => {
+      if (titleLayerRef.current) {
+        const style = {
+          ...titleLayerRef.current.options.style,
+          fillOpacity: titleOpacityRef.current,
+        }
+        titleLayerRef.current.options.style = style
+        titleLayerRef.current.setStyle(style)
+      }
+      if (requestLayerRef.current) {
+        const style = {
+          ...requestLayerRef.current.options.style,
+          fillOpacity: requestOpacityRef.current,
+        }
+        requestLayerRef.current.options.style = style
+        requestLayerRef.current.setStyle(style)
+      }
+    }
+
+    map.on("zoomend", handleZoom)
+    return () => {
+      map.off("zoomend", handleZoom)
+    }
+  }, [mapInstance])
 
 
 
