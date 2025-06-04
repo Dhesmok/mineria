@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Button } from "@/components/ui/button"
 import proj4 from 'proj4'
-import proj4List from 'proj4-list'
 import shpwrite from 'shp-write'
 
 // Define the coordinate systems
