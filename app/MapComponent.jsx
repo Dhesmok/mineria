@@ -41,9 +41,13 @@ export default function MapComponent({
   const [drawingColor, setDrawingColor] = useState("#f357a1")
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
+  const layerNumbersCacheRef = useRef(null)
 
-  const showTitleLayer = titleOpacity > 0
-  const showRequestLayer = requestOpacity > 0
+  // Determinar si las capas deben mostrarse teniendo en cuenta el valor
+  // proveniente de los controles y la opacidad configurada
+  const shouldShowTitleLayer = showTitleLayer && titleOpacity > 0
+  const shouldShowRequestLayer = showRequestLayer && requestOpacity > 0
+
 
   // Función para formatear fechas
   const formatDate = (value) => {
@@ -418,7 +422,12 @@ export default function MapComponent({
 
   // Función para buscar los números de capa
   const findLayerNumbers = useCallback(async () => {
-    const baseUrl = "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer"
+    if (layerNumbersCacheRef.current) {
+      return layerNumbersCacheRef.current
+    }
+
+    const baseUrl =
+      "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer"
     const layerNames = ["Solicitud Vigente", "Título Vigente"]
     const foundLayers = {}
 
@@ -434,6 +443,7 @@ export default function MapComponent({
       }
     }
 
+    layerNumbersCacheRef.current = foundLayers
     return foundLayers
   }, [])
 
@@ -449,14 +459,20 @@ export default function MapComponent({
       // polylabel necesita un array de anillos: [exterior, agujeros...]
       // 'coordinates' ya es algo así: [ [ [x,y], [x,y],...], [ [x,y],...], ...]
       // El segundo parámetro (1.0) es la precisión; a menor valor, más preciso pero más lento.
-      const bestPoint = polylabel(coordinates, 1.0)
-      // polylabel retorna [x, y]
+      let bestPoint = polylabel(coordinates, 1.0)
+      // Aseguramos que realmente esté dentro del polígono
+      if (!turf.booleanPointInPolygon(turf.point(bestPoint), turf.polygon(coordinates))) {
+        // polylabel debería estar dentro, pero si por alguna razón no lo está,
+        // usamos un punto garantizado dentro del polígono
+        bestPoint = turf.pointOnFeature(feature).geometry.coordinates
+      }
       return bestPoint // [long, lat]
     } else if (type === "MultiPolygon") {
       // Podríamos calcular la etiqueta para cada polígono y elegir el de mayor área,
       // o simplemente tomar el primero. Aquí tomamos el de mayor área.
       let largestArea = 0
       let bestOverallPoint = [0, 0]
+      let polygonForBestPoint = null
       for (const polygonCoords of coordinates) {
         // 'polygonCoords' es un array de anillos para ese polígono
         const labelPoint = polylabel(polygonCoords, 1.0)
@@ -465,7 +481,17 @@ export default function MapComponent({
         if (area > largestArea) {
           largestArea = area
           bestOverallPoint = labelPoint
+          polygonForBestPoint = polygonCoords
         }
+      }
+      if (
+        polygonForBestPoint &&
+        !turf.booleanPointInPolygon(
+          turf.point(bestOverallPoint),
+          turf.polygon(polygonForBestPoint),
+        )
+      ) {
+        bestOverallPoint = turf.pointOnFeature(feature).geometry.coordinates
       }
       return bestOverallPoint
     }
@@ -679,19 +705,31 @@ export default function MapComponent({
     }
 
     try {
-      updateLayer(showTitleLayer, titleLayerRef, titleLabelsLayerRef, "Título Vigente", {
-        color: "#894444",
-        weight: 2,
-        fillColor: "#A46F48",
-        fillOpacity: titleOpacity,
-      })
+      updateLayer(
+        shouldShowTitleLayer,
+        titleLayerRef,
+        titleLabelsLayerRef,
+        "Título Vigente",
+        {
+          color: "#894444",
+          weight: 2,
+          fillColor: "#A46F48",
+          fillOpacity: titleOpacity,
+        },
+      )
 
-      updateLayer(showRequestLayer, requestLayerRef, requestLabelsLayerRef, "Solicitud Vigente", {
-        color: "#F0C567",
-        weight: 2,
-        fillColor: "#FFF0AF",
-        fillOpacity: requestOpacity,
-      })
+      updateLayer(
+        shouldShowRequestLayer,
+        requestLayerRef,
+        requestLabelsLayerRef,
+        "Solicitud Vigente",
+        {
+          color: "#F0C567",
+          weight: 2,
+          fillColor: "#FFF0AF",
+          fillOpacity: requestOpacity,
+        },
+      )
 
       // Forzamos que Leaflet refresque la vista
       mapRef.current.invalidateSize()
@@ -699,7 +737,14 @@ export default function MapComponent({
       console.error("Error al actualizar las capas:", error)
       setError("Error al actualizar las capas del mapa")
     }
-  }, [showTitleLayer, showRequestLayer, titleOpacity, requestOpacity, findLayerNumbers])
+  }, [
+    mapInstance,
+    shouldShowTitleLayer,
+    shouldShowRequestLayer,
+    titleOpacity,
+    requestOpacity,
+    findLayerNumbers,
+  ])
 
 
   // Alternar entre capa base OSM y Satélite
