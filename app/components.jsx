@@ -270,25 +270,20 @@ export default function Component() {
               />
               <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
             </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="requestLayer" className="text-sm">
-                  Solicitudes Vigente
-                </Label>
-                <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
-              </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="requestLayer" className="text-sm">
+                Solicitudes Vigente
+              </Label>
               <input
-
                 type="range"
                 min="0"
                 max="1"
                 step="0.1"
                 value={requestOpacity}
                 onChange={(e) => setRequestOpacity(parseFloat(e.target.value))}
-
-                className="w-full mt-1"
-
+                className="flex-1"
               />
+              <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
             </div>
           </div>
 
