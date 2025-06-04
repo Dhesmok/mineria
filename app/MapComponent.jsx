@@ -41,6 +41,7 @@ export default function MapComponent({
   const [drawingColor, setDrawingColor] = useState("#f357a1")
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
+  const layerNumbersCacheRef = useRef(null)
 
   // Determinar si las capas deben mostrarse según su opacidad
   const shouldShowTitleLayer = titleOpacity > 0
@@ -391,8 +392,14 @@ export default function MapComponent({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [showColorPicker])
+    if (layerNumbersCacheRef.current) {
+      return layerNumbersCacheRef.current
+    }
 
+    const baseUrl =
+      "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer"
+
+    layerNumbersCacheRef.current = foundLayers
   // Crea el contenido del Popup
   const createPopupContent = (properties) => {
     return `
@@ -688,7 +695,7 @@ export default function MapComponent({
           mapRef.current.removeLayer(labelsLayerRef.current)
           labelsLayerRef.current = null
         }
-        if (mapRef.current.hasLayer(layerRef.current)) {
+  }, [mapInstance, showTitleLayer, showRequestLayer, titleOpacity, requestOpacity, findLayerNumbers])
           mapRef.current.removeLayer(layerRef.current)
         }
         layerRef.current = null
