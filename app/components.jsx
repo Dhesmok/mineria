@@ -275,15 +275,15 @@ export default function Component() {
               <Label htmlFor="requestLayer" className="text-sm">
                 Solicitudes Vigente
               </Label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={requestOpacity}
-                onChange={(e) => setRequestOpacity(parseFloat(e.target.value))}
-                className="w-32"
-              />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={requestOpacity}
+                  onChange={(e) => setRequestOpacity(parseFloat(e.target.value))}
+                  className="flex-1"
+                />
               <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
             </div>
           </div>
