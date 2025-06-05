@@ -44,8 +44,6 @@ export default function MapComponent({
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const layerNumbersCacheRef = useRef(null)
-  const titleOpacityRef = useRef(titleOpacity)
-  const requestOpacityRef = useRef(requestOpacity)
 
   useEffect(() => {
     titleOpacityRef.current = titleOpacity
@@ -59,14 +57,6 @@ export default function MapComponent({
   // proveniente de los controles y la opacidad configurada
   const shouldShowTitleLayer = showTitleLayer && titleOpacity > 0
   const shouldShowRequestLayer = showRequestLayer && requestOpacity > 0
-
-  useEffect(() => {
-    titleOpacityRef.current = titleOpacity
-  }, [titleOpacity])
-
-  useEffect(() => {
-    requestOpacityRef.current = requestOpacity
-  }, [requestOpacity])
 
   // Función para formatear fechas
   const formatDate = (value) => {
