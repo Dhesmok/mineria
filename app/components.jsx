@@ -85,6 +85,7 @@ export default function Component() {
     setCoordinatesAvailable(false)
     setGeoJsonData(null)
     if (mapRef.current) {
+      mapRef.current.clearSearchResult()
       mapRef.current.removeVertices()
       mapRef.current.clearDrawings()
     }

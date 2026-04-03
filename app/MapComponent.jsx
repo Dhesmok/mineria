@@ -42,6 +42,7 @@ export default function MapComponent({
   const historicalTitleLabelsLayerRef = useRef(null)
   const drawControlRef = useRef(null)
   const drawnItemsRef = useRef(null)
+  const measureControlRef = useRef(null)
   const [error, setError] = useState(null)
   const [baseLayer, setBaseLayer] = useState("osm")
   // Después de la declaración de los estados, añadir un nuevo estado para el color
@@ -49,6 +50,23 @@ export default function MapComponent({
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const layerNumbersCacheRef = useRef(null)
+
+  const formatDistance = (meters) => {
+    if (meters >= 1000) {
+      return `${(meters / 1000).toFixed(2)} km`
+    }
+    return `${meters.toFixed(2)} m`
+  }
+
+  const formatArea = (squareMeters) => {
+    if (squareMeters >= 1000000) {
+      return `${(squareMeters / 1000000).toFixed(2)} km²`
+    }
+    if (squareMeters >= 10000) {
+      return `${(squareMeters / 10000).toFixed(2)} ha`
+    }
+    return `${squareMeters.toFixed(2)} m²`
+  }
 
   useEffect(() => {
     titleOpacityRef.current = titleOpacity
@@ -187,10 +205,82 @@ export default function MapComponent({
       // Agregamos el control de dibujo directamente al mapa
       mapInstanceLocal.addControl(drawControlRef.current)
 
+      const startDistanceMeasure = () => {
+        const drawer = new L.Draw.Polyline(mapInstanceLocal, {
+          shapeOptions: {
+            color: drawingColor,
+            weight: 5,
+          },
+        })
+        drawer.enable()
+      }
+
+      const startAreaMeasure = () => {
+        const drawer = new L.Draw.Polygon(mapInstanceLocal, {
+          allowIntersection: false,
+          showArea: true,
+          shapeOptions: {
+            color: drawingColor,
+          },
+        })
+        drawer.enable()
+      }
+
+      const MeasureControl = L.Control.extend({
+        options: {
+          position: "topright",
+        },
+        onAdd: () => {
+          const container = L.DomUtil.create("div", "leaflet-bar leaflet-control measure-control")
+
+          const distanceButton = L.DomUtil.create("a", "", container)
+          distanceButton.href = "#"
+          distanceButton.title = "Medir distancia"
+          distanceButton.innerHTML = "📏"
+          distanceButton.setAttribute("aria-label", "Medir distancia")
+
+          const areaButton = L.DomUtil.create("a", "", container)
+          areaButton.href = "#"
+          areaButton.title = "Medir área"
+          areaButton.innerHTML = "⬠"
+          areaButton.setAttribute("aria-label", "Medir área")
+
+          L.DomEvent.disableClickPropagation(container)
+          L.DomEvent.on(distanceButton, "click", (event) => {
+            L.DomEvent.preventDefault(event)
+            startDistanceMeasure()
+          })
+          L.DomEvent.on(areaButton, "click", (event) => {
+            L.DomEvent.preventDefault(event)
+            startAreaMeasure()
+          })
+
+          return container
+        },
+      })
+
+      measureControlRef.current = new MeasureControl()
+      mapInstanceLocal.addControl(measureControlRef.current)
+
       // Evento para cuando se crea un elemento dibujado
       mapInstanceLocal.on(L.Draw.Event.CREATED, (event) => {
         const layer = event.layer
         drawnItemsRef.current.addLayer(layer)
+
+        if (event.layerType === "polyline") {
+          const latLngs = layer.getLatLngs()
+          let totalDistance = 0
+          for (let i = 1; i < latLngs.length; i += 1) {
+            totalDistance += mapInstanceLocal.distance(latLngs[i - 1], latLngs[i])
+          }
+          layer.bindPopup(`<strong>Distancia:</strong> ${formatDistance(totalDistance)}`).openPopup()
+        }
+
+        if (event.layerType === "polygon" || event.layerType === "rectangle") {
+          const latLngs = layer.getLatLngs()[0]
+          const area = L.GeometryUtil.geodesicArea(latLngs)
+          layer.bindPopup(`<strong>Área:</strong> ${formatArea(area)}`).openPopup()
+        }
       })
 
       // Añadir después del evento L.Draw.Event.CREATED:
@@ -327,6 +417,27 @@ export default function MapComponent({
       // Función para limpiar todos los dibujos
       mapRef.current.clearDrawings = () => {
         drawnItemsRef.current.clearLayers()
+      }
+
+      mapRef.current.clearSearchResult = () => {
+        if (geoJsonLayerRef.current && mapInstanceLocal.hasLayer(geoJsonLayerRef.current)) {
+          mapInstanceLocal.removeLayer(geoJsonLayerRef.current)
+        }
+        geoJsonLayerRef.current = null
+
+        if (labelsLayerRef.current && mapInstanceLocal.hasLayer(labelsLayerRef.current)) {
+          mapInstanceLocal.removeLayer(labelsLayerRef.current)
+        }
+        labelsLayerRef.current = null
+
+        if (verticesLayerRef.current && mapInstanceLocal.hasLayer(verticesLayerRef.current)) {
+          mapInstanceLocal.removeLayer(verticesLayerRef.current)
+        }
+        verticesLayerRef.current = null
+
+        mapInstanceLocal.closePopup()
+        mapInstanceLocal.setView([4, -72], 5)
+        setError(null)
       }
 
       onMapInitialized(mapRef.current)
@@ -1019,6 +1130,14 @@ export default function MapComponent({
             }
             .leaflet-draw-actions a:hover {
               background-color: #f0f0f0;
+            }
+            .measure-control a {
+              width: 30px;
+              height: 30px;
+              line-height: 30px;
+              text-align: center;
+              font-size: 16px;
+              text-decoration: none;
             }
           `}</style>
     </>
