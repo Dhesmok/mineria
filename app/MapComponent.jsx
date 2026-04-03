@@ -21,20 +21,25 @@ export default function MapComponent({
   onMapInitialized,
   showTitleLayer,
   showRequestLayer,
+  showHistoricalTitleLayer,
   titleOpacity,
   requestOpacity,
+  historicalTitleOpacity,
 }) {
   const mapRef = useRef(null)
   const geoJsonLayerRef = useRef(null)
   const verticesLayerRef = useRef(null)
   const titleLayerRef = useRef(null)
   const requestLayerRef = useRef(null)
+  const historicalTitleLayerRef = useRef(null)
   const titleOpacityRef = useRef(titleOpacity)
   const requestOpacityRef = useRef(requestOpacity)
+  const historicalTitleOpacityRef = useRef(historicalTitleOpacity)
   const lastSearchTriggerRef = useRef(0)
   const labelsLayerRef = useRef(null)
   const titleLabelsLayerRef = useRef(null)
   const requestLabelsLayerRef = useRef(null)
+  const historicalTitleLabelsLayerRef = useRef(null)
   const drawControlRef = useRef(null)
   const drawnItemsRef = useRef(null)
   const [error, setError] = useState(null)
@@ -53,10 +58,15 @@ export default function MapComponent({
     requestOpacityRef.current = requestOpacity
   }, [requestOpacity])
 
+  useEffect(() => {
+    historicalTitleOpacityRef.current = historicalTitleOpacity
+  }, [historicalTitleOpacity])
+
   // Determinar si las capas deben mostrarse teniendo en cuenta el valor
   // proveniente de los controles y la opacidad configurada
   const shouldShowTitleLayer = showTitleLayer && titleOpacity > 0
   const shouldShowRequestLayer = showRequestLayer && requestOpacity > 0
+  const shouldShowHistoricalTitleLayer = showHistoricalTitleLayer && historicalTitleOpacity > 0
 
   // Función para formatear fechas
   const formatDate = (value) => {
@@ -240,7 +250,12 @@ export default function MapComponent({
       // Manejamos la visibilidad de las etiquetas y la opacidad según el zoom
       const handleZoom = () => {
         const currentZoom = mapInstanceLocal.getZoom()
-        const labelsLayers = [labelsLayerRef.current, titleLabelsLayerRef.current, requestLabelsLayerRef.current]
+        const labelsLayers = [
+          labelsLayerRef.current,
+          titleLabelsLayerRef.current,
+          requestLabelsLayerRef.current,
+          historicalTitleLabelsLayerRef.current,
+        ]
         labelsLayers.forEach((layer) => {
           if (layer) {
             if (currentZoom >= 15 && currentZoom <= 19) {
@@ -260,6 +275,9 @@ export default function MapComponent({
         }
         if (requestLayerRef.current) {
           requestLayerRef.current.setStyle({ fillOpacity: requestOpacityRef.current })
+        }
+        if (historicalTitleLayerRef.current) {
+          historicalTitleLayerRef.current.setStyle({ fillOpacity: historicalTitleOpacityRef.current })
         }
       }
 
@@ -323,6 +341,7 @@ export default function MapComponent({
       labelsLayerRef.current = null
       titleLabelsLayerRef.current = null
       requestLabelsLayerRef.current = null
+      historicalTitleLabelsLayerRef.current = null
       if (mapInstanceLocal) {
         mapInstanceLocal.off("zoomend", handleZoom)
       }
@@ -685,14 +704,23 @@ export default function MapComponent({
   useEffect(() => {
     if (!mapRef.current) return
 
-    const updateLayer = async (show, layerRef, labelsLayerRef, layerName, layerStyle) => {
-      const layerNumbers = await findLayerNumbers()
-      const layerNumber = layerNumbers[layerName]
+    const updateLayer = async (show, layerRef, labelsLayerRef, layerName, layerStyle, customUrl = null) => {
+      let layerUrl = customUrl
+
+      if (!layerUrl) {
+        const layerNumbers = await findLayerNumbers()
+        const layerNumber = layerNumbers[layerName]
+        if (layerNumber === undefined) {
+          console.error(`No se encontró la capa: ${layerName}`)
+          return
+        }
+        layerUrl = `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/${layerNumber}`
+      }
 
       if (show) {
         if (!layerRef.current) {
           layerRef.current = EsriLeaflet.featureLayer({
-            url: `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/${layerNumber}`,
+            url: layerUrl,
             style: layerStyle,
             onEachFeature: (feature, layer) => {
               // De nuevo, usamos polylabel para asegurar que la etiqueta quede dentro
@@ -769,6 +797,20 @@ export default function MapComponent({
         },
       )
 
+      updateLayer(
+        shouldShowHistoricalTitleLayer,
+        historicalTitleLayerRef,
+        historicalTitleLabelsLayerRef,
+        null,
+        {
+          color: "#22577A",
+          weight: 2,
+          fillColor: "#38A3A5",
+          fillOpacity: historicalTitleOpacity,
+        },
+        "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87",
+      )
+
 
       // Forzamos que Leaflet refresque la vista
       mapRef.current.invalidateSize()
@@ -781,9 +823,11 @@ export default function MapComponent({
     mapInstance,
     shouldShowTitleLayer,
     shouldShowRequestLayer,
+    shouldShowHistoricalTitleLayer,
     titleOpacity,
-  requestOpacity,
-  findLayerNumbers,
+    requestOpacity,
+    historicalTitleOpacity,
+    findLayerNumbers,
   ])
 
   // Reaplicar opacidad según el valor de los sliders al hacer zoom
@@ -808,6 +852,14 @@ export default function MapComponent({
         }
         requestLayerRef.current.options.style = style
         requestLayerRef.current.setStyle(style)
+      }
+      if (historicalTitleLayerRef.current) {
+        const style = {
+          ...historicalTitleLayerRef.current.options.style,
+          fillOpacity: historicalTitleOpacityRef.current,
+        }
+        historicalTitleLayerRef.current.options.style = style
+        historicalTitleLayerRef.current.setStyle(style)
       }
     }
 
@@ -972,4 +1024,3 @@ export default function MapComponent({
     </>
   )
 }
-
