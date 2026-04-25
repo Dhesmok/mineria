@@ -5,7 +5,7 @@ import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import * as EsriLeaflet from "esri-leaflet"
 import { Button } from "@/components/ui/button"
-import { MapIcon, Satellite, User } from "lucide-react"
+import { Compass, Crosshair, MapIcon, Satellite, User } from "lucide-react"
 import "leaflet-draw"
 import "leaflet-draw/dist/leaflet.draw.css"
 
@@ -49,7 +49,11 @@ export default function MapComponent({
   const [drawingColor, setDrawingColor] = useState("#f357a1")
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
+  const [isCompassActive, setIsCompassActive] = useState(false)
+  const [deviceHeading, setDeviceHeading] = useState(null)
   const layerNumbersCacheRef = useRef(null)
+  const userLocationMarkerRef = useRef(null)
+  const deviceOrientationCleanupRef = useRef(null)
 
   const formatDistance = (meters) => {
     if (meters >= 1000) {
@@ -1013,9 +1017,207 @@ export default function MapComponent({
     setDrawingColor(newColor)
   }
 
+  const buildGpsCompassIcon = useCallback(
+    () =>
+      L.divIcon({
+      className: "gps-compass-marker",
+      html: `
+        <div class="gps-compass__pulse"></div>
+        <div class="gps-compass__ring">
+          <div class="gps-compass__dot"></div>
+          <div class="gps-compass__needle"></div>
+        </div>
+      `,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      }),
+    [],
+  )
+
+  const updateCompassNeedle = useCallback((heading) => {
+    if (!Number.isFinite(heading) || !userLocationMarkerRef.current) return
+
+    const markerElement = userLocationMarkerRef.current.getElement()
+    if (!markerElement) return
+
+    const needleElement = markerElement.querySelector(".gps-compass__needle")
+    if (!needleElement) return
+
+    needleElement.style.transform = `translateX(-50%) rotate(${heading}deg)`
+  }, [])
+
+  const startDeviceOrientationTracking = useCallback(async () => {
+    if (typeof window === "undefined" || typeof DeviceOrientationEvent === "undefined") {
+      setError("Este dispositivo no soporta lectura de brújula.")
+      return false
+    }
+
+    if (deviceOrientationCleanupRef.current) {
+      deviceOrientationCleanupRef.current()
+      deviceOrientationCleanupRef.current = null
+    }
+
+    let permissionGranted = true
+
+    if (typeof DeviceOrientationEvent.requestPermission === "function") {
+      try {
+        const permissionState = await DeviceOrientationEvent.requestPermission()
+        permissionGranted = permissionState === "granted"
+      } catch {
+        permissionGranted = false
+      }
+    }
+
+    if (!permissionGranted) {
+      setError("GPS activo, pero no pude leer la orientación del celular (permiso denegado).")
+      return false
+    }
+
+    const handleOrientation = (event) => {
+      let heading = null
+
+      if (typeof event.webkitCompassHeading === "number") {
+        heading = event.webkitCompassHeading
+      } else if (typeof event.alpha === "number") {
+        heading = (360 - event.alpha) % 360
+      }
+
+      if (heading !== null) {
+        setDeviceHeading(heading)
+        updateCompassNeedle(heading)
+      }
+    }
+
+    window.addEventListener("deviceorientationabsolute", handleOrientation, true)
+    window.addEventListener("deviceorientation", handleOrientation, true)
+    deviceOrientationCleanupRef.current = () => {
+      window.removeEventListener("deviceorientationabsolute", handleOrientation, true)
+      window.removeEventListener("deviceorientation", handleOrientation, true)
+    }
+    return true
+  }, [updateCompassNeedle])
+
+  const stopDeviceOrientationTracking = useCallback(() => {
+    if (deviceOrientationCleanupRef.current) {
+      deviceOrientationCleanupRef.current()
+      deviceOrientationCleanupRef.current = null
+    }
+    setIsCompassActive(false)
+    setDeviceHeading(null)
+  }, [])
+
+  const handleToggleCompass360 = useCallback(async () => {
+    if (isCompassActive) {
+      stopDeviceOrientationTracking()
+      return
+    }
+
+    setError(null)
+    const started = await startDeviceOrientationTracking()
+    if (started) {
+      setIsCompassActive(true)
+    }
+  }, [isCompassActive, startDeviceOrientationTracking, stopDeviceOrientationTracking])
+
+  const handleLocateUser = useCallback(() => {
+    if (!mapRef.current) return
+
+    if (!navigator.geolocation) {
+      setError("Tu navegador no soporta geolocalización.")
+      return
+    }
+
+    setError(null)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords
+        const map = mapRef.current
+
+        if (userLocationMarkerRef.current) {
+          map.removeLayer(userLocationMarkerRef.current)
+        }
+
+        userLocationMarkerRef.current = L.marker([latitude, longitude], {
+          icon: buildGpsCompassIcon(),
+        })
+          .addTo(map)
+          .bindPopup(
+            `Tu ubicación actual:<br/>Latitud: ${latitude.toFixed(6)}<br/>Longitud: ${longitude.toFixed(6)}`,
+          )
+          .openPopup()
+
+        map.flyTo([latitude, longitude], 16, {
+          animate: true,
+          duration: 1.5,
+        })
+      },
+      () => {
+        setError("No se pudo obtener tu ubicación. Revisa permisos de GPS e inténtalo de nuevo.")
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+      },
+    )
+  }, [buildGpsCompassIcon])
+
+  useEffect(() => {
+    return () => {
+      stopDeviceOrientationTracking()
+    }
+  }, [stopDeviceOrientationTracking])
+
+  const compassLabels = Array.from({ length: 12 }, (_, index) => index * 30)
+
   return (
     <>
       <div id="map" className="absolute inset-0 z-0"></div>
+      {isCompassActive && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 compass-overlay">
+          <div className="compass-wheel">
+            {Array.from({ length: 72 }).map((_, index) => (
+              <span
+                key={`tick-${index}`}
+                className={`compass-tick ${index % 6 === 0 ? "major" : "minor"}`}
+                style={{ transform: `rotate(${index * 5}deg)` }}
+              />
+            ))}
+
+            {compassLabels.map((degree) => {
+              const radians = (degree * Math.PI) / 180
+              const x = 50 + 44 * Math.sin(radians)
+              const y = 50 - 44 * Math.cos(radians)
+              return (
+                <span
+                  key={`label-${degree}`}
+                  className="compass-degree"
+                  style={{
+                    left: `${x}%`,
+                    top: `${y}%`,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                >
+                  {degree === 0 ? 360 : degree}
+                </span>
+              )
+            })}
+
+            <span className="compass-cardinal north">N</span>
+            <span className="compass-cardinal east">E</span>
+            <span className="compass-cardinal south">S</span>
+            <span className="compass-cardinal west">W</span>
+
+            <div
+              className="compass-heading-line"
+              style={{ transform: `translateX(-50%) rotate(${deviceHeading ?? 0}deg)` }}
+            />
+            <div className="compass-center-dot" />
+            <div className="compass-heading-readout">
+              {deviceHeading === null ? "—" : `${Math.round(deviceHeading)}°`}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Selector de color para dibujos - Botón desplegable */}
       <div className="absolute top-4 right-20 z-10">
@@ -1061,6 +1263,14 @@ export default function MapComponent({
         <Button onClick={toggleBaseLayer} className="bg-white text-black hover:bg-gray-200">
           {baseLayer === "osm" ? <Satellite className="mr-2 h-4 w-4" /> : <MapIcon className="mr-2 h-4 w-4" />}
           {baseLayer === "osm" ? "Satélite" : "Mapa"}
+        </Button>
+        <Button onClick={handleLocateUser} className="bg-white text-black hover:bg-gray-200">
+          <Crosshair className="mr-2 h-4 w-4" />
+          Activar GPS
+        </Button>
+        <Button onClick={handleToggleCompass360} className="bg-white text-black hover:bg-gray-200">
+          <Compass className="mr-2 h-4 w-4" />
+          {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
         </Button>
         <Button
           onClick={() => window.open("https://www.linkedin.com/in/fabio-espinosa/", "_blank", "noopener,noreferrer")}
@@ -1138,6 +1348,168 @@ export default function MapComponent({
               text-align: center;
               font-size: 16px;
               text-decoration: none;
+            }
+            .compass-overlay {
+              background: rgba(15, 23, 42, 0.55);
+              border: 1px solid rgba(255, 255, 255, 0.18);
+              border-radius: 9999px;
+              backdrop-filter: blur(6px);
+              box-shadow: 0 18px 40px rgba(15, 23, 42, 0.45);
+              padding: 12px;
+            }
+            .compass-wheel {
+              position: relative;
+              width: 260px;
+              height: 260px;
+              border-radius: 9999px;
+              border: 2px solid rgba(255, 255, 255, 0.8);
+            }
+            .compass-tick {
+              position: absolute;
+              left: 50%;
+              top: 8px;
+              transform-origin: 50% 122px;
+              border-radius: 9999px;
+            }
+            .compass-tick.minor {
+              width: 1px;
+              height: 8px;
+              background: rgba(255, 255, 255, 0.55);
+            }
+            .compass-tick.major {
+              width: 2px;
+              height: 14px;
+              background: rgba(255, 255, 255, 0.95);
+            }
+            .compass-degree {
+              position: absolute;
+              font-size: 12px;
+              font-weight: 600;
+              color: rgba(255, 255, 255, 0.92);
+              text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+            }
+            .compass-cardinal {
+              position: absolute;
+              font-size: 42px;
+              font-weight: 700;
+              line-height: 1;
+              color: #ffffff;
+              text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+            }
+            .compass-cardinal.north {
+              left: 50%;
+              top: 24px;
+              transform: translateX(-50%);
+              color: #ef4444;
+            }
+            .compass-cardinal.east {
+              right: 20px;
+              top: 50%;
+              transform: translateY(-50%);
+            }
+            .compass-cardinal.south {
+              left: 50%;
+              bottom: 20px;
+              transform: translateX(-50%);
+              color: #93c5fd;
+            }
+            .compass-cardinal.west {
+              left: 20px;
+              top: 50%;
+              transform: translateY(-50%);
+            }
+            .compass-heading-line {
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              width: 3px;
+              height: 98px;
+              transform-origin: 50% 100%;
+              background: linear-gradient(to top, #ef4444, rgba(239, 68, 68, 0.2));
+              border-radius: 9999px;
+              box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+            }
+            .compass-center-dot {
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              width: 10px;
+              height: 10px;
+              border-radius: 9999px;
+              transform: translate(-50%, -50%);
+              background: #ef4444;
+              box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+            }
+            .compass-heading-readout {
+              position: absolute;
+              left: 50%;
+              bottom: 58px;
+              transform: translateX(-50%);
+              color: white;
+              font-weight: 600;
+              font-size: 16px;
+              letter-spacing: 0.06em;
+              text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+            }
+            .gps-compass-marker {
+              background: transparent;
+              border: none;
+            }
+            .gps-compass__ring {
+              position: relative;
+              width: 44px;
+              height: 44px;
+              border-radius: 9999px;
+              background: rgba(255, 255, 255, 0.95);
+              border: 2px solid #0f172a;
+              box-shadow: 0 8px 20px rgba(15, 23, 42, 0.3);
+              backdrop-filter: blur(2px);
+            }
+            .gps-compass__dot {
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              width: 10px;
+              height: 10px;
+              border-radius: 9999px;
+              transform: translate(-50%, -50%);
+              background: #2563eb;
+              border: 2px solid #ffffff;
+              z-index: 3;
+            }
+            .gps-compass__needle {
+              position: absolute;
+              left: 50%;
+              top: 4px;
+              width: 3px;
+              height: 16px;
+              border-radius: 9999px;
+              transform-origin: 50% calc(100% - 2px);
+              transform: translateX(-50%) rotate(0deg);
+              background: linear-gradient(to bottom, #ef4444, #b91c1c);
+              box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+              z-index: 2;
+            }
+            .gps-compass__pulse {
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              width: 50px;
+              height: 50px;
+              border-radius: 9999px;
+              transform: translate(-50%, -50%);
+              background: rgba(37, 99, 235, 0.18);
+              animation: gps-pulse 2s ease-out infinite;
+            }
+            @keyframes gps-pulse {
+              0% {
+                transform: translate(-50%, -50%) scale(0.9);
+                opacity: 0.8;
+              }
+              100% {
+                transform: translate(-50%, -50%) scale(1.5);
+                opacity: 0;
+              }
             }
           `}</style>
     </>
