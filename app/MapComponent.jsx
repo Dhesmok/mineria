@@ -5,7 +5,7 @@ import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import * as EsriLeaflet from "esri-leaflet"
 import { Button } from "@/components/ui/button"
-import { MapIcon, Satellite, User } from "lucide-react"
+import { Crosshair, MapIcon, Satellite, User } from "lucide-react"
 import "leaflet-draw"
 import "leaflet-draw/dist/leaflet.draw.css"
 
@@ -50,6 +50,7 @@ export default function MapComponent({
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const layerNumbersCacheRef = useRef(null)
+  const userLocationMarkerRef = useRef(null)
 
   const formatDistance = (meters) => {
     if (meters >= 1000) {
@@ -1013,6 +1014,46 @@ export default function MapComponent({
     setDrawingColor(newColor)
   }
 
+  const handleLocateUser = useCallback(() => {
+    if (!mapRef.current) return
+
+    if (!navigator.geolocation) {
+      setError("Tu navegador no soporta geolocalización.")
+      return
+    }
+
+    setError(null)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords
+        const map = mapRef.current
+
+        if (userLocationMarkerRef.current) {
+          map.removeLayer(userLocationMarkerRef.current)
+        }
+
+        userLocationMarkerRef.current = L.marker([latitude, longitude])
+          .addTo(map)
+          .bindPopup(
+            `Tu ubicación actual:<br/>Latitud: ${latitude.toFixed(6)}<br/>Longitud: ${longitude.toFixed(6)}`,
+          )
+          .openPopup()
+
+        map.flyTo([latitude, longitude], 16, {
+          animate: true,
+          duration: 1.5,
+        })
+      },
+      () => {
+        setError("No se pudo obtener tu ubicación. Revisa permisos de GPS e inténtalo de nuevo.")
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+      },
+    )
+  }, [])
+
   return (
     <>
       <div id="map" className="absolute inset-0 z-0"></div>
@@ -1061,6 +1102,10 @@ export default function MapComponent({
         <Button onClick={toggleBaseLayer} className="bg-white text-black hover:bg-gray-200">
           {baseLayer === "osm" ? <Satellite className="mr-2 h-4 w-4" /> : <MapIcon className="mr-2 h-4 w-4" />}
           {baseLayer === "osm" ? "Satélite" : "Mapa"}
+        </Button>
+        <Button onClick={handleLocateUser} className="bg-white text-black hover:bg-gray-200">
+          <Crosshair className="mr-2 h-4 w-4" />
+          Activar GPS
         </Button>
         <Button
           onClick={() => window.open("https://www.linkedin.com/in/fabio-espinosa/", "_blank", "noopener,noreferrer")}
