@@ -51,6 +51,7 @@ export default function MapComponent({
   const [showColorPicker, setShowColorPicker] = useState(false)
   const layerNumbersCacheRef = useRef(null)
   const userLocationMarkerRef = useRef(null)
+  const deviceOrientationCleanupRef = useRef(null)
 
   const formatDistance = (meters) => {
     if (meters >= 1000) {
@@ -1014,6 +1015,83 @@ export default function MapComponent({
     setDrawingColor(newColor)
   }
 
+  const buildGpsCompassIcon = useCallback(
+    () =>
+      L.divIcon({
+      className: "gps-compass-marker",
+      html: `
+        <div class="gps-compass__pulse"></div>
+        <div class="gps-compass__ring">
+          <div class="gps-compass__dot"></div>
+          <div class="gps-compass__needle"></div>
+        </div>
+      `,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      }),
+    [],
+  )
+
+  const updateCompassNeedle = useCallback((heading) => {
+    if (!Number.isFinite(heading) || !userLocationMarkerRef.current) return
+
+    const markerElement = userLocationMarkerRef.current.getElement()
+    if (!markerElement) return
+
+    const needleElement = markerElement.querySelector(".gps-compass__needle")
+    if (!needleElement) return
+
+    needleElement.style.transform = `translateX(-50%) rotate(${heading}deg)`
+  }, [])
+
+  const startDeviceOrientationTracking = useCallback(async () => {
+    if (typeof window === "undefined" || typeof DeviceOrientationEvent === "undefined") {
+      return
+    }
+
+    if (deviceOrientationCleanupRef.current) {
+      deviceOrientationCleanupRef.current()
+      deviceOrientationCleanupRef.current = null
+    }
+
+    let permissionGranted = true
+
+    if (typeof DeviceOrientationEvent.requestPermission === "function") {
+      try {
+        const permissionState = await DeviceOrientationEvent.requestPermission()
+        permissionGranted = permissionState === "granted"
+      } catch {
+        permissionGranted = false
+      }
+    }
+
+    if (!permissionGranted) {
+      setError("GPS activo, pero no pude leer la orientación del celular (permiso denegado).")
+      return
+    }
+
+    const handleOrientation = (event) => {
+      let heading = null
+
+      if (typeof event.webkitCompassHeading === "number") {
+        heading = event.webkitCompassHeading
+      } else if (typeof event.alpha === "number") {
+        heading = (360 - event.alpha) % 360
+      }
+
+      if (heading !== null) {
+        updateCompassNeedle(heading)
+      }
+    }
+
+    window.addEventListener("deviceorientationabsolute", handleOrientation, true)
+    window.addEventListener("deviceorientation", handleOrientation, true)
+    deviceOrientationCleanupRef.current = () => {
+      window.removeEventListener("deviceorientationabsolute", handleOrientation, true)
+      window.removeEventListener("deviceorientation", handleOrientation, true)
+    }
+  }, [updateCompassNeedle])
+
   const handleLocateUser = useCallback(() => {
     if (!mapRef.current) return
 
@@ -1032,7 +1110,9 @@ export default function MapComponent({
           map.removeLayer(userLocationMarkerRef.current)
         }
 
-        userLocationMarkerRef.current = L.marker([latitude, longitude])
+        userLocationMarkerRef.current = L.marker([latitude, longitude], {
+          icon: buildGpsCompassIcon(),
+        })
           .addTo(map)
           .bindPopup(
             `Tu ubicación actual:<br/>Latitud: ${latitude.toFixed(6)}<br/>Longitud: ${longitude.toFixed(6)}`,
@@ -1043,6 +1123,7 @@ export default function MapComponent({
           animate: true,
           duration: 1.5,
         })
+        startDeviceOrientationTracking()
       },
       () => {
         setError("No se pudo obtener tu ubicación. Revisa permisos de GPS e inténtalo de nuevo.")
@@ -1052,6 +1133,14 @@ export default function MapComponent({
         timeout: 10000,
       },
     )
+  }, [buildGpsCompassIcon, startDeviceOrientationTracking])
+
+  useEffect(() => {
+    return () => {
+      if (deviceOrientationCleanupRef.current) {
+        deviceOrientationCleanupRef.current()
+      }
+    }
   }, [])
 
   return (
@@ -1183,6 +1272,66 @@ export default function MapComponent({
               text-align: center;
               font-size: 16px;
               text-decoration: none;
+            }
+            .gps-compass-marker {
+              background: transparent;
+              border: none;
+            }
+            .gps-compass__ring {
+              position: relative;
+              width: 44px;
+              height: 44px;
+              border-radius: 9999px;
+              background: rgba(255, 255, 255, 0.95);
+              border: 2px solid #0f172a;
+              box-shadow: 0 8px 20px rgba(15, 23, 42, 0.3);
+              backdrop-filter: blur(2px);
+            }
+            .gps-compass__dot {
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              width: 10px;
+              height: 10px;
+              border-radius: 9999px;
+              transform: translate(-50%, -50%);
+              background: #2563eb;
+              border: 2px solid #ffffff;
+              z-index: 3;
+            }
+            .gps-compass__needle {
+              position: absolute;
+              left: 50%;
+              top: 4px;
+              width: 3px;
+              height: 16px;
+              border-radius: 9999px;
+              transform-origin: 50% calc(100% - 2px);
+              transform: translateX(-50%) rotate(0deg);
+              background: linear-gradient(to bottom, #ef4444, #b91c1c);
+              box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+              z-index: 2;
+            }
+            .gps-compass__pulse {
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              width: 50px;
+              height: 50px;
+              border-radius: 9999px;
+              transform: translate(-50%, -50%);
+              background: rgba(37, 99, 235, 0.18);
+              animation: gps-pulse 2s ease-out infinite;
+            }
+            @keyframes gps-pulse {
+              0% {
+                transform: translate(-50%, -50%) scale(0.9);
+                opacity: 0.8;
+              }
+              100% {
+                transform: translate(-50%, -50%) scale(1.5);
+                opacity: 0;
+              }
             }
           `}</style>
     </>
