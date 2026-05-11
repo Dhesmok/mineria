@@ -49,9 +49,11 @@ export default function Component() {
   const inputRef = useRef(null)
   const [showTitleLayer, setShowTitleLayer] = useState(false)
   const [showRequestLayer, setShowRequestLayer] = useState(false)
+  const [showAnmServiceLayer, setShowAnmServiceLayer] = useState(false)
   const [showHistoricalTitleLayer, setShowHistoricalTitleLayer] = useState(false)
   const [titleOpacity, setTitleOpacity] = useState(0.6)
   const [requestOpacity, setRequestOpacity] = useState(0.7)
+  const [anmServiceOpacity, setAnmServiceOpacity] = useState(0.7)
   const [historicalTitleOpacity, setHistoricalTitleOpacity] = useState(0.5)
 
   const handleApply = useCallback(() => {
@@ -290,6 +292,21 @@ export default function Component() {
               <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
             </div>
             <div className="flex items-center gap-2">
+              <Label htmlFor="anmServiceLayer" className="text-sm">
+                Capa ANM Servicio 3
+              </Label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={anmServiceOpacity}
+                onChange={(e) => setAnmServiceOpacity(parseFloat(e.target.value))}
+                className="flex-1"
+              />
+              <Switch id="anmServiceLayer" checked={showAnmServiceLayer} onCheckedChange={setShowAnmServiceLayer} />
+            </div>
+            <div className="flex items-center gap-2">
               <Label htmlFor="historicalTitleLayer" className="text-sm">
                 Título Histórico
               </Label>
@@ -347,9 +364,11 @@ export default function Component() {
           onMapInitialized={handleMapInitialized}
           showTitleLayer={showTitleLayer}
           showRequestLayer={showRequestLayer}
+          showAnmServiceLayer={showAnmServiceLayer}
           showHistoricalTitleLayer={showHistoricalTitleLayer}
           titleOpacity={titleOpacity}
           requestOpacity={requestOpacity}
+          anmServiceOpacity={anmServiceOpacity}
           historicalTitleOpacity={historicalTitleOpacity}
         />
         {!showSidebar && (

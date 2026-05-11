@@ -21,9 +21,11 @@ export default function MapComponent({
   onMapInitialized,
   showTitleLayer,
   showRequestLayer,
+  showAnmServiceLayer,
   showHistoricalTitleLayer,
   titleOpacity,
   requestOpacity,
+  anmServiceOpacity,
   historicalTitleOpacity,
 }) {
   const mapRef = useRef(null)
@@ -31,14 +33,17 @@ export default function MapComponent({
   const verticesLayerRef = useRef(null)
   const titleLayerRef = useRef(null)
   const requestLayerRef = useRef(null)
+  const anmServiceLayerRef = useRef(null)
   const historicalTitleLayerRef = useRef(null)
   const titleOpacityRef = useRef(titleOpacity)
   const requestOpacityRef = useRef(requestOpacity)
+  const anmServiceOpacityRef = useRef(anmServiceOpacity)
   const historicalTitleOpacityRef = useRef(historicalTitleOpacity)
   const lastSearchTriggerRef = useRef(0)
   const labelsLayerRef = useRef(null)
   const titleLabelsLayerRef = useRef(null)
   const requestLabelsLayerRef = useRef(null)
+  const anmServiceLabelsLayerRef = useRef(null)
   const historicalTitleLabelsLayerRef = useRef(null)
   const drawControlRef = useRef(null)
   const drawnItemsRef = useRef(null)
@@ -81,6 +86,10 @@ export default function MapComponent({
   }, [requestOpacity])
 
   useEffect(() => {
+    anmServiceOpacityRef.current = anmServiceOpacity
+  }, [anmServiceOpacity])
+
+  useEffect(() => {
     historicalTitleOpacityRef.current = historicalTitleOpacity
   }, [historicalTitleOpacity])
 
@@ -88,6 +97,7 @@ export default function MapComponent({
   // proveniente de los controles y la opacidad configurada
   const shouldShowTitleLayer = showTitleLayer && titleOpacity > 0
   const shouldShowRequestLayer = showRequestLayer && requestOpacity > 0
+  const shouldShowAnmServiceLayer = showAnmServiceLayer && anmServiceOpacity > 0
   const shouldShowHistoricalTitleLayer = showHistoricalTitleLayer && historicalTitleOpacity > 0
 
   // Función para formatear fechas
@@ -900,6 +910,20 @@ export default function MapComponent({
       )
 
       updateLayer(
+        shouldShowAnmServiceLayer,
+        anmServiceLayerRef,
+        anmServiceLabelsLayerRef,
+        null,
+        {
+          color: "#00A8E8",
+          weight: 2,
+          fillColor: "#90E0EF",
+          fillOpacity: anmServiceOpacity,
+        },
+        "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3",
+      )
+
+      updateLayer(
         shouldShowRequestLayer,
         requestLayerRef,
         requestLabelsLayerRef,
@@ -938,9 +962,11 @@ export default function MapComponent({
     mapInstance,
     shouldShowTitleLayer,
     shouldShowRequestLayer,
+    shouldShowAnmServiceLayer,
     shouldShowHistoricalTitleLayer,
     titleOpacity,
     requestOpacity,
+    anmServiceOpacity,
     historicalTitleOpacity,
     findLayerNumbers,
   ])
@@ -975,6 +1001,14 @@ export default function MapComponent({
         }
         historicalTitleLayerRef.current.options.style = style
         historicalTitleLayerRef.current.setStyle(style)
+      }
+      if (anmServiceLayerRef.current) {
+        const style = {
+          ...anmServiceLayerRef.current.options.style,
+          fillOpacity: anmServiceOpacityRef.current,
+        }
+        anmServiceLayerRef.current.options.style = style
+        anmServiceLayerRef.current.setStyle(style)
       }
     }
 
