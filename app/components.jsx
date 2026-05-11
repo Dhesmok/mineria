@@ -137,12 +137,18 @@ export default function Component() {
       const urls = [
         `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE&returnGeometry=false&f=json`,
         `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE&returnGeometry=false&f=json`,
+        `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
+        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
       ]
 
       const responses = await Promise.all(urls.map((url) => fetch(url)))
       const data = await Promise.all(responses.map((res) => res.json()))
 
-      const expedients = data.flatMap((d) => d.features.map((f) => f.attributes.CODIGO_EXPEDIENTE))
+      const expedients = data.flatMap((d) =>
+        (d.features || [])
+          .map((f) => f.attributes?.CODIGO_EXPEDIENTE || f.attributes?.TENURE_ID)
+          .filter(Boolean),
+      )
       const uniqueExpedients = [...new Set(expedients)]
       if (uniqueExpedients.length > 0) {
         setExpedientSuggestions(uniqueExpedients.slice(0, 10))
@@ -293,7 +299,7 @@ export default function Component() {
             </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="anmServiceLayer" className="text-sm">
-                Capa ANM Servicio 3
+                Subcontratos
               </Label>
               <input
                 type="range"

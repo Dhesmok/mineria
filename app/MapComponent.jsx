@@ -54,6 +54,7 @@ export default function MapComponent({
   const [drawingColor, setDrawingColor] = useState("#f357a1")
   const [mapInstance, setMapInstance] = useState(null)
   const [showColorPicker, setShowColorPicker] = useState(false)
+  const [showErrorBanner, setShowErrorBanner] = useState(false)
   const [isCompassActive, setIsCompassActive] = useState(false)
   const [deviceHeading, setDeviceHeading] = useState(null)
   const layerNumbersCacheRef = useRef(null)
@@ -697,11 +698,29 @@ export default function MapComponent({
         },
       },
       {
+        url: "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query",
+        style: {
+          color: "#6E4B3A",
+          weight: 3,
+          fillColor: "#B68863",
+          fillOpacity: 0.6,
+        },
+      },
+      {
         url: `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/${layerNumbers["Solicitud Vigente"]}/query`,
         style: {
           color: "#F0C567",
           weight: 3,
           fillColor: "#FFF0AF",
+          fillOpacity: 0.6,
+        },
+      },
+      {
+        url: "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query",
+        style: {
+          color: "#22577A",
+          weight: 3,
+          fillColor: "#38A3A5",
           fillOpacity: 0.6,
         },
       },
@@ -807,11 +826,13 @@ export default function MapComponent({
         }
       } catch (error) {
         console.error("Error al obtener los datos:", error)
+        setShowErrorBanner(true)
         setError("Error al obtener los datos del expediente")
       }
     }
 
     // Si llegamos aquí, no se encontró el expediente
+    setShowErrorBanner(true)
     setError(`No se encontró un polígono con el expediente introducido '${expedientCode}'.`)
     onCoordinatesUpdate([], null)
   }, [expedientCode, onCoordinatesUpdate, findLayerNumbers])
@@ -821,6 +842,7 @@ export default function MapComponent({
     if (searchTrigger !== lastSearchTriggerRef.current) {
       lastSearchTriggerRef.current = searchTrigger
       setError(null)
+      setShowErrorBanner(false)
       fetchData()
     }
   }, [searchTrigger, fetchData])
@@ -915,9 +937,9 @@ export default function MapComponent({
         anmServiceLabelsLayerRef,
         null,
         {
-          color: "#00A8E8",
+          color: "#6E4B3A",
           weight: 2,
-          fillColor: "#90E0EF",
+          fillColor: "#B68863",
           fillOpacity: anmServiceOpacity,
         },
         "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3",
@@ -955,6 +977,7 @@ export default function MapComponent({
       mapRef.current.invalidateSize()
     } catch (error) {
       console.error("Error al actualizar las capas:", error)
+      setShowErrorBanner(true)
       setError("Error al actualizar las capas del mapa")
     }
 
@@ -1147,6 +1170,7 @@ export default function MapComponent({
     }
 
     setError(null)
+    setShowErrorBanner(false)
     const started = await startDeviceOrientationTracking()
     if (started) {
       setIsCompassActive(true)
@@ -1157,11 +1181,13 @@ export default function MapComponent({
     if (!mapRef.current) return
 
     if (!navigator.geolocation) {
+      setShowErrorBanner(true)
       setError("Tu navegador no soporta geolocalización.")
       return
     }
 
     setError(null)
+    setShowErrorBanner(false)
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords
@@ -1186,6 +1212,7 @@ export default function MapComponent({
         })
       },
       () => {
+        setShowErrorBanner(true)
         setError("No se pudo obtener tu ubicación. Revisa permisos de GPS e inténtalo de nuevo.")
       },
       {
@@ -1314,7 +1341,18 @@ export default function MapComponent({
           Fabio A. Espinosa
         </Button>
       </div>
-      {error && <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 text-center z-10">{error}</div>}
+      {error && showErrorBanner && (
+        <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 z-10 flex items-center justify-between gap-2">
+          <span className="text-sm">{error}</span>
+          <button
+            type="button"
+            onClick={() => setShowErrorBanner(false)}
+            className="px-2 py-1 text-xs font-semibold bg-red-700 rounded hover:bg-red-800"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
 
       <style jsx global>{`
             .map-label {
