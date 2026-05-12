@@ -49,9 +49,11 @@ export default function Component() {
   const inputRef = useRef(null)
   const [showTitleLayer, setShowTitleLayer] = useState(false)
   const [showRequestLayer, setShowRequestLayer] = useState(false)
+  const [showAnmServiceLayer, setShowAnmServiceLayer] = useState(false)
   const [showHistoricalTitleLayer, setShowHistoricalTitleLayer] = useState(false)
   const [titleOpacity, setTitleOpacity] = useState(0.6)
   const [requestOpacity, setRequestOpacity] = useState(0.7)
+  const [anmServiceOpacity, setAnmServiceOpacity] = useState(0.7)
   const [historicalTitleOpacity, setHistoricalTitleOpacity] = useState(0.5)
 
   const handleApply = useCallback(() => {
@@ -132,20 +134,38 @@ export default function Component() {
     setIsLoading(true)
     setError(null)
     try {
+      const sanitizedQuery = query.trim().toUpperCase().replace(/'/g, "''")
+      const whereClause = `(UPPER(TENURE_ID) LIKE '${sanitizedQuery}%' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${sanitizedQuery}%')`
       const urls = [
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE&returnGeometry=false&f=json`,
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE&returnGeometry=false&f=json`,
+        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
+        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
+        `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
+        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
       ]
 
-      const responses = await Promise.all(urls.map((url) => fetch(url)))
-      const data = await Promise.all(responses.map((res) => res.json()))
+      const settledResponses = await Promise.allSettled(urls.map((url) => fetch(url)))
+      const successfulResponses = settledResponses
+        .filter((result) => result.status === "fulfilled" && result.value.ok)
+        .map((result) => result.value)
 
-      const expedients = data.flatMap((d) => d.features.map((f) => f.attributes.CODIGO_EXPEDIENTE))
+      const settledPayloads = await Promise.allSettled(successfulResponses.map((res) => res.json()))
+      const data = settledPayloads
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => result.value)
+
+      const expedients = data.flatMap((d) =>
+        (d.features || [])
+          .map((f) => f.attributes?.CODIGO_EXPEDIENTE || f.attributes?.TENURE_ID)
+          .filter(Boolean),
+      )
       const uniqueExpedients = [...new Set(expedients)]
       if (uniqueExpedients.length > 0) {
         setExpedientSuggestions(uniqueExpedients.slice(0, 10))
       } else {
         setExpedientSuggestions([])
+      }
+      if (successfulResponses.length === 0) {
+        throw new Error("No fue posible consultar las capas de sugerencias.")
       }
     } catch (error) {
       console.error("Error fetching expedients:", error)
@@ -290,6 +310,21 @@ export default function Component() {
               <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
             </div>
             <div className="flex items-center gap-2">
+              <Label htmlFor="anmServiceLayer" className="text-sm">
+                Subcontratos
+              </Label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={anmServiceOpacity}
+                onChange={(e) => setAnmServiceOpacity(parseFloat(e.target.value))}
+                className="flex-1"
+              />
+              <Switch id="anmServiceLayer" checked={showAnmServiceLayer} onCheckedChange={setShowAnmServiceLayer} />
+            </div>
+            <div className="flex items-center gap-2">
               <Label htmlFor="historicalTitleLayer" className="text-sm">
                 Título Histórico
               </Label>
@@ -347,9 +382,11 @@ export default function Component() {
           onMapInitialized={handleMapInitialized}
           showTitleLayer={showTitleLayer}
           showRequestLayer={showRequestLayer}
+          showAnmServiceLayer={showAnmServiceLayer}
           showHistoricalTitleLayer={showHistoricalTitleLayer}
           titleOpacity={titleOpacity}
           requestOpacity={requestOpacity}
+          anmServiceOpacity={anmServiceOpacity}
           historicalTitleOpacity={historicalTitleOpacity}
         />
         {!showSidebar && (
