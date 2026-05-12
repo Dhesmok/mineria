@@ -143,8 +143,15 @@ export default function Component() {
         `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
       ]
 
-      const responses = await Promise.all(urls.map((url) => fetch(url)))
-      const data = await Promise.all(responses.map((res) => res.json()))
+      const settledResponses = await Promise.allSettled(urls.map((url) => fetch(url)))
+      const successfulResponses = settledResponses
+        .filter((result) => result.status === "fulfilled" && result.value.ok)
+        .map((result) => result.value)
+
+      const settledPayloads = await Promise.allSettled(successfulResponses.map((res) => res.json()))
+      const data = settledPayloads
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => result.value)
 
       const expedients = data.flatMap((d) =>
         (d.features || [])
@@ -156,6 +163,9 @@ export default function Component() {
         setExpedientSuggestions(uniqueExpedients.slice(0, 10))
       } else {
         setExpedientSuggestions([])
+      }
+      if (successfulResponses.length === 0) {
+        throw new Error("No fue posible consultar las capas de sugerencias.")
       }
     } catch (error) {
       console.error("Error fetching expedients:", error)
