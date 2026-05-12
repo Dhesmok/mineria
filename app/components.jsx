@@ -134,11 +134,13 @@ export default function Component() {
     setIsLoading(true)
     setError(null)
     try {
+      const sanitizedQuery = query.trim().toUpperCase().replace(/'/g, "''")
+      const whereClause = `(UPPER(TENURE_ID) LIKE '${sanitizedQuery}%' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${sanitizedQuery}%')`
       const urls = [
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE&returnGeometry=false&f=json`,
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE&returnGeometry=false&f=json`,
-        `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query?where=TENURE_ID%20LIKE%20'${query}%'&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
+        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
+        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
+        `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
+        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
       ]
 
       const responses = await Promise.all(urls.map((url) => fetch(url)))

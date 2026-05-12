@@ -684,6 +684,7 @@ export default function MapComponent({
   // Función para cargar datos de un expediente específico
   const fetchData = useCallback(async () => {
     if (!mapRef.current || !expedientCode) return
+    const normalizedCode = expedientCode.trim().toUpperCase().replace(/'/g, "''")
 
     const layerNumbers = await findLayerNumbers()
 
@@ -743,7 +744,7 @@ export default function MapComponent({
     // Buscamos en ambas capas (Título y Solicitud)
     for (const layer of layers) {
       const params = new URLSearchParams({
-        where: `TENURE_ID='${expedientCode}'`,
+        where: `(UPPER(TENURE_ID)='${normalizedCode}' OR UPPER(CODIGO_EXPEDIENTE)='${normalizedCode}')`,
         outFields: "*",
         returnGeometry: "true",
         f: "geojson",
