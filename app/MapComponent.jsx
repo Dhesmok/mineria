@@ -57,6 +57,8 @@ export default function MapComponent({
   const [showErrorBanner, setShowErrorBanner] = useState(false)
   const [isCompassActive, setIsCompassActive] = useState(false)
   const [deviceHeading, setDeviceHeading] = useState(null)
+  const [isLocating, setIsLocating] = useState(false)
+  const [hasLocated, setHasLocated] = useState(false)
   const layerNumbersCacheRef = useRef(null)
   const userLocationMarkerRef = useRef(null)
   const deviceOrientationCleanupRef = useRef(null)
@@ -1193,8 +1195,11 @@ export default function MapComponent({
 
     setError(null)
     setShowErrorBanner(false)
+    setIsLocating(true)
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        setIsLocating(false)
+        setHasLocated(true)
         const { latitude, longitude } = position.coords
         const map = mapRef.current
 
@@ -1217,6 +1222,8 @@ export default function MapComponent({
         })
       },
       () => {
+        setIsLocating(false)
+        setHasLocated(false)
         setShowErrorBanner(true)
         setError("No se pudo obtener tu ubicación. Revisa permisos de GPS e inténtalo de nuevo.")
       },
@@ -1330,12 +1337,28 @@ export default function MapComponent({
           {baseLayer === "osm" ? <Satellite className="mr-2 h-4 w-4" /> : <MapIcon className="mr-2 h-4 w-4" />}
           {baseLayer === "osm" ? "Satélite" : "Mapa"}
         </Button>
-        <Button onClick={handleLocateUser} className="bg-white text-black hover:bg-gray-200">
-          <Crosshair className="mr-2 h-4 w-4" />
-          Activar GPS
+        <Button
+          onClick={handleLocateUser}
+          className={`transition-colors ${
+            isLocating
+              ? "bg-blue-50 text-blue-500 animate-pulse"
+              : hasLocated
+                ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                : "bg-white text-black hover:bg-gray-200"
+          }`}
+        >
+          <Crosshair className={`mr-2 h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
+          {isLocating ? "Ubicando..." : hasLocated ? "Ubicación activa" : "Activar GPS"}
         </Button>
-        <Button onClick={handleToggleCompass360} className="bg-white text-black hover:bg-gray-200">
-          <Compass className="mr-2 h-4 w-4" />
+        <Button
+          onClick={handleToggleCompass360}
+          className={`transition-colors ${
+            isCompassActive
+              ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+              : "bg-white text-black hover:bg-gray-200"
+          }`}
+        >
+          <Compass className={`mr-2 h-4 w-4 ${isCompassActive ? "text-blue-600" : ""}`} />
           {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
         </Button>
         <Button
