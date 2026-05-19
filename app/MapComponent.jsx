@@ -1084,22 +1084,70 @@ export default function MapComponent({
     setDrawingColor(newColor)
   }
 
+
   const buildGpsCompassIcon = useCallback(
-    (compassActive) =>
-      L.divIcon({
-      className: "gps-compass-marker",
-      html: `
-        <div class="gps-compass__pulse"></div>
-        <div class="gps-compass__ring">
-          <div class="gps-compass__dot"></div>
-          ${compassActive ? '<div class="gps-compass__needle"></div>' : ''}
-        </div>
-      `,
-      iconSize: [44, 44],
-      iconAnchor: [22, 22],
-      }),
+    (compassActive) => {
+      const size = compassActive ? 250 : 44
+      const center = size / 2
+
+      let dialHtml = ''
+      let needleHtml = ''
+
+      if (compassActive) {
+        let ticks = ''
+        for (let i = 0; i < 360; i += 2) {
+          const isTen = i % 10 === 0
+          const length = isTen ? 12 : (i % 5 === 0 ? 8 : 4)
+          ticks += `<line x1="${center}" y1="${isTen ? 0 : (12-length)}" x2="${center}" y2="12" transform="rotate(${i} ${center} ${center})" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"/>`
+          ticks += `<line x1="${center}" y1="${isTen ? 0 : (12-length)}" x2="${center}" y2="12" transform="rotate(${i} ${center} ${center})" stroke="rgba(0,0,0,0.5)" stroke-width="0.5"/>`
+          if (isTen) {
+            ticks += `<text x="${center}" y="24" transform="rotate(${i} ${center} ${center})" fill="white" font-size="10" text-anchor="middle" font-family="sans-serif" font-weight="bold" style="text-shadow: 1px 1px 2px black;">${i}</text>`
+          }
+        }
+
+        dialHtml = `
+          <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="position: absolute; left: 0; top: 0; pointer-events: none;">
+            <circle cx="${center}" cy="${center}" r="${center - 2}" fill="rgba(0, 50, 100, 0.1)" stroke="rgba(255,255,255,0.4)" stroke-width="1"/>
+            ${ticks}
+            <g font-size="28" font-weight="bold" font-family="serif" style="text-shadow: 1px 1px 3px black;">
+              <text x="${center}" y="55" fill="#ff4444" text-anchor="middle">N</text>
+              <text x="${center}" y="${size - 35}" fill="white" text-anchor="middle">S</text>
+              <text x="${size - 35}" y="${center + 10}" fill="white" text-anchor="middle">E</text>
+              <text x="35" y="${center + 10}" fill="white" text-anchor="middle">W</text>
+            </g>
+            <line x1="${center - 15}" y1="${center}" x2="${center + 15}" y2="${center}" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
+            <line x1="${center}" y1="${center - 15}" x2="${center}" y2="${center + 15}" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
+          </svg>
+        `
+
+        needleHtml = `
+          <div class="gps-compass__needle" style="width:${size}px; height:${size}px; left:0; top:0; transform-origin: center; transform: rotate(0deg); background:transparent; border:none; filter:none; position:absolute;">
+            <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+              <line x1="${center}" y1="${center}" x2="${center}" y2="20" stroke="#ff4444" stroke-width="2"/>
+              <polygon points="${center - 4},35 ${center + 4},35 ${center},20" fill="#ff4444" />
+              <circle cx="${center}" cy="${center}" r="3" fill="#ff4444"/>
+            </svg>
+          </div>
+        `
+      }
+
+      return L.divIcon({
+        className: "gps-compass-marker",
+        html: `
+          <div class="gps-compass__pulse" style="left: ${center}px; top: ${center}px;"></div>
+          <div class="gps-compass__ring" style="width: ${size}px; height: ${size}px;">
+            ${dialHtml}
+            ${needleHtml}
+            <div class="gps-compass__dot" style="left: ${center}px; top: ${center}px;"></div>
+          </div>
+        `,
+        iconSize: [size, size],
+        iconAnchor: [center, center],
+      })
+    },
     [],
   )
+
 
   const updateCompassNeedle = useCallback((heading) => {
     if (!Number.isFinite(heading) || !userLocationMarkerRef.current) return
@@ -1110,7 +1158,7 @@ export default function MapComponent({
     const needleElement = markerElement.querySelector(".gps-compass__needle")
     if (!needleElement) return
 
-    needleElement.style.transform = `translateX(-50%) rotate(${heading}deg)`
+    needleElement.style.transform = `rotate(${heading}deg)`
   }, [])
 
   const startDeviceOrientationTracking = useCallback(async () => {
