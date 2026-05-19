@@ -468,9 +468,6 @@ export default function MapComponent({
       titleLabelsLayerRef.current = null
       requestLabelsLayerRef.current = null
       historicalTitleLabelsLayerRef.current = null
-      if (mapInstanceLocal) {
-        mapInstanceLocal.off("zoomend", handleZoom)
-      }
     }
   }, [onMapInitialized])
 
@@ -743,18 +740,24 @@ export default function MapComponent({
 
     // Buscamos en ambas capas (Título y Solicitud)
     for (const layer of layers) {
-      const params = new URLSearchParams({
-        where: `(UPPER(TENURE_ID)='${normalizedCode}' OR UPPER(CODIGO_EXPEDIENTE)='${normalizedCode}')`,
-        outFields: "*",
-        returnGeometry: "true",
-        f: "geojson",
-      })
+      const queries = [
+        `UPPER(TENURE_ID)='${normalizedCode}'`,
+        `UPPER(CODIGO_EXPEDIENTE)='${normalizedCode}'`
+      ];
 
-      try {
-        const response = await fetch(`${layer.url}?${params}`)
-        const data = await response.json()
+      for (const whereClause of queries) {
+        const params = new URLSearchParams({
+          where: whereClause,
+          outFields: "*",
+          returnGeometry: "true",
+          f: "geojson",
+        })
 
-        if (data.features && data.features.length > 0) {
+        try {
+          const response = await fetch(`${layer.url}?${params}`)
+          const data = await response.json()
+
+          if (data.features && data.features.length > 0) {
           // Agregamos la capa GeoJSON
           geoJsonLayerRef.current = L.geoJSON(data, {
             style: layer.style,
@@ -819,16 +822,17 @@ export default function MapComponent({
           const mappedCoordinates = allCoordinates.map((coord) => [coord[1], coord[0]])
           mapRef.current.addVertices(mappedCoordinates)
 
-          // Llamamos a onCoordinatesUpdate si existe
-          onCoordinatesUpdate(allCoordinates, data)
+            // Llamamos a onCoordinatesUpdate si existe
+            onCoordinatesUpdate(allCoordinates, data)
 
-          // Salimos del bucle porque ya encontramos el expediente
-          return
+            // Salimos de ambos bucles porque ya encontramos el expediente
+            return
+          }
+        } catch (error) {
+          console.error("Error al obtener los datos:", error)
+          setShowErrorBanner(true)
+          setError("Error al obtener los datos del expediente")
         }
-      } catch (error) {
-        console.error("Error al obtener los datos:", error)
-        setShowErrorBanner(true)
-        setError("Error al obtener los datos del expediente")
       }
     }
 
