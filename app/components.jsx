@@ -218,7 +218,13 @@ export default function Component() {
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Títulos y Solicitudes</h2>
-            <Button variant="ghost" onClick={() => setShowSidebar(false)} className="p-1 rounded-full">
+            <Button
+              variant="ghost"
+              onClick={() => setShowSidebar(false)}
+              className="p-1 rounded-full"
+              aria-label="Ocultar panel"
+              title="Ocultar panel"
+            >
               <ChevronLeft className="h-6 w-6" />
             </Button>
           </div>
@@ -290,7 +296,7 @@ export default function Component() {
                 value={titleOpacity}
                 onChange={(e) => setTitleOpacity(parseFloat(e.target.value))}
                 className="flex-1"
-
+                aria-label="Opacidad de Títulos Vigentes"
               />
               <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
             </div>
@@ -306,6 +312,7 @@ export default function Component() {
                   value={requestOpacity}
                   onChange={(e) => setRequestOpacity(parseFloat(e.target.value))}
                   className="flex-1"
+                  aria-label="Opacidad de Solicitudes Vigente"
                 />
               <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
             </div>
@@ -321,6 +328,7 @@ export default function Component() {
                 value={anmServiceOpacity}
                 onChange={(e) => setAnmServiceOpacity(parseFloat(e.target.value))}
                 className="flex-1"
+                aria-label="Opacidad de Subcontratos"
               />
               <Switch id="anmServiceLayer" checked={showAnmServiceLayer} onCheckedChange={setShowAnmServiceLayer} />
             </div>
@@ -336,6 +344,7 @@ export default function Component() {
                 value={historicalTitleOpacity}
                 onChange={(e) => setHistoricalTitleOpacity(parseFloat(e.target.value))}
                 className="flex-1"
+                aria-label="Opacidad de Título Histórico"
               />
               <Switch
                 id="historicalTitleLayer"
@@ -394,6 +403,8 @@ export default function Component() {
             variant="outline"
             onClick={() => setShowSidebar(true)}
             className="absolute top-4 left-4 z-20 bg-white shadow-md rounded-full p-2"
+            aria-label="Mostrar panel"
+            title="Mostrar panel"
           >
             <ChevronRight className="h-6 w-6" />
           </Button>
