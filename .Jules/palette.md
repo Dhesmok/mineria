@@ -7,3 +7,6 @@
 ## 2024-05-19 - Modernized GPS location icon
 **Learning:** Default leaflet or custom opaque icons for live location can feel outdated. A modern transparent look with a blue dot, pulsing aura, and a semi-transparent directional cone significantly improves map UX by imitating standard mobile map apps.
 **Action:** Replaced CSS styling for the `gps-compass` classes. Changed the ring to transparent, updated the dot to blue (`#007aff`), replaced the red needle with a CSS border-triangle cone (`rgba(0, 122, 255, 0.3)`), and refined the pulse animation.
+## 2024-05-19 - Fixing stale closures in map tracking
+**Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
+**Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.

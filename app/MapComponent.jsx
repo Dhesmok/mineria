@@ -62,6 +62,9 @@ export default function MapComponent({
   const layerNumbersCacheRef = useRef(null)
   const userLocationMarkerRef = useRef(null)
   const deviceOrientationCleanupRef = useRef(null)
+  const locationWatchIdRef = useRef(null)
+  const deviceHeadingRef = useRef(null)
+  const hasCenteredRef = useRef(false)
 
   const formatDistance = (meters) => {
     if (meters >= 1000) {
@@ -1082,14 +1085,14 @@ export default function MapComponent({
   }
 
   const buildGpsCompassIcon = useCallback(
-    () =>
+    (compassActive) =>
       L.divIcon({
       className: "gps-compass-marker",
       html: `
         <div class="gps-compass__pulse"></div>
         <div class="gps-compass__ring">
           <div class="gps-compass__dot"></div>
-          <div class="gps-compass__needle"></div>
+          ${compassActive ? '<div class="gps-compass__needle"></div>' : ''}
         </div>
       `,
       iconSize: [44, 44],
@@ -1148,6 +1151,7 @@ export default function MapComponent({
 
       if (heading !== null) {
         setDeviceHeading(heading)
+        deviceHeadingRef.current = heading
         updateCompassNeedle(heading)
       }
     }
@@ -1173,6 +1177,9 @@ export default function MapComponent({
   const handleToggleCompass360 = useCallback(async () => {
     if (isCompassActive) {
       stopDeviceOrientationTracking()
+      if (userLocationMarkerRef.current) {
+        userLocationMarkerRef.current.setIcon(buildGpsCompassIcon(false))
+      }
       return
     }
 
@@ -1181,11 +1188,34 @@ export default function MapComponent({
     const started = await startDeviceOrientationTracking()
     if (started) {
       setIsCompassActive(true)
+      if (userLocationMarkerRef.current) {
+        userLocationMarkerRef.current.setIcon(buildGpsCompassIcon(true))
+        setTimeout(() => {
+          if (deviceHeadingRef.current !== null) {
+            updateCompassNeedle(deviceHeadingRef.current)
+          }
+        }, 0)
+      }
     }
-  }, [isCompassActive, startDeviceOrientationTracking, stopDeviceOrientationTracking])
+  }, [isCompassActive, startDeviceOrientationTracking, stopDeviceOrientationTracking, buildGpsCompassIcon, updateCompassNeedle])
 
   const handleLocateUser = useCallback(() => {
     if (!mapRef.current) return
+
+    if (hasLocated || isLocating) {
+      if (locationWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchIdRef.current)
+        locationWatchIdRef.current = null
+      }
+      if (userLocationMarkerRef.current) {
+        mapRef.current.removeLayer(userLocationMarkerRef.current)
+        userLocationMarkerRef.current = null
+      }
+      setIsLocating(false)
+      setHasLocated(false)
+      hasCenteredRef.current = false
+      return
+    }
 
     if (!navigator.geolocation) {
       setShowErrorBanner(true)
@@ -1196,47 +1226,60 @@ export default function MapComponent({
     setError(null)
     setShowErrorBanner(false)
     setIsLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
+
+    locationWatchIdRef.current = navigator.geolocation.watchPosition(
+      async (position) => {
         setIsLocating(false)
         setHasLocated(true)
         const { latitude, longitude } = position.coords
         const map = mapRef.current
 
         if (userLocationMarkerRef.current) {
-          map.removeLayer(userLocationMarkerRef.current)
+          userLocationMarkerRef.current.setLatLng([latitude, longitude])
+          userLocationMarkerRef.current.setPopupContent(
+            `Tu ubicación actual:<br/>Latitud: ${latitude.toFixed(6)}<br/>Longitud: ${longitude.toFixed(6)}`
+          )
+        } else {
+          userLocationMarkerRef.current = L.marker([latitude, longitude], {
+            icon: buildGpsCompassIcon(isCompassActive),
+          })
+            .addTo(map)
+            .bindPopup(
+              `Tu ubicación actual:<br/>Latitud: ${latitude.toFixed(6)}<br/>Longitud: ${longitude.toFixed(6)}`,
+            )
         }
 
-        userLocationMarkerRef.current = L.marker([latitude, longitude], {
-          icon: buildGpsCompassIcon(),
-        })
-          .addTo(map)
-          .bindPopup(
-            `Tu ubicación actual:<br/>Latitud: ${latitude.toFixed(6)}<br/>Longitud: ${longitude.toFixed(6)}`,
-          )
-          .openPopup()
-
-        map.flyTo([latitude, longitude], 16, {
-          animate: true,
-          duration: 1.5,
-        })
+        // Solo centramos la cámara la primera vez para no interrumpir al usuario si mueve el mapa
+        if (!hasCenteredRef.current) {
+          map.flyTo([latitude, longitude], 16, {
+            animate: true,
+            duration: 1.5,
+          })
+          userLocationMarkerRef.current.openPopup()
+          hasCenteredRef.current = true
+        }
       },
       () => {
         setIsLocating(false)
         setHasLocated(false)
+        hasCenteredRef.current = false
         setShowErrorBanner(true)
         setError("No se pudo obtener tu ubicación. Revisa permisos de GPS e inténtalo de nuevo.")
       },
       {
         enableHighAccuracy: true,
         timeout: 10000,
+        maximumAge: 0
       },
     )
-  }, [buildGpsCompassIcon])
+  }, [buildGpsCompassIcon, hasLocated, isLocating, isCompassActive])
 
   useEffect(() => {
     return () => {
       stopDeviceOrientationTracking()
+      if (locationWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchIdRef.current)
+      }
     }
   }, [stopDeviceOrientationTracking])
 
@@ -1245,53 +1288,6 @@ export default function MapComponent({
   return (
     <>
       <div id="map" className="absolute inset-0 z-0"></div>
-      {isCompassActive && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 compass-overlay">
-          <div className="compass-wheel">
-            {Array.from({ length: 72 }).map((_, index) => (
-              <span
-                key={`tick-${index}`}
-                className={`compass-tick ${index % 6 === 0 ? "major" : "minor"}`}
-                style={{ transform: `rotate(${index * 5}deg)` }}
-              />
-            ))}
-
-            {compassLabels.map((degree) => {
-              const radians = (degree * Math.PI) / 180
-              const x = 50 + 44 * Math.sin(radians)
-              const y = 50 - 44 * Math.cos(radians)
-              return (
-                <span
-                  key={`label-${degree}`}
-                  className="compass-degree"
-                  style={{
-                    left: `${x}%`,
-                    top: `${y}%`,
-                    transform: "translate(-50%, -50%)",
-                  }}
-                >
-                  {degree === 0 ? 360 : degree}
-                </span>
-              )
-            })}
-
-            <span className="compass-cardinal north">N</span>
-            <span className="compass-cardinal east">E</span>
-            <span className="compass-cardinal south">S</span>
-            <span className="compass-cardinal west">W</span>
-
-            <div
-              className="compass-heading-line"
-              style={{ transform: `translateX(-50%) rotate(${deviceHeading ?? 0}deg)` }}
-            />
-            <div className="compass-center-dot" />
-            <div className="compass-heading-readout">
-              {deviceHeading === null ? "—" : `${Math.round(deviceHeading)}°`}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Selector de color para dibujos - Botón desplegable */}
       <div className="absolute top-4 right-20 z-10">
         <div className="relative">
@@ -1448,108 +1444,6 @@ export default function MapComponent({
               text-align: center;
               font-size: 16px;
               text-decoration: none;
-            }
-            .compass-overlay {
-              background: rgba(15, 23, 42, 0.55);
-              border: 1px solid rgba(255, 255, 255, 0.18);
-              border-radius: 9999px;
-              backdrop-filter: blur(6px);
-              box-shadow: 0 18px 40px rgba(15, 23, 42, 0.45);
-              padding: 12px;
-            }
-            .compass-wheel {
-              position: relative;
-              width: 260px;
-              height: 260px;
-              border-radius: 9999px;
-              border: 2px solid rgba(255, 255, 255, 0.8);
-            }
-            .compass-tick {
-              position: absolute;
-              left: 50%;
-              top: 8px;
-              transform-origin: 50% 122px;
-              border-radius: 9999px;
-            }
-            .compass-tick.minor {
-              width: 1px;
-              height: 8px;
-              background: rgba(255, 255, 255, 0.55);
-            }
-            .compass-tick.major {
-              width: 2px;
-              height: 14px;
-              background: rgba(255, 255, 255, 0.95);
-            }
-            .compass-degree {
-              position: absolute;
-              font-size: 12px;
-              font-weight: 600;
-              color: rgba(255, 255, 255, 0.92);
-              text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-            }
-            .compass-cardinal {
-              position: absolute;
-              font-size: 42px;
-              font-weight: 700;
-              line-height: 1;
-              color: #ffffff;
-              text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
-            }
-            .compass-cardinal.north {
-              left: 50%;
-              top: 24px;
-              transform: translateX(-50%);
-              color: #ef4444;
-            }
-            .compass-cardinal.east {
-              right: 20px;
-              top: 50%;
-              transform: translateY(-50%);
-            }
-            .compass-cardinal.south {
-              left: 50%;
-              bottom: 20px;
-              transform: translateX(-50%);
-              color: #93c5fd;
-            }
-            .compass-cardinal.west {
-              left: 20px;
-              top: 50%;
-              transform: translateY(-50%);
-            }
-            .compass-heading-line {
-              position: absolute;
-              left: 50%;
-              top: 50%;
-              width: 3px;
-              height: 98px;
-              transform-origin: 50% 100%;
-              background: linear-gradient(to top, #ef4444, rgba(239, 68, 68, 0.2));
-              border-radius: 9999px;
-              box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
-            }
-            .compass-center-dot {
-              position: absolute;
-              left: 50%;
-              top: 50%;
-              width: 10px;
-              height: 10px;
-              border-radius: 9999px;
-              transform: translate(-50%, -50%);
-              background: #ef4444;
-              box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
-            }
-            .compass-heading-readout {
-              position: absolute;
-              left: 50%;
-              bottom: 58px;
-              transform: translateX(-50%);
-              color: white;
-              font-weight: 600;
-              font-size: 16px;
-              letter-spacing: 0.06em;
-              text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
             }
             .gps-compass-marker {
               background: transparent;
