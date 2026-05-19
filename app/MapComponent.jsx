@@ -1560,51 +1560,52 @@ export default function MapComponent({
               width: 44px;
               height: 44px;
               border-radius: 9999px;
-              background: rgba(255, 255, 255, 0.95);
-              border: 2px solid #0f172a;
-              box-shadow: 0 8px 20px rgba(15, 23, 42, 0.3);
-              backdrop-filter: blur(2px);
+              background: transparent;
             }
             .gps-compass__dot {
               position: absolute;
               left: 50%;
               top: 50%;
-              width: 10px;
-              height: 10px;
+              width: 16px;
+              height: 16px;
               border-radius: 9999px;
               transform: translate(-50%, -50%);
-              background: #2563eb;
-              border: 2px solid #ffffff;
+              background: #007aff;
+              border: 3px solid #ffffff;
+              box-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
               z-index: 3;
             }
             .gps-compass__needle {
               position: absolute;
               left: 50%;
-              top: 4px;
-              width: 3px;
-              height: 16px;
-              border-radius: 9999px;
-              transform-origin: 50% calc(100% - 2px);
+              top: -6px;
+              width: 0;
+              height: 0;
+              border-left: 20px solid transparent;
+              border-right: 20px solid transparent;
+              border-bottom: 40px solid rgba(0, 122, 255, 0.3);
+              transform-origin: 50% 28px;
               transform: translateX(-50%) rotate(0deg);
-              background: linear-gradient(to bottom, #ef4444, #b91c1c);
-              box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
               z-index: 2;
+              border-radius: 10px;
+              filter: blur(1px);
             }
             .gps-compass__pulse {
               position: absolute;
               left: 50%;
               top: 50%;
-              width: 50px;
-              height: 50px;
+              width: 60px;
+              height: 60px;
               border-radius: 9999px;
               transform: translate(-50%, -50%);
-              background: rgba(37, 99, 235, 0.18);
-              animation: gps-pulse 2s ease-out infinite;
+              background: rgba(0, 122, 255, 0.2);
+              animation: gps-pulse 2.5s ease-out infinite;
+              z-index: 1;
             }
             @keyframes gps-pulse {
               0% {
-                transform: translate(-50%, -50%) scale(0.9);
-                opacity: 0.8;
+                transform: translate(-50%, -50%) scale(0.3);
+                opacity: 1;
               }
               100% {
                 transform: translate(-50%, -50%) scale(1.5);
