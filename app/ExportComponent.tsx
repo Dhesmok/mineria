@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react'
 import { Button } from "@/components/ui/button"
 import proj4 from 'proj4'
-import shpwrite from 'shp-write'
+import shpwrite from '@mapbox/shp-write'
+import * as turf from '@turf/turf'
 
 // Define the coordinate systems
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
@@ -29,50 +30,6 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
     };
 
     return transformCoords(coords);
-  }, []);
-
-  const fixRingOrientation = useCallback((geometry) => {
-    if (!geometry || geometry.type !== 'Polygon' && geometry.type !== 'MultiPolygon') {
-      return geometry;
-    }
-
-    const isClockwise = (ring) => {
-      let sum = 0;
-      for (let i = 0; i < ring.length - 1; i++) {
-        sum += (ring[i+1][0] - ring[i][0]) * (ring[i+1][1] + ring[i][1]);
-      }
-      return sum > 0;
-    };
-
-    const fixPolygon = (polygon) => {
-      // El anillo exterior debe ser en sentido horario
-      const outerRing = polygon[0];
-      if (!isClockwise(outerRing)) {
-        polygon[0] = outerRing.slice().reverse();
-      }
-      
-      // Los anillos interiores (huecos) deben ser en sentido antihorario
-      for (let i = 1; i < polygon.length; i++) {
-        if (isClockwise(polygon[i])) {
-          polygon[i] = polygon[i].slice().reverse();
-        }
-      }
-      return polygon;
-    };
-
-    if (geometry.type === 'Polygon') {
-      return {
-        ...geometry,
-        coordinates: fixPolygon(geometry.coordinates)
-      };
-    } else if (geometry.type === 'MultiPolygon') {
-      return {
-        ...geometry,
-        coordinates: geometry.coordinates.map(fixPolygon)
-      };
-    }
-    
-    return geometry;
   }, []);
 
   const fetchMapData = useCallback(async () => {
@@ -131,7 +88,7 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
       const toProj = `EPSG:${selectedCoordinateSystem}`;
 
       console.log("Transformando coordenadas...");
-      let transformedGeoJson = {
+      let transformedGeoJson: any = {
         type: "FeatureCollection",
         features: mapData.features.map(feature => {
           // Primero transformamos las coordenadas
@@ -141,11 +98,15 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
             toProj
           );
           
-          // Luego corregimos la orientación de los anillos
-          const fixedGeometry = fixRingOrientation({
+          let fixedGeometry = {
             type: feature.geometry.type,
             coordinates: transformedCoords
-          });
+          };
+
+          // Luego corregimos la orientación de los anillos para que sean compatibles con ArcGIS Shapefile
+          // ArcGIS requiere que los anillos exteriores sean Clockwise (sentido horario)
+          // y los anillos interiores (huecos) Counter-Clockwise (antihorario).
+          turf.rewind(fixedGeometry, { mutate: true, reverse: true });
           
           return {
             type: "Feature",
@@ -165,7 +126,7 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
       });
 
       console.log("Creando Shapefile...");
-      const options = {
+      const options: any = {
         folder: expedientCode+"_EPSG-"+selectedCoordinateSystem,
         types: {
           point: 'points',
@@ -186,7 +147,7 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
     } finally {
       setIsExportingSHP(false);
     }
-  }, [expedientCode, selectedCoordinateSystem, fetchMapData, transformCoordinates, fixRingOrientation]);
+  }, [expedientCode, selectedCoordinateSystem, fetchMapData, transformCoordinates]);
 
   const exportKML = useCallback(async () => {
     if (!expedientCode) {
