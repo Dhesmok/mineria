@@ -744,6 +744,8 @@ export default function MapComponent({
     }
 
     // Buscamos en ambas capas (Título y Solicitud)
+    let hasFetchError = false;
+
     for (const layer of layers) {
       const queries = [
         `UPPER(TENURE_ID)='${normalizedCode}'`,
@@ -835,15 +837,20 @@ export default function MapComponent({
           }
         } catch (error) {
           console.error("Error al obtener los datos:", error)
-          setShowErrorBanner(true)
-          setError("Error al obtener los datos del expediente")
+          hasFetchError = true
         }
       }
     }
 
     // Si llegamos aquí, no se encontró el expediente
     setShowErrorBanner(true)
-    setError(`No se encontró un polígono con el expediente introducido '${expedientCode}'.`)
+    if (hasFetchError) {
+      setError(
+        `No se pudo obtener la información de algunas capas debido a un error del servidor, y no se encontró el expediente introducido '${expedientCode}'.`,
+      )
+    } else {
+      setError(`No se encontró un polígono con el expediente introducido '${expedientCode}'.`)
+    }
     onCoordinatesUpdate([], null)
   }, [expedientCode, onCoordinatesUpdate, findLayerNumbers])
 
