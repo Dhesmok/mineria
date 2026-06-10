@@ -11,7 +11,8 @@ proj4.defs("EPSG:9377", "+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000
 
 const URLS = [
   'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3',
-  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4'
+  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4',
+  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87'
 ];
 
 export default function ExportComponent({ selectedCoordinateSystem, expedientCode }) {
