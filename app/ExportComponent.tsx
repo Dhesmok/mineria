@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import proj4 from 'proj4'
 import shpwrite from '@mapbox/shp-write'
 import * as turf from '@turf/turf'
+import { saveAs } from 'file-saver'
 
 // Define the coordinate systems
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
@@ -127,18 +128,21 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
       });
 
       console.log("Creando Shapefile...");
+      const folderName = expedientCode+"_EPSG-"+selectedCoordinateSystem;
       const options: any = {
-        folder: expedientCode+"_EPSG-"+selectedCoordinateSystem,
+        folder: folderName,
         types: {
           point: 'points',
           polygon: expedientCode,
           line: 'lines'
         },
-        prj: selectedCoordinateSystem
+        prj: selectedCoordinateSystem,
+        outputType: 'blob'
       };
       console.log(selectedCoordinateSystem)
 
-      shpwrite.download(transformedGeoJson, options);
+      const content = await shpwrite.zip(transformedGeoJson, options);
+      saveAs(content as Blob, `${folderName}.zip`);
 
       console.log("Shapefile creado y descarga iniciada.");
 
