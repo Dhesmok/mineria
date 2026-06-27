@@ -1,4 +1,4 @@
-import { debounce } from './debounce';
+const { debounce } = require('./debounce');
 
 describe('debounce', () => {
   beforeEach(() => {
@@ -16,13 +16,13 @@ describe('debounce', () => {
 
     debouncedFn();
 
-    expect(fn).not.toBeCalled();
+    expect(fn).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(50);
-    expect(fn).not.toBeCalled();
+    expect(fn).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(50);
-    expect(fn).toBeCalledTimes(1);
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 
   it('should call the function only once after multiple rapid calls', () => {
@@ -35,10 +35,10 @@ describe('debounce', () => {
     debouncedFn();
 
     jest.advanceTimersByTime(99);
-    expect(fn).not.toBeCalled();
+    expect(fn).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(1);
-    expect(fn).toBeCalledTimes(1);
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 
   it('should pass the latest arguments to the debounced function', () => {
@@ -50,7 +50,7 @@ describe('debounce', () => {
 
     jest.advanceTimersByTime(100);
 
-    expect(fn).toBeCalledWith('arg3', 'arg4');
+    expect(fn).toHaveBeenCalledWith('arg3', 'arg4');
   });
 
   it('should reset the timer on each call', () => {
@@ -63,9 +63,9 @@ describe('debounce', () => {
     debouncedFn();
 
     jest.advanceTimersByTime(50);
-    expect(fn).not.toBeCalled(); // It's been 100ms since the FIRST call, but only 50ms since the SECOND
+    expect(fn).not.toHaveBeenCalled(); // It's been 100ms since the FIRST call, but only 50ms since the SECOND
 
     jest.advanceTimersByTime(50);
-    expect(fn).toBeCalledTimes(1); // Now it's been 100ms since the SECOND call
+    expect(fn).toHaveBeenCalledTimes(1); // Now it's been 100ms since the SECOND call
   });
 });
