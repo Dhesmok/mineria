@@ -434,7 +434,7 @@ export default function MapComponent({
         }
       }
 
-      // Función para limpiar todos los dibujos
+      // Función para limpiar los dibujos
       mapRef.current.clearDrawings = () => {
         drawnItemsRef.current.clearLayers()
       }
@@ -804,8 +804,8 @@ export default function MapComponent({
           // Ajustamos el mapa para mostrar el polígono
           mapRef.current.fitBounds(geoJsonLayerRef.current.getBounds())
 
-          // Obtenemos todos los vértices para dibujar marcadores
-          const allCoordinates = []
+          // Obtenemos los vértices para dibujar marcadores
+          let allCoordinates = []
           const firstFeature = data.features[0]
           const geomType = firstFeature.geometry.type
 
