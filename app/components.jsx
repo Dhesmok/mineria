@@ -10,14 +10,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight } from "lucide-react"
 import proj4 from "proj4"
 import ExportComponent from "./ExportComponent"
-
-function debounce(fn, delay) {
-  let timeout
-  return (...args) => {
-    clearTimeout(timeout)
-    timeout = setTimeout(() => fn(...args), delay)
-  }
-}
+import { debounce } from "./utils/debounce"
 
 const MapComponent = dynamic(() => import("./MapComponent"), {
   ssr: false,
