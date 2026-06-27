@@ -748,21 +748,49 @@ export default function MapComponent({
     // Buscamos en ambas capas (Título y Solicitud)
     let hasFetchError = false;
 
+    const fetchPromises = [];
+
     for (const layer of layers) {
-      const params = new URLSearchParams({
-        where: `(UPPER(TENURE_ID) LIKE '${normalizedCode}%' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${normalizedCode}%')`,
-        outFields: "*",
-        returnGeometry: "true",
-        f: "geojson",
-      })
+      const queries = [
+        `UPPER(TENURE_ID)='${normalizedCode}'`,
+        `UPPER(CODIGO_EXPEDIENTE)='${normalizedCode}'`
+      ];
 
-        try {
-          const response = await fetch(`${layer.url}?${params}`)
-          const data = await response.json()
+      for (const whereClause of queries) {
+        const params = new URLSearchParams({
+          where: whereClause,
+          outFields: "*",
+          returnGeometry: "true",
+          f: "geojson",
+        });
 
-          if (data.features && data.features.length > 0) {
-          // Agregamos la capa GeoJSON
-          geoJsonLayerRef.current = L.geoJSON(data, {
+        const fetchPromise = fetch(`${layer.url}?${params}`)
+          .then(async (response) => {
+            const data = await response.json();
+            return { success: true, data, layer };
+          })
+          .catch((error) => {
+            return { success: false, error };
+          });
+
+        fetchPromises.push(fetchPromise);
+      }
+    }
+
+    const results = await Promise.all(fetchPromises);
+
+    for (const result of results) {
+      if (!result.success) {
+        console.error("Error al obtener los datos:", result.error);
+        hasFetchError = true;
+        continue;
+      }
+
+      const { data, layer } = result;
+
+      if (data.features && data.features.length > 0) {
+        // Agregamos la capa GeoJSON
+        geoJsonLayerRef.current = L.geoJSON(data, {
             style: layer.style,
             onEachFeature: (feature, layer) => {
               // Usamos polylabel para encontrar un punto interno "lo más adentro posible"
@@ -828,18 +856,9 @@ export default function MapComponent({
             // Llamamos a onCoordinatesUpdate si existe
             onCoordinatesUpdate(allCoordinates, data)
 
-            // Salimos de ambos bucles porque ya encontramos el expediente
+            // Salimos porque ya encontramos el expediente
             return
           }
-        } catch (error) {
-          console.error("Error al obtener los datos:", error)
-          hasFetchError = true
-        }
-      } catch (error) {
-        console.error("Error al obtener los datos:", error)
-        setShowErrorBanner(true)
-        setError("Error al obtener los datos del expediente")
-      }
     }
 
     // Si llegamos aquí, no se encontró el expediente

@@ -1,76 +1,95 @@
-const URLS = [
-  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3',
-  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4',
-  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87'
+const layerNumbers = {
+  "Título Vigente": 1,
+  "Solicitud Vigente": 2
+};
+
+const layers = [
+  {
+    url: `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/1/query`,
+  },
+  {
+    url: "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query",
+  },
+  {
+    url: `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/2/query`,
+  },
+  {
+    url: "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query",
+  },
 ];
-const expedientCode = 'HGL-151'; // A random string, might not return results
 
-async function fetchMapDataSequential() {
-  for (const url of URLS) {
-    const params = new URLSearchParams({
-      where: `TENURE_ID='${expedientCode}'`,
-      outFields: '*',
-      f: 'geojson'
-    });
+const normalizedCode = "HJB-082".toUpperCase();
 
-    try {
-      const response = await fetch(`${url}/query?${params}`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
+async function runSequential() {
+  const start = Date.now();
+  for (const layer of layers) {
+    const queries = [
+      `UPPER(TENURE_ID)='${normalizedCode}'`,
+      `UPPER(CODIGO_EXPEDIENTE)='${normalizedCode}'`
+    ];
+
+    for (const whereClause of queries) {
+      const params = new URLSearchParams({
+        where: whereClause,
+        outFields: "*",
+        returnGeometry: "true",
+        f: "geojson",
       });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      const data = await response.json();
-      if (data.features && data.features.length > 0) return data;
-    } catch (error) {
-      // ignore
+      try {
+        const response = await fetch(`${layer.url}?${params}`);
+        const data = await response.json();
+        if (data.features && data.features.length > 0) {
+          console.log(`Sequential found in ${Date.now() - start}ms`);
+          return;
+        }
+      } catch (err) {}
     }
   }
-  throw new Error('Not found');
+  console.log(`Sequential not found in ${Date.now() - start}ms`);
 }
 
-async function fetchMapDataParallel() {
-  const controller = new AbortController();
+async function runConcurrent() {
+  const start = Date.now();
+  const fetchPromises = [];
 
-  const promises = URLS.map(async (url) => {
-    const params = new URLSearchParams({
-      where: `TENURE_ID='${expedientCode}'`,
-      outFields: '*',
-      f: 'geojson'
-    });
+  for (const layer of layers) {
+    const queries = [
+      `UPPER(TENURE_ID)='${normalizedCode}'`,
+      `UPPER(CODIGO_EXPEDIENTE)='${normalizedCode}'`
+    ];
 
-    const response = await fetch(`${url}/query?${params}`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      signal: controller.signal
-    });
+    for (const whereClause of queries) {
+      const params = new URLSearchParams({
+        where: whereClause,
+        outFields: "*",
+        returnGeometry: "true",
+        f: "geojson",
+      });
 
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const data = await response.json();
-    if (data.features && data.features.length > 0) {
-      return data;
+      fetchPromises.push(
+        fetch(`${layer.url}?${params}`)
+          .then(res => res.json())
+          .then(data => ({ data, layer }))
+          .catch(error => ({ error }))
+      );
     }
-    throw new Error('No features');
-  });
-
-  try {
-    const result = await Promise.any(promises);
-    controller.abort(); // abort others
-    return result;
-  } catch (error) {
-    throw new Error('Not found');
   }
+
+  const results = await Promise.all(fetchPromises);
+  for (const result of results) {
+    if (result.error) continue;
+    const { data } = result;
+    if (data.features && data.features.length > 0) {
+      console.log(`Concurrent found in ${Date.now() - start}ms`);
+      return;
+    }
+  }
+  console.log(`Concurrent not found in ${Date.now() - start}ms`);
 }
 
 async function run() {
-  const startSeq = performance.now();
-  try { await fetchMapDataSequential(); } catch (e) {}
-  const endSeq = performance.now();
-  console.log(`Sequential: ${endSeq - startSeq}ms`);
-
-  const startPar = performance.now();
-  try { await fetchMapDataParallel(); } catch (e) {}
-  const endPar = performance.now();
-  console.log(`Parallel: ${endPar - startPar}ms`);
+  await runSequential();
+  await runConcurrent();
 }
 
 run();
