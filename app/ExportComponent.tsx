@@ -45,7 +45,6 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
       });
 
       try {
-        console.log(`Fetching data from ${url}...`);
         const response = await fetch(`${url}/query?${params}`, {
           method: 'GET',
           headers: {
@@ -58,7 +57,6 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
         }
 
         const data = await response.json();
-        console.log(`Data received from ${url}:`, data);
         if (data.features && data.features.length > 0) {
           return data;
         }
@@ -79,10 +77,7 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
     setIsExportingSHP(true);
 
     try {
-      console.log("Iniciando exportación SHP...");
-      
       const mapData = await fetchMapData();
-      console.log("Datos obtenidos:", JSON.stringify(mapData, null, 2));
 
       if (!mapData.features || mapData.features.length === 0) {
         throw new Error('No se encontraron datos para el expediente especificado');
@@ -91,7 +86,6 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
       const fromProj = "EPSG:4326";
       const toProj = `EPSG:9377`;
 
-      console.log("Transformando coordenadas...");
       let transformedGeoJson: any = {
         type: "FeatureCollection",
         features: mapData.features.map(feature => {
@@ -120,16 +114,6 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
         })
       };
 
-      console.log("GeoJSON transformado:", JSON.stringify(transformedGeoJson, null, 2));
-
-      console.log("Verificando geometrías antes de crear Shapefile...");
-      transformedGeoJson.features.forEach((feature, index) => {
-        if (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon') {
-          console.log(`Verificando geometría ${index+1}/${transformedGeoJson.features.length}`);
-        }
-      });
-
-      console.log("Creando Shapefile...");
       const folderName = expedientCode+"_EPSG-9377";
       const options: any = {
         folder: folderName,
@@ -141,12 +125,9 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
         prj: PRJ_9377,
         outputType: 'blob'
       };
-      console.log("Proyectando a EPSG:9377 CTM12");
 
       const content = await shpwrite.zip(transformedGeoJson, options);
       saveAs(content as Blob, `${folderName}.zip`);
-
-      console.log("Shapefile creado y descarga iniciada.");
 
     } catch (error) {
       console.error('Error detallado al exportar SHP:', error);
