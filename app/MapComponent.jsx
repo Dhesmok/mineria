@@ -747,18 +747,12 @@ export default function MapComponent({
     let hasFetchError = false;
 
     for (const layer of layers) {
-      const queries = [
-        `UPPER(TENURE_ID)='${normalizedCode}'`,
-        `UPPER(CODIGO_EXPEDIENTE)='${normalizedCode}'`
-      ];
-
-      for (const whereClause of queries) {
-        const params = new URLSearchParams({
-          where: whereClause,
-          outFields: "*",
-          returnGeometry: "true",
-          f: "geojson",
-        })
+      const params = new URLSearchParams({
+        where: `(UPPER(TENURE_ID) LIKE '${normalizedCode}%' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${normalizedCode}%')`,
+        outFields: "*",
+        returnGeometry: "true",
+        f: "geojson",
+      })
 
         try {
           const response = await fetch(`${layer.url}?${params}`)
@@ -839,18 +833,16 @@ export default function MapComponent({
           console.error("Error al obtener los datos:", error)
           hasFetchError = true
         }
+      } catch (error) {
+        console.error("Error al obtener los datos:", error)
+        setShowErrorBanner(true)
+        setError("Error al obtener los datos del expediente")
       }
     }
 
     // Si llegamos aquí, no se encontró el expediente
     setShowErrorBanner(true)
-    if (hasFetchError) {
-      setError(
-        `No se pudo obtener la información de algunas capas debido a un error del servidor, y no se encontró el expediente introducido '${expedientCode}'.`,
-      )
-    } else {
-      setError(`No se encontró un polígono con el expediente introducido '${expedientCode}'.`)
-    }
+    setError(`No se encontró un polígono con el expediente introducido '${expedientCode}'.`)
     onCoordinatesUpdate([], null)
   }, [expedientCode, onCoordinatesUpdate, findLayerNumbers])
 
@@ -1280,12 +1272,8 @@ export default function MapComponent({
 
     setError(null)
     setShowErrorBanner(false)
-    setIsLocating(true)
-
-    locationWatchIdRef.current = navigator.geolocation.watchPosition(
-      async (position) => {
-        setIsLocating(false)
-        setHasLocated(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
         const { latitude, longitude } = position.coords
         const map = mapRef.current
 
@@ -1315,9 +1303,6 @@ export default function MapComponent({
         }
       },
       () => {
-        setIsLocating(false)
-        setHasLocated(false)
-        hasCenteredRef.current = false
         setShowErrorBanner(true)
         setError("No se pudo obtener tu ubicación. Revisa permisos de GPS e inténtalo de nuevo.")
       },
