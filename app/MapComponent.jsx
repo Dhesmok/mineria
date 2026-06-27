@@ -434,7 +434,7 @@ export default function MapComponent({
         }
       }
 
-      // Función para limpiar todos los dibujos
+      // Función para limpiar los dibujos
       mapRef.current.clearDrawings = () => {
         drawnItemsRef.current.clearLayers()
       }
@@ -599,7 +599,7 @@ export default function MapComponent({
     const layerNames = ["Solicitud Vigente", "Título Vigente"]
     const foundLayers = {}
 
-    for (let i = 0; i <= 5; i++) {
+    const fetchPromises = Array.from({ length: 6 }, async (_, i) => {
       try {
         const response = await fetch(`${baseUrl}/${i}?f=json`)
         const data = await response.json()
@@ -609,7 +609,9 @@ export default function MapComponent({
       } catch (error) {
         console.error(`Error checking layer ${i}:`, error)
       }
-    }
+    })
+
+    await Promise.all(fetchPromises)
 
     layerNumbersCacheRef.current = foundLayers
     return foundLayers
@@ -826,7 +828,7 @@ export default function MapComponent({
           // Ajustamos el mapa para mostrar el polígono
           mapRef.current.fitBounds(geoJsonLayerRef.current.getBounds())
 
-          // Obtenemos todos los vértices para dibujar marcadores
+          // Obtenemos los vértices para dibujar marcadores
           let allCoordinates = []
           const firstFeature = data.features[0]
           const geomType = firstFeature.geometry.type
@@ -835,14 +837,14 @@ export default function MapComponent({
             const rings = firstFeature.geometry.coordinates
             rings.forEach((ring) => {
               const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring
-              allCoordinates = [...allCoordinates, ...ringCoords]
+              allCoordinates.push(...ringCoords)
             })
           } else if (geomType === "MultiPolygon") {
             const multiRings = firstFeature.geometry.coordinates
             multiRings.forEach((polygon) => {
               polygon.forEach((ring) => {
                 const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring
-                allCoordinates = [...allCoordinates, ...ringCoords]
+                allCoordinates.push(...ringCoords)
               })
             })
           }
@@ -861,13 +863,7 @@ export default function MapComponent({
 
     // Si llegamos aquí, no se encontró el expediente
     setShowErrorBanner(true)
-    if (hasFetchError) {
-      setError(
-        `No se pudo obtener la información de algunas capas debido a un error del servidor, y no se encontró el expediente introducido '${expedientCode}'.`,
-      )
-    } else {
-      setError(`No se encontró un polígono con el expediente introducido '${expedientCode}'.`)
-    }
+    setError(`No se encontró un polígono con el expediente introducido '${expedientCode}'.`)
     onCoordinatesUpdate([], null)
   }, [expedientCode, onCoordinatesUpdate, findLayerNumbers])
 
@@ -938,7 +934,7 @@ export default function MapComponent({
           layerRef.current.setStyle(layerStyle)
         }
       } else if (layerRef.current) {
-        // Si ya no se va a mostrar, removemos todo
+        // Si ya no se va a mostrar, removemos todas las capas
         if (labelsLayerRef.current && mapRef.current.hasLayer(labelsLayerRef.current)) {
           mapRef.current.removeLayer(labelsLayerRef.current)
           labelsLayerRef.current = null
@@ -1297,12 +1293,8 @@ export default function MapComponent({
 
     setError(null)
     setShowErrorBanner(false)
-    setIsLocating(true)
-
-    locationWatchIdRef.current = navigator.geolocation.watchPosition(
-      async (position) => {
-        setIsLocating(false)
-        setHasLocated(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
         const { latitude, longitude } = position.coords
         const map = mapRef.current
 
@@ -1332,9 +1324,6 @@ export default function MapComponent({
         }
       },
       () => {
-        setIsLocating(false)
-        setHasLocated(false)
-        hasCenteredRef.current = false
         setShowErrorBanner(true)
         setError("No se pudo obtener tu ubicación. Revisa permisos de GPS e inténtalo de nuevo.")
       },
