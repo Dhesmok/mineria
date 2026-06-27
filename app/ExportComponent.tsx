@@ -37,35 +37,47 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
   }, []);
 
   const fetchMapData = useCallback(async () => {
-    for (const url of URLS) {
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const promises = URLS.map(async (url) => {
       const params = new URLSearchParams({
         where: `TENURE_ID='${expedientCode}'`,
         outFields: '*',
         f: 'geojson'
       });
 
-      try {
-        const response = await fetch(`${url}/query?${params}`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
+      console.log(`Fetching data from ${url}...`);
+      const response = await fetch(`${url}/query?${params}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+        signal,
+      });
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data.features && data.features.length > 0) {
-          return data;
-        }
-      } catch (error) {
-        console.error(`Error fetching data from ${url}:`, error);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    }
 
-    throw new Error('No se encontraron datos para el expediente especificado en ninguna de las fuentes');
+      const data = await response.json();
+      console.log(`Data received from ${url}:`, data);
+
+      if (data.features && data.features.length > 0) {
+        return data;
+      }
+
+      throw new Error(`No valid features found from ${url}`);
+    });
+
+    try {
+      const result = await Promise.any(promises);
+      controller.abort();
+      return result;
+    } catch (error) {
+      console.error('All fetch attempts failed:', error);
+      throw new Error('No se encontraron datos para el expediente especificado en ninguna de las fuentes');
+    }
   }, [expedientCode]);
 
   const exportSHP = useCallback(async () => {

@@ -1,55 +1,76 @@
-const { performance } = require('perf_hooks');
+const URLS = [
+  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3',
+  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4',
+  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87'
+];
+const expedientCode = 'HGL-151'; // A random string, might not return results
 
-function testSpread(rings) {
-  let allCoordinates = [];
-  const start = performance.now();
-  rings.forEach((ring) => {
-    const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring;
-    allCoordinates = [...allCoordinates, ...ringCoords];
-  });
-  const end = performance.now();
-  return { time: end - start, length: allCoordinates.length };
-}
+async function fetchMapDataSequential() {
+  for (const url of URLS) {
+    const params = new URLSearchParams({
+      where: `TENURE_ID='${expedientCode}'`,
+      outFields: '*',
+      f: 'geojson'
+    });
 
-function testPush(rings) {
-  let allCoordinates = [];
-  const start = performance.now();
-  rings.forEach((ring) => {
-    const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring;
-    allCoordinates.push(...ringCoords);
-  });
-  const end = performance.now();
-  return { time: end - start, length: allCoordinates.length };
-}
-
-// Generate some dummy data representing a large multipolygon
-const generateRings = (numRings, coordsPerRing) => {
-  const rings = [];
-  for (let i = 0; i < numRings; i++) {
-    const ring = [];
-    for (let j = 0; j < coordsPerRing; j++) {
-      ring.push([Math.random(), Math.random()]);
+    try {
+      const response = await fetch(`${url}/query?${params}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      if (data.features && data.features.length > 0) return data;
+    } catch (error) {
+      // ignore
     }
-    ring.push(ring[0]); // close the ring
-    rings.push(ring);
   }
-  return rings;
-};
-
-const rings = generateRings(500, 100);
-
-console.log('Testing spread operator...');
-let totalSpreadTime = 0;
-for (let i = 0; i < 10; i++) {
-  const result = testSpread(rings);
-  totalSpreadTime += result.time;
+  throw new Error('Not found');
 }
-console.log(`Average spread time: ${totalSpreadTime / 10} ms`);
 
-console.log('Testing push...');
-let totalPushTime = 0;
-for (let i = 0; i < 10; i++) {
-  const result = testPush(rings);
-  totalPushTime += result.time;
+async function fetchMapDataParallel() {
+  const controller = new AbortController();
+
+  const promises = URLS.map(async (url) => {
+    const params = new URLSearchParams({
+      where: `TENURE_ID='${expedientCode}'`,
+      outFields: '*',
+      f: 'geojson'
+    });
+
+    const response = await fetch(`${url}/query?${params}`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal
+    });
+
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+    if (data.features && data.features.length > 0) {
+      return data;
+    }
+    throw new Error('No features');
+  });
+
+  try {
+    const result = await Promise.any(promises);
+    controller.abort(); // abort others
+    return result;
+  } catch (error) {
+    throw new Error('Not found');
+  }
 }
-console.log(`Average push time: ${totalPushTime / 10} ms`);
+
+async function run() {
+  const startSeq = performance.now();
+  try { await fetchMapDataSequential(); } catch (e) {}
+  const endSeq = performance.now();
+  console.log(`Sequential: ${endSeq - startSeq}ms`);
+
+  const startPar = performance.now();
+  try { await fetchMapDataParallel(); } catch (e) {}
+  const endPar = performance.now();
+  console.log(`Parallel: ${endPar - startPar}ms`);
+}
+
+run();
