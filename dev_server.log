@@ -1,16 +1,12 @@
 
-> litto-labs@1.0.0 dev
+> litto-labs@1.0.0 dev /app
 > next dev
 
-  ▲ Next.js 14.2.7
+  ▲ Next.js 14.2.35
   - Local:        http://localhost:3000
 
  ✓ Starting...
- ✓ Ready in 3.8s
+ ✓ Ready in 1810ms
  ○ Compiling / ...
-Browserslist: caniuse-lite is outdated. Please run:
-  npx update-browserslist-db@latest
-  Why you should do it regularly: https://github.com/browserslist/update-db#readme
- ✓ Compiled / in 12s (1524 modules)
- GET / 200 in 12646ms
- GET / 200 in 60ms
+ ✓ Compiled / in 14.6s (1556 modules)
+ GET / 200 in 15272ms
