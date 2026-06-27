@@ -921,7 +921,7 @@ export default function MapComponent({
           layerRef.current.setStyle(layerStyle)
         }
       } else if (layerRef.current) {
-        // Si ya no se va a mostrar, removemos todo
+        // Si ya no se va a mostrar, removemos todas las capas
         if (labelsLayerRef.current && mapRef.current.hasLayer(labelsLayerRef.current)) {
           mapRef.current.removeLayer(labelsLayerRef.current)
           labelsLayerRef.current = null
