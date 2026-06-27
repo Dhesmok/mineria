@@ -813,14 +813,14 @@ export default function MapComponent({
             const rings = firstFeature.geometry.coordinates
             rings.forEach((ring) => {
               const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring
-              allCoordinates = [...allCoordinates, ...ringCoords]
+              allCoordinates.push(...ringCoords)
             })
           } else if (geomType === "MultiPolygon") {
             const multiRings = firstFeature.geometry.coordinates
             multiRings.forEach((polygon) => {
               polygon.forEach((ring) => {
                 const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring
-                allCoordinates = [...allCoordinates, ...ringCoords]
+                allCoordinates.push(...ringCoords)
               })
             })
           }
@@ -921,7 +921,7 @@ export default function MapComponent({
           layerRef.current.setStyle(layerStyle)
         }
       } else if (layerRef.current) {
-        // Si ya no se va a mostrar, removemos todo
+        // Si ya no se va a mostrar, removemos todas las capas
         if (labelsLayerRef.current && mapRef.current.hasLayer(labelsLayerRef.current)) {
           mapRef.current.removeLayer(labelsLayerRef.current)
           labelsLayerRef.current = null
