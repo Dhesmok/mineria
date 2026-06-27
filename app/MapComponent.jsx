@@ -805,7 +805,7 @@ export default function MapComponent({
           mapRef.current.fitBounds(geoJsonLayerRef.current.getBounds())
 
           // Obtenemos todos los vértices para dibujar marcadores
-          let allCoordinates = []
+          const allCoordinates = []
           const firstFeature = data.features[0]
           const geomType = firstFeature.geometry.type
 
@@ -813,14 +813,14 @@ export default function MapComponent({
             const rings = firstFeature.geometry.coordinates
             rings.forEach((ring) => {
               const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring
-              allCoordinates = [...allCoordinates, ...ringCoords]
+              allCoordinates.push(...ringCoords)
             })
           } else if (geomType === "MultiPolygon") {
             const multiRings = firstFeature.geometry.coordinates
             multiRings.forEach((polygon) => {
               polygon.forEach((ring) => {
                 const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring
-                allCoordinates = [...allCoordinates, ...ringCoords]
+                allCoordinates.push(...ringCoords)
               })
             })
           }
