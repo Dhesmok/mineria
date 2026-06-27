@@ -599,7 +599,7 @@ export default function MapComponent({
     const layerNames = ["Solicitud Vigente", "Título Vigente"]
     const foundLayers = {}
 
-    for (let i = 0; i <= 5; i++) {
+    const fetchPromises = Array.from({ length: 6 }, async (_, i) => {
       try {
         const response = await fetch(`${baseUrl}/${i}?f=json`)
         const data = await response.json()
@@ -609,7 +609,9 @@ export default function MapComponent({
       } catch (error) {
         console.error(`Error checking layer ${i}:`, error)
       }
-    }
+    })
+
+    await Promise.all(fetchPromises)
 
     layerNumbersCacheRef.current = foundLayers
     return foundLayers
