@@ -10,3 +10,6 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+## 2024-06-28 - Consistent ARIA labels across layered inputs
+**Learning:** Found an inconsistency in accessibility attributes for range sliders controlling map layers; 3 out of 4 layers had `aria-label` but the "Subcontratos" layer was missing it, leading to a confusing screen reader experience for that specific control.
+**Action:** Added `aria-label="Opacidad de Subcontratos"` to the missing range input to ensure all map layer opacity controls have consistent accessibility descriptions.
