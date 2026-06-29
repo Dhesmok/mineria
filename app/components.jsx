@@ -239,6 +239,12 @@ export default function Component() {
                       setExpedientSuggestions([])
                     }
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      handleApply()
+                    }
+                  }}
                   className="pl-10 pr-4 py-2 w-full border rounded-md"
                   aria-autocomplete="list"
                   aria-controls="expedient-suggestions"
@@ -321,6 +327,7 @@ export default function Component() {
                 value={anmServiceOpacity}
                 onChange={(e) => setAnmServiceOpacity(parseFloat(e.target.value))}
                 className="flex-1"
+                aria-label="Opacidad de Subcontratos"
               />
               <Switch id="anmServiceLayer" checked={showAnmServiceLayer} onCheckedChange={setShowAnmServiceLayer} />
             </div>

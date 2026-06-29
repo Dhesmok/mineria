@@ -10,3 +10,6 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+## 2024-05-19 - Keyboard Accessibility for Search Inputs
+**Learning:** Inputs that perform a search action but are not wrapped in a `<form>` element lack native "Enter" key submission handling. This creates a frustrating experience for keyboard users who expect to type their query and press Enter to search, but instead have to Tab to and trigger the search button manually.
+**Action:** When building or updating search inputs that aren't inside a form, explicitly attach an `onKeyDown` handler to intercept the "Enter" key and trigger the associated action. Also check for missed `aria-label`s on related input groups (like sliders).
