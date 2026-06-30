@@ -14,7 +14,12 @@ import { debounce } from "@/lib/utils"
 
 const MapComponent = dynamic(() => import("./MapComponent"), {
   ssr: false,
-  loading: () => <p>Cargando mapa...</p>,
+  loading: () => (
+    <div className="flex items-center justify-center h-full min-h-[400px]">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-500 mr-2" />
+      <p className="text-gray-500 font-medium">Cargando mapa...</p>
+    </div>
+  ),
 })
 
 // Definición de los sistemas de coordenadas
@@ -321,6 +326,7 @@ export default function Component() {
                 value={anmServiceOpacity}
                 onChange={(e) => setAnmServiceOpacity(parseFloat(e.target.value))}
                 className="flex-1"
+                aria-label="Opacidad de Subcontratos"
               />
               <Switch id="anmServiceLayer" checked={showAnmServiceLayer} onCheckedChange={setShowAnmServiceLayer} />
             </div>
