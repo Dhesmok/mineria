@@ -321,6 +321,7 @@ export default function Component() {
                 value={anmServiceOpacity}
                 onChange={(e) => setAnmServiceOpacity(parseFloat(e.target.value))}
                 className="flex-1"
+                aria-label="Opacidad de Subcontratos"
               />
               <Switch id="anmServiceLayer" checked={showAnmServiceLayer} onCheckedChange={setShowAnmServiceLayer} />
             </div>

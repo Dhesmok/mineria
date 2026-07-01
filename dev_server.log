@@ -6,7 +6,14 @@
   - Local:        http://localhost:3000
 
  ✓ Starting...
- ✓ Ready in 1810ms
+ ✓ Ready in 3.9s
  ○ Compiling / ...
- ✓ Compiled / in 14.6s (1556 modules)
- GET / 200 in 15272ms
+ ✓ Compiled / in 14.9s (1574 modules)
+ GET / 200 in 15575ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1154ms (1526 modules)
+ GET /marker-icon.png 404 in 1355ms
+ GET /marker-shadow.png 404 in 1352ms
+ GET / 200 in 185ms
+ GET /marker-icon.png 404 in 71ms
+ GET /marker-shadow.png 404 in 70ms
