@@ -10,3 +10,6 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+## 2024-05-19 - Improved async task feedback and form accessibility
+**Learning:** Found that long-running operations like shapefile generation ("Exportar") lacked visual loading states, keeping the user guessing if their click worked. Also discovered a missing `aria-label` for the "Subcontratos" opacity slider, breaking screen-reader consistency with the other opacity sliders.
+**Action:** Added `Lucide-react` spinners (`Loader2`) to the export buttons during pending states, and added an `aria-label` to the remaining input range. Always ensure all inputs have accessible labels, especially those that act independently from visual `<Label>` association when screen-readers iterate through inputs.
