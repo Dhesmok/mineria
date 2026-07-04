@@ -10,3 +10,6 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+## 2024-07-04 - Consistent feedback for async actions and UI form controls
+**Learning:** Encountered buttons for exporting map files that lacked a visual loading state during the operation, despite other async actions having them. Also, noticed inconsistent ARIA labeling in similar range inputs, where some had screen reader labels and others did not. These inconsistencies reduce overall UX and accessibility coherence.
+**Action:** When auditing or implementing async actions, always provide a visual indicator (like an `animate-spin` `Loader2` icon) and disable the button. For form controls appearing in groups or a consistent layout, audit all similar elements to ensure they all possess appropriate `aria-label`s.
