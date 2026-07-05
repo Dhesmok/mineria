@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Button } from "@/components/ui/button"
+import { Loader2 } from "lucide-react"
 import proj4 from 'proj4'
 import shpwrite from '@mapbox/shp-write'
 import * as turf from '@turf/turf'
@@ -221,18 +222,20 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
     <div className="flex flex-col justify-center gap-4">
       <Button 
         variant="default" 
-        className="w-full bg-green-500 text-white" 
+        className="w-full bg-green-500 text-white flex items-center justify-center gap-2"
         onClick={exportSHP}
         disabled={isExportingSHP || isExportingKML}
       >
+        {isExportingSHP && <Loader2 className="h-4 w-4 animate-spin" />}
         {isExportingSHP ? 'Exportando...' : 'Exportar SHP'}
       </Button>
       <Button 
         variant="default" 
-        className="w-full bg-green-500 text-white" 
+        className="w-full bg-green-500 text-white flex items-center justify-center gap-2"
         onClick={exportKML}
         disabled={isExportingSHP || isExportingKML}
       >
+        {isExportingKML && <Loader2 className="h-4 w-4 animate-spin" />}
         {isExportingKML ? 'Exportando...' : 'Exportar KML'}
       </Button>
     </div>

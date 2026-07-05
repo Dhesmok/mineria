@@ -10,3 +10,6 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+## 2024-07-05 - Missing ARIA label in input range sliders
+**Learning:** Some custom UI inputs like range sliders for layer opacity can miss important accessibility features if not strictly enforced. Range inputs (`type="range"`) are particularly problematic as their visual context isn't automatically available to screen readers.
+**Action:** When working on components that include non-standard or visually-represented inputs like range sliders, ensure they have explicit `aria-label` attributes to maintain accessibility standards.
