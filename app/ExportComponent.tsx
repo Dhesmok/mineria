@@ -4,6 +4,7 @@ import proj4 from 'proj4'
 import shpwrite from '@mapbox/shp-write'
 import * as turf from '@turf/turf'
 import { saveAs } from 'file-saver'
+import { Loader2 } from 'lucide-react'
 
 // Define the coordinate systems
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
@@ -225,7 +226,14 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
         onClick={exportSHP}
         disabled={isExportingSHP || isExportingKML}
       >
-        {isExportingSHP ? 'Exportando...' : 'Exportar SHP'}
+        {isExportingSHP ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Exportando...
+          </>
+        ) : (
+          'Exportar SHP'
+        )}
       </Button>
       <Button 
         variant="default" 
@@ -233,7 +241,14 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
         onClick={exportKML}
         disabled={isExportingSHP || isExportingKML}
       >
-        {isExportingKML ? 'Exportando...' : 'Exportar KML'}
+        {isExportingKML ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Exportando...
+          </>
+        ) : (
+          'Exportar KML'
+        )}
       </Button>
     </div>
   )
