@@ -10,3 +10,10 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+## 2024-05-19 - Improved loading states for export buttons
+**Learning:** Found that long-running asynchronous tasks (like fetching map data for SHP/KML exports) only changed text to "Exportando..." without clear visual indication that work was happening in the background. The user might think the app is frozen.
+**Action:** Added `Loader2` from `lucide-react` with `animate-spin` alongside the text, and added hover states (`hover:bg-green-600`) to improve interactivity. Will prioritize adding spinners to all primary async action buttons.
+
+## 2024-05-19 - Added missing ARIA label to slider
+**Learning:** Found an inconsistency where the "Subcontratos" range input lacked an `aria-label`, whereas others in the same group had one. This makes it difficult for screen reader users to identify the slider's purpose.
+**Action:** Added `aria-label="Opacidad de Subcontratos"` to match the pattern used across other sliders. Always audit groups of identical UI elements for consistent accessibility attributes.
