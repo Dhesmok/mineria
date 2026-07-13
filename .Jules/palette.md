@@ -10,3 +10,6 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+## 2024-05-19 - Interactive Button Loading States
+**Learning:** Using `lucide-react` icons (like `Loader2`) alongside standard Tailwind classes like `animate-spin` is an extremely effective pattern in this codebase for visual feedback. Simply modifying the text on asynchronous buttons (e.g., from "Exportar" to "Exportando...") often isn't enough visual cue for users; combining it with a spinner provides a robust and standard UX pattern.
+**Action:** When working on buttons that trigger async actions, prioritize adding a `Loader2` spinner over just text changes to signify loading states.
