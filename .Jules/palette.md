@@ -10,3 +10,6 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+## 2024-05-19 - Added loading states and consistent ARIA labels
+**Learning:** Found that the export buttons in the map component lacked visual feedback during asynchronous file generation, and a range slider for layer opacity ("Subcontratos") was missing its `aria-label`, unlike the others in the same group. This creates an inconsistent screen reader experience and leaves sighted users wondering if a button click registered.
+**Action:** Added `Loader2` with `animate-spin` to the export buttons during their loading state. Added the missing `aria-label="Opacidad de Subcontratos"` to ensure consistency. Always audit grouped inputs for consistent accessibility attributes and ensure all async actions provide immediate visual feedback.
