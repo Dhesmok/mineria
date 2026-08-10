@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react"
 import dynamic from "next/dynamic"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight } from "lucide-react"
 import proj4 from "proj4"
 import ExportComponent from "./ExportComponent"
+import { formatDegrees } from "./utils/mapUtils"
 import { debounce } from "@/lib/utils"
 
 const MapComponent = dynamic(() => import("./MapComponent"), {
@@ -26,6 +27,7 @@ export default function Component() {
   const [showSidebar, setShowSidebar] = useState(true)
   const [showTable, setShowTable] = useState(false)
   const [coordinates, setCoordinates] = useState([])
+  const [coordinateRings, setCoordinateRings] = useState([])
   const [transformedCoordinates, setTransformedCoordinates] = useState([])
   const [showToggle, setShowToggle] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -73,6 +75,7 @@ export default function Component() {
   const handleReset = () => {
     setExpedientCode("")
     setCoordinates([])
+    setCoordinateRings([])
     setTransformedCoordinates([])
     setShowTable(false)
     setShowToggle(false)
@@ -94,11 +97,25 @@ export default function Component() {
     setShowExportModal(false)
   }
 
-  const handleCoordinatesUpdate = useCallback((newCoordinates, newGeoJsonData) => {
+  const handleCoordinatesUpdate = useCallback((newCoordinates, newGeoJsonData, newRings = []) => {
     setCoordinates(newCoordinates)
+    setCoordinateRings(newRings)
     setCoordinatesAvailable(newCoordinates.length > 0)
     setGeoJsonData(newGeoJsonData)
   }, [])
+
+  // Índice del primer vértice de cada anillo, para intercalar un encabezado en la
+  // tabla. Sin esto los huecos y las partes de un multipolígono se numeraban
+  // seguidos, como si fueran un único contorno.
+  const ringStartLabels = useMemo(() => {
+    const labels = new Map()
+    let offset = 0
+    coordinateRings.forEach((ring) => {
+      labels.set(offset, ring.label)
+      offset += ring.coordinates.length
+    })
+    return labels
+  }, [coordinateRings])
 
   const transformCoordinates = useCallback((coords, fromEPSG, toEPSG) => {
     return coords.map((coord) => {
@@ -108,13 +125,16 @@ export default function Component() {
   }, [])
 
   useEffect(() => {
-    if (coordinates.length > 0) {
-      if (selectedCoordinateSystem === "4686") {
-        setTransformedCoordinates(coordinates)
-      } else {
-        const transformed = transformCoordinates(coordinates, epsg4686, epsg9377)
-        setTransformedCoordinates(transformed)
-      }
+    // Recalcular también cuando no hay coordenadas: antes se conservaban las del
+    // expediente anterior tras una búsqueda sin resultados.
+    if (coordinates.length === 0) {
+      setTransformedCoordinates([])
+      return
+    }
+    if (selectedCoordinateSystem === "4686") {
+      setTransformedCoordinates(coordinates)
+    } else {
+      setTransformedCoordinates(transformCoordinates(coordinates, epsg4686, epsg9377))
     }
   }, [coordinates, selectedCoordinateSystem, transformCoordinates])
 
@@ -439,19 +459,27 @@ export default function Component() {
                 </TableHeader>
                 <TableBody>
                   {transformedCoordinates.map((coord, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="text-center">{index + 1}</TableCell>
-                      <TableCell className="text-center">
-                        {selectedCoordinateSystem === "4686"
-                          ? coord[1].toFixed(5).replace(".", ",")
-                          : Math.round(coord[1])}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {selectedCoordinateSystem === "4686"
-                          ? coord[0].toFixed(5).replace(".", ",")
-                          : Math.round(coord[0])}
-                      </TableCell>
-                    </TableRow>
+                    <Fragment key={index}>
+                      {coordinateRings.length > 1 && ringStartLabels.has(index) && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={3}
+                            className="bg-gray-100 text-xs font-semibold text-gray-600 text-center"
+                          >
+                            {ringStartLabels.get(index)}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      <TableRow>
+                        <TableCell className="text-center">{index + 1}</TableCell>
+                        <TableCell className="text-center">
+                          {selectedCoordinateSystem === "4686" ? formatDegrees(coord[1]) : Math.round(coord[1])}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {selectedCoordinateSystem === "4686" ? formatDegrees(coord[0]) : Math.round(coord[0])}
+                        </TableCell>
+                      </TableRow>
+                    </Fragment>
                   ))}
                 </TableBody>
               </Table>

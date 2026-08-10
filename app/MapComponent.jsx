@@ -11,7 +11,7 @@ import { useDrawControl } from "./hooks/map/useDrawControl"
 import { useGeolocation } from "./hooks/map/useGeolocation"
 import { useMapLayers } from "./hooks/map/useMapLayers"
 import { useExpedientSearch } from "./hooks/map/useExpedientSearch"
-import { formatDistance, formatArea } from "./utils/mapUtils"
+import { formatDistance, formatArea, formatDegrees } from "./utils/mapUtils"
 import { MapControls } from "./components/MapControls"
 import { ColorPicker } from "./components/ColorPicker"
 
@@ -268,7 +268,10 @@ export default function MapComponent({
 
       mapRef.current = mapInstanceLocal
 
-      mapRef.current.addVertices = (coordinates) => {
+      // Recibe los anillos en orden GeoJSON ([lon, lat]) y desestructura por nombre.
+      // La versión anterior recibía [lat, lon] y luego leía coord[1] como latitud,
+      // así que el tooltip mostraba la longitud etiquetada como "Lat" y viceversa.
+      mapRef.current.addVertices = (rings) => {
         if (verticesLayerRef.current) {
           if (mapInstanceLocal.hasLayer(verticesLayerRef.current)) {
             mapInstanceLocal.removeLayer(verticesLayerRef.current)
@@ -276,25 +279,31 @@ export default function MapComponent({
         }
         verticesLayerRef.current = L.layerGroup().addTo(mapInstanceLocal)
 
-        coordinates.forEach((coord, index) => {
-          const circle = L.circleMarker(coord, {
-            radius: 10,
-            fillColor: "red",
-            color: "#fff",
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 0.5,
-          }).addTo(verticesLayerRef.current)
+        const showPart = rings.length > 1
+        let vertexNumber = 0
 
-          circle.bindTooltip(
-            `Vértice ${index + 1}<br>Lat: ${coord[1].toFixed(5).replace(".", ",")}<br>Lon: ${coord[0]
-              .toFixed(5)
-              .replace(".", ",")}`,
-            {
-              permanent: false,
-              direction: "top",
-            },
-          )
+        rings.forEach((ring) => {
+          ring.coordinates.forEach(([lon, lat]) => {
+            vertexNumber += 1
+
+            const circle = L.circleMarker([lat, lon], {
+              radius: 10,
+              fillColor: "red",
+              color: "#fff",
+              weight: 1,
+              opacity: 1,
+              fillOpacity: 0.5,
+            }).addTo(verticesLayerRef.current)
+
+            const part = showPart ? `${ring.label}<br>` : ""
+            circle.bindTooltip(
+              `${part}Vértice ${vertexNumber}<br>Lat: ${formatDegrees(lat)}<br>Lon: ${formatDegrees(lon)}`,
+              {
+                permanent: false,
+                direction: "top",
+              },
+            )
+          })
         })
       }
 

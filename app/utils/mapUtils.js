@@ -38,6 +38,76 @@ export const formatDate = (value) => {
   return value || "N/A"
 }
 
+/** Grados con coma decimal, la convención local. */
+export const formatDegrees = (value) => value.toFixed(5).replace(".", ",")
+
+const ringsOfGeometry = (geometry) => {
+  if (geometry?.type === "Polygon") {
+    // coordinates es [exterior, hueco...]: un solo polígono.
+    return [geometry.coordinates]
+  }
+  if (geometry?.type === "MultiPolygon") {
+    // coordinates es [[exterior, hueco...], ...]: varios polígonos.
+    return geometry.coordinates
+  }
+  return []
+}
+
+const isClosedRing = (ring) => {
+  const [firstX, firstY] = ring[0]
+  const [lastX, lastY] = ring[ring.length - 1]
+  return firstX === lastX && firstY === lastY
+}
+
+/**
+ * Aplana una FeatureCollection en los anillos que la componen, conservando a qué
+ * polígono pertenece cada uno para poder numerarlos y separarlos en la tabla.
+ *
+ * Recorre todas las features, no solo la primera, y quita el vértice de cierre que
+ * GeoJSON repite al final de cada anillo. La comprobación anterior era
+ * `ring[0] === ring[ring.length - 1]`, que compara dos arreglos por referencia y por
+ * tanto siempre daba falso: el vértice duplicado nunca se eliminaba.
+ *
+ * @param {Object} featureCollection - GeoJSON FeatureCollection
+ * @returns {Array<{polygonNumber: number, isHole: boolean, label: string, coordinates: Array}>}
+ */
+export const extractRings = (featureCollection) => {
+  const rings = []
+  let polygonNumber = 0
+
+  const features = Array.isArray(featureCollection?.features) ? featureCollection.features : []
+
+  features.forEach((feature) => {
+    ringsOfGeometry(feature?.geometry).forEach((polygonRings) => {
+      const presentRings = (Array.isArray(polygonRings) ? polygonRings : []).filter(
+        (ring) => Array.isArray(ring) && ring.length > 0,
+      )
+      if (presentRings.length === 0) {
+        return
+      }
+
+      polygonNumber += 1
+
+      presentRings.forEach((ring, ringIndex) => {
+        const coordinates = ring.length > 1 && isClosedRing(ring) ? ring.slice(0, -1) : ring
+        if (coordinates.length === 0) {
+          return
+        }
+
+        const isHole = ringIndex > 0
+        rings.push({
+          polygonNumber,
+          isHole,
+          label: isHole ? `Polígono ${polygonNumber} · hueco ${ringIndex}` : `Polígono ${polygonNumber}`,
+          coordinates,
+        })
+      })
+    })
+  })
+
+  return rings
+}
+
 // Un anillo GeoJSON válido necesita al menos 4 posiciones (la última repite la primera).
 const MIN_RING_POSITIONS = 4
 // polylabel se detiene cuando ya no puede mejorar más que la precisión pedida.
