@@ -496,7 +496,6 @@ export default function Component() {
             <h2 className="text-2xl font-bold mb-4 text-gray-800">Tipo de archivo</h2>
             <ExportComponent
               geoJsonData={geoJsonData}
-              transformedCoordinates={transformedCoordinates}
               selectedCoordinateSystem={selectedCoordinateSystem}
               expedientCode={expedientCode}
             />
