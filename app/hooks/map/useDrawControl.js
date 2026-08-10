@@ -1,73 +1,48 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import L from "leaflet"
+import { createDrawOptions, DEFAULT_DRAWING_COLOR } from "../../utils/drawOptions"
 
-export const useDrawControl = (mapRef, drawControlRef, drawnItemsRef) => {
-  const [drawingColor, setDrawingColor] = useState("#f357a1")
+export const useDrawControl = (mapRef, mapInstance, drawControlRef, drawnItemsRef, measureControlRef) => {
+  const [drawingColor, setDrawingColor] = useState(DEFAULT_DRAWING_COLOR)
   const [showColorPicker, setShowColorPicker] = useState(false)
+
+  // Las herramientas de medición se crean una sola vez, dentro del efecto de
+  // inicialización del mapa, y capturaban el color del primer render: cambiarlo en el
+  // selector no las afectaba. Con un ref siempre leen el valor actual.
+  const drawingColorRef = useRef(drawingColor)
+
+  useEffect(() => {
+    drawingColorRef.current = drawingColor
+  }, [drawingColor])
 
   const handleColorChange = (newColor) => {
     setDrawingColor(newColor)
   }
 
-  // Actualizar el control de dibujo cuando cambie el color
+  // Leaflet.Draw copia las shapeOptions al construir cada manejador, así que cambiar
+  // el color obliga a recrear el control.
   useEffect(() => {
-    if (mapRef.current && drawControlRef.current) {
-      // Remover el control actual
-      mapRef.current.removeControl(drawControlRef.current)
+    if (!mapInstance || !drawnItemsRef.current) return
 
-      // Crear un nuevo control con el color actualizado
-      drawControlRef.current = new L.Control.Draw({
-        position: "topright",
-        draw: {
-          polyline: {
-            shapeOptions: {
-              color: drawingColor,
-              weight: 5,
-            },
-          },
-          polygon: {
-            allowIntersection: false,
-            drawError: {
-              color: "#e1e100",
-              message: "<strong>¡Error!</strong> No se permiten polígonos que se intersecten.",
-            },
-            shapeOptions: {
-              color: drawingColor,
-            },
-          },
-          circle: {
-            shapeOptions: {
-              color: drawingColor,
-            },
-          },
-          rectangle: {
-            shapeOptions: {
-              color: drawingColor,
-            },
-          },
-          marker: {
-            icon: new L.Icon({
-              iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-              iconRetinaUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-              shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-              iconSize: [25, 41],
-              iconAnchor: [12, 41],
-              popupAnchor: [1, -34],
-              shadowSize: [41, 41],
-            }),
-          },
-          circlemarker: false,
-        },
-        edit: {
-          featureGroup: drawnItemsRef.current,
-          remove: true,
-        },
-      })
+    const map = mapInstance
 
-      // Añadir el nuevo control al mapa
-      mapRef.current.addControl(drawControlRef.current)
+    if (drawControlRef.current) {
+      map.removeControl(drawControlRef.current)
     }
-  }, [drawingColor, mapRef, drawControlRef, drawnItemsRef])
+    // Los controles se apilan en el orden en que se añaden. Recreando solo el de
+    // dibujo, este saltaba por debajo del de medición cada vez que se cambiaba el
+    // color; re-añadir el de medición después conserva el orden de la barra.
+    if (measureControlRef?.current) {
+      map.removeControl(measureControlRef.current)
+    }
+
+    drawControlRef.current = new L.Control.Draw(createDrawOptions(drawingColor, drawnItemsRef.current))
+    map.addControl(drawControlRef.current)
+
+    if (measureControlRef?.current) {
+      map.addControl(measureControlRef.current)
+    }
+  }, [drawingColor, mapInstance, drawControlRef, drawnItemsRef, measureControlRef])
 
   // Cerrar el selector de colores cuando se hace clic fuera de él
   useEffect(() => {
@@ -94,5 +69,5 @@ export const useDrawControl = (mapRef, drawControlRef, drawnItemsRef) => {
     }
   }, [showColorPicker])
 
-  return { drawingColor, handleColorChange, showColorPicker, setShowColorPicker }
+  return { drawingColor, drawingColorRef, handleColorChange, showColorPicker, setShowColorPicker }
 }

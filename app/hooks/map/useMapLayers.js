@@ -79,9 +79,14 @@ export const useMapLayers = (
     const isStale = () => runId !== updateRunIdRef.current
 
     const updateLayer = async (show, layerRef, labelsLayerRef, layerName, layerStyle, customUrl = null) => {
+      // Capa apagada y todavía sin crear: no hay nada que hacer. Resolver la URL aquí
+      // disparaba el descubrimiento de capas nada más cargar la página, con los cuatro
+      // interruptores en off, y sacaba el banner de error si el servicio no respondía.
+      if (!show && !layerRef.current) return
+
       let layerUrl = customUrl
 
-      if (!layerUrl) {
+      if (show && !layerUrl) {
         const layerNumbers = await findTenureLayerNumbers()
         if (isStale()) return
 

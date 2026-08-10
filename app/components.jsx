@@ -36,7 +36,9 @@ const MAX_SUGGESTIONS = 10
 /** Etiqueta, slider de opacidad e interruptor de una capa. */
 const LayerControl = ({ id, label, checked, onCheckedChange, opacity, onOpacityChange }) => (
   <>
-    <Label htmlFor={id} className="text-sm">
+    {/* Ancho fijo para que las cuatro filas queden alineadas: sin él la etiqueta más
+        larga partía en dos líneas y desnivelaba su fila. */}
+    <Label htmlFor={id} className="w-36 shrink-0 whitespace-nowrap text-sm">
       {label}
     </Label>
     <input
@@ -345,7 +347,9 @@ export default function Component() {
   return (
     <div className="relative flex w-full h-screen bg-gray-100">
       <div
-        className={`absolute top-4 left-4 z-10 w-[350px] bg-white shadow-lg rounded-xl transition-transform duration-300 ease-in-out ${showSidebar ? "translate-x-0" : "-translate-x-full"}`}
+        // -translate-x-full solo desplaza el ancho del panel, y al estar en left-4
+        // quedaba una franja de 16px asomando bajo el botón de mostrar.
+        className={`absolute top-4 left-4 z-10 w-[350px] bg-white shadow-lg rounded-xl transition-transform duration-300 ease-in-out ${showSidebar ? "translate-x-0" : "-translate-x-[calc(100%+1rem)]"}`}
       >
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between mb-4">
