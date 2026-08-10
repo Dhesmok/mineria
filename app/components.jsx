@@ -12,6 +12,12 @@ import proj4 from "proj4"
 import ExportComponent from "./ExportComponent"
 import { formatDegrees } from "./utils/mapUtils"
 import { fetchArcgisJson } from "./utils/arcgis"
+import {
+  findTenureLayerNumbers,
+  REQUEST_LAYER_NAME,
+  TITLE_LAYER_NAME,
+  tenureLayerUrl,
+} from "./utils/tenureLayers"
 import { debounce } from "@/lib/utils"
 
 const MapComponent = dynamic(() => import("./MapComponent"), {
@@ -23,6 +29,33 @@ const MapComponent = dynamic(() => import("./MapComponent"), {
 const epsg4686 = "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs"
 const epsg9377 =
   "+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+
+const MIN_SUGGESTION_LENGTH = 3
+const MAX_SUGGESTIONS = 10
+
+/** Etiqueta, slider de opacidad e interruptor de una capa. */
+const LayerControl = ({ id, label, checked, onCheckedChange, opacity, onOpacityChange }) => (
+  <>
+    {/* Ancho fijo para que las cuatro filas queden alineadas: sin él la etiqueta más
+        larga partía en dos líneas y desnivelaba su fila. */}
+    <Label htmlFor={id} className="w-36 shrink-0 whitespace-nowrap text-sm">
+      {label}
+    </Label>
+    <input
+      type="range"
+      min="0"
+      max="1"
+      step="0.1"
+      value={opacity}
+      onChange={(e) => onOpacityChange(parseFloat(e.target.value))}
+      className="flex-1 disabled:opacity-40"
+      // El slider no hace nada con la capa apagada; deshabilitarlo lo deja claro.
+      disabled={!checked}
+      aria-label={`Opacidad de ${label}`}
+    />
+    <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+  </>
+)
 
 export default function Component() {
   const [showSidebar, setShowSidebar] = useState(true)
@@ -40,9 +73,13 @@ export default function Component() {
   const mapRef = useRef(null)
   const [mapInitialized, setMapInitialized] = useState(false)
   const [expedientSuggestions, setExpedientSuggestions] = useState([])
+  const [activeSuggestion, setActiveSuggestion] = useState(-1)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const inputRef = useRef(null)
+  const searchBoxRef = useRef(null)
+  const suggestionAbortRef = useRef(null)
+  const skipNextSuggestionFetchRef = useRef(false)
   const [showTitleLayer, setShowTitleLayer] = useState(false)
   const [showRequestLayer, setShowRequestLayer] = useState(false)
   const [showAnmServiceLayer, setShowAnmServiceLayer] = useState(false)
@@ -57,9 +94,67 @@ export default function Component() {
       alert("Por favor, introduce un código de expediente.")
       return
     }
+    setExpedientSuggestions([])
     setSearchTrigger((prev) => prev + 1)
     setShowToggle(true)
   }, [expedientCode])
+
+  const closeSuggestions = useCallback(() => {
+    setExpedientSuggestions([])
+    setActiveSuggestion(-1)
+  }, [])
+
+  const selectSuggestion = useCallback(
+    (suggestion) => {
+      skipNextSuggestionFetchRef.current = true
+      setExpedientCode(suggestion)
+      closeSuggestions()
+      inputRef.current?.focus()
+    },
+    [closeSuggestions],
+  )
+
+  const handleSearchKeyDown = useCallback(
+    (event) => {
+      if (event.key === "Escape") {
+        closeSuggestions()
+        return
+      }
+
+      if (expedientSuggestions.length === 0) {
+        if (event.key === "Enter") handleApply()
+        return
+      }
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault()
+        const step = event.key === "ArrowDown" ? 1 : -1
+        setActiveSuggestion((current) => {
+          const next = current + step
+          if (next < 0) return expedientSuggestions.length - 1
+          if (next >= expedientSuggestions.length) return 0
+          return next
+        })
+        return
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault()
+        if (activeSuggestion >= 0) {
+          selectSuggestion(expedientSuggestions[activeSuggestion])
+        } else {
+          closeSuggestions()
+          handleApply()
+        }
+      }
+    },
+    [activeSuggestion, closeSuggestions, expedientSuggestions, handleApply, selectSuggestion],
+  )
+
+  // Reiniciar el resaltado cada vez que cambia la lista.
+  useEffect(() => {
+    setActiveSuggestion(-1)
+  }, [expedientSuggestions])
 
   const handleShowCoordinates = () => {
     if (coordinatesAvailable) {
@@ -145,22 +240,41 @@ export default function Component() {
   }, [])
 
   const fetchExpedients = useCallback(async (query) => {
+    // Cancelar la consulta anterior: sin esto una respuesta lenta podía llegar después
+    // de una más reciente y pisar sus sugerencias.
+    suggestionAbortRef.current?.abort()
+    const controller = new AbortController()
+    suggestionAbortRef.current = controller
+
     setIsLoading(true)
     setError(null)
     try {
       const sanitizedQuery = query.trim().toUpperCase().replace(/'/g, "''")
       const whereClause = `(UPPER(TENURE_ID) LIKE '${sanitizedQuery}%' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${sanitizedQuery}%')`
+      const queryString = `query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`
+
+      // Los números de las capas de tenencia se descubren, igual que en el mapa y en
+      // la búsqueda. Aquí estaban fijos en 3 y 4, y podían discrepar del resto.
+      const layerNumbers = await findTenureLayerNumbers()
+      if (controller.signal.aborted) return
+
       const urls = [
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
-        `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
+        ...[TITLE_LAYER_NAME, REQUEST_LAYER_NAME]
+          .map((name) => layerNumbers[name])
+          .filter((layerNumber) => layerNumber !== undefined)
+          .map((layerNumber) => `${tenureLayerUrl(layerNumber)}/${queryString}`),
+        `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/${queryString}`,
+        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/${queryString}`,
       ]
 
       // fetchArcgisJson reconoce los errores que ArcGIS devuelve con HTTP 200; antes
       // una capa que respondía {"error": ...} se contaba como consulta exitosa sin
       // resultados, y las sugerencias salían incompletas en silencio.
-      const settled = await Promise.allSettled(urls.map((url) => fetchArcgisJson(url)))
+      const settled = await Promise.allSettled(
+        urls.map((url) => fetchArcgisJson(url, { signal: controller.signal })),
+      )
+      if (controller.signal.aborted) return
+
       const data = settled.filter((result) => result.status === "fulfilled").map((result) => result.value)
 
       const expedients = data.flatMap((d) =>
@@ -169,16 +283,19 @@ export default function Component() {
           .filter(Boolean),
       )
       const uniqueExpedients = [...new Set(expedients)]
-      setExpedientSuggestions(uniqueExpedients.slice(0, 10))
+      setExpedientSuggestions(uniqueExpedients.slice(0, MAX_SUGGESTIONS))
 
       if (data.length === 0) {
         throw new Error("No fue posible consultar las capas de sugerencias.")
       }
     } catch (error) {
+      if (error?.name === "AbortError" || controller.signal.aborted) return
       console.error("Error fetching expedients:", error)
       setError("Error al cargar los expedientes. Por favor, intente de nuevo.")
     } finally {
-      setIsLoading(false)
+      if (!controller.signal.aborted) {
+        setIsLoading(false)
+      }
     }
   }, [])
 
@@ -188,39 +305,51 @@ export default function Component() {
   )
 
   useEffect(() => {
-    if (expedientCode.trim().length > 0) {
-      debouncedFetchExpedients(expedientCode)
-    } else {
-      setExpedientSuggestions([])
+    // Elegir una sugerencia cambia expedientCode, lo que volvía a disparar la consulta
+    // y reabría el desplegable 300 ms después de haberlo cerrado.
+    if (skipNextSuggestionFetchRef.current) {
+      skipNextSuggestionFetchRef.current = false
+      return
     }
+
+    // Con una sola letra, `LIKE 'A%'` barre el dataset nacional entero sin dar nada útil.
+    if (expedientCode.trim().length < MIN_SUGGESTION_LENGTH) {
+      suggestionAbortRef.current?.abort()
+      setExpedientSuggestions([])
+      setIsLoading(false)
+      return
+    }
+
+    debouncedFetchExpedients(expedientCode)
   }, [expedientCode, debouncedFetchExpedients])
 
   useEffect(() => {
+    // Contra el contenedor, no contra el input: el desplegable vive dentro y un clic
+    // en una sugerencia se contaba como clic fuera.
     const handleClickOutside = (event) => {
-      if (inputRef.current && !inputRef.current.contains(event.target)) {
-        setExpedientSuggestions([])
-      }
-    }
-
-    const handleEscapeKey = (event) => {
-      if (event.key === "Escape") {
-        setExpedientSuggestions([])
+      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target)) {
+        closeSuggestions()
       }
     }
 
     document.addEventListener("click", handleClickOutside)
-    document.addEventListener("keydown", handleEscapeKey)
-
     return () => {
       document.removeEventListener("click", handleClickOutside)
-      document.removeEventListener("keydown", handleEscapeKey)
+    }
+  }, [closeSuggestions])
+
+  useEffect(() => {
+    return () => {
+      suggestionAbortRef.current?.abort()
     }
   }, [])
 
   return (
     <div className="relative flex w-full h-screen bg-gray-100">
       <div
-        className={`absolute top-4 left-4 z-10 w-[350px] bg-white shadow-lg rounded-xl transition-transform duration-300 ease-in-out ${showSidebar ? "translate-x-0" : "-translate-x-full"}`}
+        // -translate-x-full solo desplaza el ancho del panel, y al estar en left-4
+        // quedaba una franja de 16px asomando bajo el botón de mostrar.
+        className={`absolute top-4 left-4 z-10 w-[350px] bg-white shadow-lg rounded-xl transition-transform duration-300 ease-in-out ${showSidebar ? "translate-x-0" : "-translate-x-[calc(100%+1rem)]"}`}
       >
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between mb-4">
@@ -240,23 +369,26 @@ export default function Component() {
               <Label htmlFor="search" className="text-sm font-medium mb-1 block">
                 Buscar Expediente
               </Label>
-              <div className="relative">
+              {/* El desplegable vive dentro de este contenedor posicionado. Antes era
+                  hermano suyo, así que su ancho se medía contra la barra lateral
+                  completa y se desbordaba por el padding. */}
+              <div className="relative" ref={searchBoxRef}>
                 <Input
                   ref={inputRef}
                   id="search"
                   placeholder="Ingrese el expediente"
                   value={expedientCode}
-                  onChange={(e) => {
-                    const value = e.target.value.toUpperCase()
-                    setExpedientCode(value)
-                    if (!value.trim()) {
-                      setExpedientSuggestions([])
-                    }
-                  }}
+                  onChange={(e) => setExpedientCode(e.target.value.toUpperCase())}
+                  onKeyDown={handleSearchKeyDown}
                   className="pl-10 pr-4 py-2 w-full border rounded-md"
+                  role="combobox"
+                  autoComplete="off"
                   aria-autocomplete="list"
                   aria-controls="expedient-suggestions"
                   aria-expanded={expedientSuggestions.length > 0}
+                  aria-activedescendant={
+                    activeSuggestion >= 0 ? `expedient-suggestion-${activeSuggestion}` : undefined
+                  }
                 />
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 {isLoading && (
@@ -264,27 +396,37 @@ export default function Component() {
                     <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
                   </div>
                 )}
+                {expedientSuggestions.length > 0 && (
+                  <ul
+                    id="expedient-suggestions"
+                    role="listbox"
+                    aria-label="Expedientes sugeridos"
+                    className="absolute left-0 right-0 top-full z-20 mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto"
+                  >
+                    {expedientSuggestions.map((suggestion, index) => (
+                      <li
+                        key={suggestion}
+                        id={`expedient-suggestion-${index}`}
+                        role="option"
+                        aria-selected={index === activeSuggestion}
+                        className={`px-4 py-2 cursor-pointer ${
+                          index === activeSuggestion ? "bg-blue-50" : "hover:bg-gray-100"
+                        }`}
+                        // onMouseDown, no onClick: el clic fuera cierra la lista antes
+                        // de que llegue el onClick del elemento.
+                        onMouseDown={(event) => {
+                          event.preventDefault()
+                          selectSuggestion(suggestion)
+                        }}
+                        onMouseEnter={() => setActiveSuggestion(index)}
+                      >
+                        {suggestion}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-              {expedientSuggestions.length > 0 && (
-                <ul
-                  id="expedient-suggestions"
-                  className="absolute z-20 w-full bg-white border mt-1 rounded-md shadow-lg max-h-60 overflow-auto"
-                >
-                  {expedientSuggestions.map((suggestion, index) => (
-                    <li
-                      key={index}
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                      onClick={() => {
-                        setExpedientCode(suggestion)
-                        setExpedientSuggestions([])
-                      }}
-                    >
-                      {suggestion}
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
           </div>
           <Button onClick={handleApply} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
@@ -292,70 +434,43 @@ export default function Component() {
           </Button>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Label htmlFor="titleLayer" className="text-sm">
-                Títulos Vigentes
-              </Label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={titleOpacity}
-                onChange={(e) => setTitleOpacity(parseFloat(e.target.value))}
-                className="flex-1"
-                aria-label="Opacidad de Títulos Vigentes"
+              <LayerControl
+                id="titleLayer"
+                label="Títulos Vigentes"
+                checked={showTitleLayer}
+                onCheckedChange={setShowTitleLayer}
+                opacity={titleOpacity}
+                onOpacityChange={setTitleOpacity}
               />
-              <Switch id="titleLayer" checked={showTitleLayer} onCheckedChange={setShowTitleLayer} />
             </div>
             <div className="flex items-center gap-2">
-              <Label htmlFor="requestLayer" className="text-sm">
-                Solicitudes Vigente
-              </Label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  value={requestOpacity}
-                  onChange={(e) => setRequestOpacity(parseFloat(e.target.value))}
-                  className="flex-1"
-                  aria-label="Opacidad de Solicitudes Vigente"
-                />
-              <Switch id="requestLayer" checked={showRequestLayer} onCheckedChange={setShowRequestLayer} />
+              <LayerControl
+                id="requestLayer"
+                label="Solicitudes Vigentes"
+                checked={showRequestLayer}
+                onCheckedChange={setShowRequestLayer}
+                opacity={requestOpacity}
+                onOpacityChange={setRequestOpacity}
+              />
             </div>
             <div className="flex items-center gap-2">
-              <Label htmlFor="anmServiceLayer" className="text-sm">
-                Subcontratos
-              </Label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={anmServiceOpacity}
-                onChange={(e) => setAnmServiceOpacity(parseFloat(e.target.value))}
-                className="flex-1"
+              <LayerControl
+                id="anmServiceLayer"
+                label="Subcontratos"
+                checked={showAnmServiceLayer}
+                onCheckedChange={setShowAnmServiceLayer}
+                opacity={anmServiceOpacity}
+                onOpacityChange={setAnmServiceOpacity}
               />
-              <Switch id="anmServiceLayer" checked={showAnmServiceLayer} onCheckedChange={setShowAnmServiceLayer} />
             </div>
             <div className="flex items-center gap-2">
-              <Label htmlFor="historicalTitleLayer" className="text-sm">
-                Título Histórico
-              </Label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={historicalTitleOpacity}
-                onChange={(e) => setHistoricalTitleOpacity(parseFloat(e.target.value))}
-                className="flex-1"
-                aria-label="Opacidad de Título Histórico"
-              />
-              <Switch
+              <LayerControl
                 id="historicalTitleLayer"
+                label="Título Histórico"
                 checked={showHistoricalTitleLayer}
                 onCheckedChange={setShowHistoricalTitleLayer}
+                opacity={historicalTitleOpacity}
+                onOpacityChange={setHistoricalTitleOpacity}
               />
             </div>
           </div>

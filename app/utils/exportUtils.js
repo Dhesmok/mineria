@@ -1,14 +1,6 @@
-import { getFeatureLabel } from "./mapUtils"
+import { escapeXml, getFeatureLabel } from "./mapUtils"
 
-const XML_ENTITIES = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&apos;",
-}
-
-export const escapeXml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => XML_ENTITIES[char])
+export { escapeXml }
 
 /** KML usa lon,lat,alt separados por espacios, y espera el anillo cerrado. */
 const ringToKml = (ring) => {

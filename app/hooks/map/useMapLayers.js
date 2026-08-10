@@ -1,12 +1,14 @@
 import { useEffect, useRef, useCallback, useState } from "react"
 import L from "leaflet"
 import * as EsriLeaflet from "esri-leaflet"
-import { getLabelCoordinates, getFeatureLabel, createPopupContent } from "../../utils/mapUtils"
-import { fetchArcgisJson } from "../../utils/arcgis"
-
-const TENURE_LAYERS_URL = "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer"
-const REQUIRED_LAYER_NAMES = ["Solicitud Vigente", "Título Vigente"]
-const LAYER_PROBE_RANGE = [0, 1, 2, 3, 4, 5]
+import { createPopupContent } from "../../utils/mapUtils"
+import { createLabelMarker, shouldShowLabels, syncLabelsWithFeatures } from "../../utils/mapLabels"
+import {
+  findTenureLayerNumbers,
+  REQUEST_LAYER_NAME,
+  TITLE_LAYER_NAME,
+  tenureLayerUrl,
+} from "../../utils/tenureLayers"
 
 // Estas capas cubren todo el país. Pedirlas a zoom bajo trae decenas de miles de
 // polígonos: ArcGIS corta la respuesta en maxRecordCount y el mapa quedaba mostrando
@@ -39,8 +41,6 @@ export const useMapLayers = (
   const requestOpacityRef = useRef(requestOpacity)
   const anmServiceOpacityRef = useRef(anmServiceOpacity)
   const historicalTitleOpacityRef = useRef(historicalTitleOpacity)
-  const layerNumbersCacheRef = useRef(null)
-  const layerNumbersPromiseRef = useRef(null)
   const updateRunIdRef = useRef(0)
 
   const [isBelowLayersMinZoom, setIsBelowLayersMinZoom] = useState(false)
@@ -61,65 +61,16 @@ export const useMapLayers = (
     historicalTitleOpacityRef.current = historicalTitleOpacity
   }, [historicalTitleOpacity])
 
-  const shouldShowTitleLayer = showTitleLayer && titleOpacity > 0
-  const shouldShowRequestLayer = showRequestLayer && requestOpacity > 0
-  const shouldShowAnmServiceLayer = showAnmServiceLayer && anmServiceOpacity > 0
-  const shouldShowHistoricalTitleLayer = showHistoricalTitleLayer && historicalTitleOpacity > 0
-
+  // El interruptor decide si la capa existe; el slider solo controla el relleno.
+  // Antes una opacidad de 0 destruía la capa entera —contorno incluido— y forzaba a
+  // recargarla desde el servidor al volver a subir el slider.
   const anyLayerEnabled =
-    shouldShowTitleLayer || shouldShowRequestLayer || shouldShowAnmServiceLayer || shouldShowHistoricalTitleLayer
-
-  const findLayerNumbers = useCallback(async () => {
-    if (layerNumbersCacheRef.current) {
-      return layerNumbersCacheRef.current
-    }
-    // Compartir la consulta en vuelo: varias llamadas concurrentes repetían las seis
-    // peticiones de metadatos cada una.
-    if (layerNumbersPromiseRef.current) {
-      return layerNumbersPromiseRef.current
-    }
-
-    const request = (async () => {
-      const probes = await Promise.all(
-        LAYER_PROBE_RANGE.map(async (index) => {
-          try {
-            const data = await fetchArcgisJson(`${TENURE_LAYERS_URL}/${index}?f=json`)
-            return [data.name, index]
-          } catch (error) {
-            console.error(`Error checking layer ${index}:`, error)
-            return null
-          }
-        }),
-      )
-
-      const foundLayers = {}
-      probes.forEach((probe) => {
-        if (probe && REQUIRED_LAYER_NAMES.includes(probe[0])) {
-          foundLayers[probe[0]] = probe[1]
-        }
-      })
-
-      // No cachear un resultado incompleto: si todas las peticiones fallaban se
-      // guardaba {} para siempre y las capas dinámicas quedaban rotas hasta recargar.
-      if (REQUIRED_LAYER_NAMES.every((name) => foundLayers[name] !== undefined)) {
-        layerNumbersCacheRef.current = foundLayers
-      }
-
-      return foundLayers
-    })()
-
-    layerNumbersPromiseRef.current = request
-    try {
-      return await request
-    } finally {
-      layerNumbersPromiseRef.current = null
-    }
-  }, [])
+    showTitleLayer || showRequestLayer || showAnmServiceLayer || showHistoricalTitleLayer
 
   useEffect(() => {
     if (!mapInstance) return
 
-    // Cada ejecución invalida a la anterior. updateLayer espera a findLayerNumbers
+    // Cada ejecución invalida a la anterior. updateLayer espera a findTenureLayerNumbers
     // antes de mirar layerRef.current, así que dos ejecuciones solapadas (arrastrar
     // el slider de opacidad, alternar switches rápido) veían ambas el ref vacío y
     // creaban y añadían dos capas superpuestas.
@@ -128,54 +79,55 @@ export const useMapLayers = (
     const isStale = () => runId !== updateRunIdRef.current
 
     const updateLayer = async (show, layerRef, labelsLayerRef, layerName, layerStyle, customUrl = null) => {
+      // Capa apagada y todavía sin crear: no hay nada que hacer. Resolver la URL aquí
+      // disparaba el descubrimiento de capas nada más cargar la página, con los cuatro
+      // interruptores en off, y sacaba el banner de error si el servicio no respondía.
+      if (!show && !layerRef.current) return
+
       let layerUrl = customUrl
 
-      if (!layerUrl) {
-        const layerNumbers = await findLayerNumbers()
+      if (show && !layerUrl) {
+        const layerNumbers = await findTenureLayerNumbers()
         if (isStale()) return
 
         const layerNumber = layerNumbers[layerName]
         if (layerNumber === undefined) {
           throw new Error(`No se encontró la capa "${layerName}" en el servicio de la ANM`)
         }
-        layerUrl = `${TENURE_LAYERS_URL}/${layerNumber}`
+        layerUrl = tenureLayerUrl(layerNumber)
       }
 
       if (isStale() || !mapRef.current) return
 
       if (show) {
         if (!layerRef.current) {
+          // Poblado desde onEachFeature; syncLabelsWithFeatures lo usa para quitar y
+          // reponer las etiquetas según entran y salen del viewport.
+          const labelMarkers = new Map()
+
           layerRef.current = EsriLeaflet.featureLayer({
             url: layerUrl,
             style: layerStyle,
             minZoom: LAYERS_MIN_ZOOM,
             onEachFeature: (feature, layer) => {
-              const bestPoint = getLabelCoordinates(feature)
+              const marker = createLabelMarker(feature)
 
-              if (bestPoint) {
-                const [long, lat] = bestPoint
-
-                const label = L.divIcon({
-                  className: "map-label",
-                  html: `<div>${getFeatureLabel(feature.properties)}</div>`,
-                  iconSize: [100, 40],
-                  iconAnchor: [50, 20],
-                })
-
+              if (marker) {
                 if (!labelsLayerRef.current) {
                   labelsLayerRef.current = L.layerGroup()
                 }
-                const marker = L.marker([lat, long], { icon: label })
                 labelsLayerRef.current.addLayer(marker)
+                labelMarkers.set(feature.id, marker)
               }
 
-              const popupContent = createPopupContent(feature.properties)
-              layer.bindPopup(popupContent)
+              layer.bindPopup(createPopupContent(feature.properties))
             },
-          }).addTo(mapRef.current)
+          })
 
-          const currentZoom = mapRef.current.getZoom()
-          if (currentZoom >= 15 && currentZoom <= 19 && labelsLayerRef.current) {
+          syncLabelsWithFeatures(layerRef.current, labelsLayerRef, labelMarkers)
+          layerRef.current.addTo(mapRef.current)
+
+          if (shouldShowLabels(mapRef.current.getZoom()) && labelsLayerRef.current) {
             mapRef.current.addLayer(labelsLayerRef.current)
           }
         } else {
@@ -206,14 +158,14 @@ export const useMapLayers = (
       try {
         await Promise.all([
           updateLayer(
-            shouldShowTitleLayer,
+            showTitleLayer,
             titleLayerRef,
             titleLabelsLayerRef,
-            "Título Vigente",
+            TITLE_LAYER_NAME,
             { color: "#894444", weight: 2, fillColor: "#A46F48", fillOpacity: titleOpacity },
           ),
           updateLayer(
-            shouldShowAnmServiceLayer,
+            showAnmServiceLayer,
             anmServiceLayerRef,
             anmServiceLabelsLayerRef,
             null,
@@ -221,14 +173,14 @@ export const useMapLayers = (
             "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3",
           ),
           updateLayer(
-            shouldShowRequestLayer,
+            showRequestLayer,
             requestLayerRef,
             requestLabelsLayerRef,
-            "Solicitud Vigente",
+            REQUEST_LAYER_NAME,
             { color: "#F0C567", weight: 2, fillColor: "#FFF0AF", fillOpacity: requestOpacity },
           ),
           updateLayer(
-            shouldShowHistoricalTitleLayer,
+            showHistoricalTitleLayer,
             historicalTitleLayerRef,
             historicalTitleLabelsLayerRef,
             null,
@@ -250,15 +202,14 @@ export const useMapLayers = (
     run()
   }, [
     mapInstance,
-    shouldShowTitleLayer,
-    shouldShowRequestLayer,
-    shouldShowAnmServiceLayer,
-    shouldShowHistoricalTitleLayer,
+    showTitleLayer,
+    showRequestLayer,
+    showAnmServiceLayer,
+    showHistoricalTitleLayer,
     titleOpacity,
     requestOpacity,
     anmServiceOpacity,
     historicalTitleOpacity,
-    findLayerNumbers,
     mapRef,
     setError,
     setShowErrorBanner
@@ -330,7 +281,6 @@ export const useMapLayers = (
   }, [mapInstance])
 
   return {
-    findLayerNumbers,
     // Una capa encendida por debajo del zoom mínimo no dibuja nada: hay que decirlo,
     // en vez de dejar el mapa vacío sin explicación.
     showZoomInHint: anyLayerEnabled && isBelowLayersMinZoom,

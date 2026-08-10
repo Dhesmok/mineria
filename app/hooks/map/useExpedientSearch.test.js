@@ -1,6 +1,11 @@
 import { renderHook, waitFor } from "@testing-library/react"
 import { useExpedientSearch } from "./useExpedientSearch"
 
+jest.mock("../../utils/tenureLayers", () => ({
+  ...jest.requireActual("../../utils/tenureLayers"),
+  findTenureLayerNumbers: async () => ({ "Título Vigente": 3, "Solicitud Vigente": 4 }),
+}))
+
 // Leaflet no funciona en jsdom, así que sustituimos las fábricas que usa el hook por
 // dobles que registran qué se añadió al mapa.
 jest.mock("leaflet", () => {
@@ -75,7 +80,6 @@ const renderSearch = (map, overrides = {}) => {
         "ABC-123",
         searchTrigger,
         props.onCoordinatesUpdate,
-        async () => ({ "Título Vigente": 3, "Solicitud Vigente": 4 }),
         props.setError,
         props.setShowErrorBanner,
         refs.geoJson,

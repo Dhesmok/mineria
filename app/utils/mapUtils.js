@@ -225,25 +225,42 @@ export const getLabelCoordinates = (feature) => {
 export const getFeatureLabel = (properties) =>
   properties?.TENURE_ID || properties?.CODIGO_EXPEDIENTE || "N/A"
 
-export const createPopupContent = (properties) => {
+const MARKUP_ENTITIES = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&apos;",
+}
+
+/**
+ * Escapa los cinco caracteres reservados de XML/HTML. Los atributos de la ANM se
+ * interpolan en HTML (popups, etiquetas) y en XML (KML) sin ningún saneamiento.
+ */
+export const escapeXml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => MARKUP_ENTITIES[char])
+
+const field = (value) => escapeXml(value || "N/A")
+
+export const createPopupContent = (properties = {}) => {
+  const area =
+    typeof properties.AREA_HA === "number" ? properties.AREA_HA.toFixed(4) : properties.AREA_HA || "N/A"
+
   return `
     <div class="popup-content">
       <h3>Información del Expediente</h3>
-      <p><strong>Código Expediente:</strong> ${properties.CODIGO_EXPEDIENTE || properties.TENURE_ID || "N/A"}</p>
-      <p><strong>Modalidad:</strong> ${properties.MODALIDAD || "N/A"}</p>
-      <p><strong>Estado del Título:</strong> ${properties.TITULO_ESTADO || properties.STATUS || "N/A"}</p>
-      <p><strong>Área (ha):</strong> ${
-        typeof properties.AREA_HA === "number" ? properties.AREA_HA.toFixed(4) : properties.AREA_HA || "N/A"
-      }</p>
-      <p><strong>Clasificación Minería:</strong> ${properties.CLASIFICACION_MINERIA || "N/A"}</p>
-      <p><strong>Etapa:</strong> ${properties.ETAPA || "N/A"}</p>
-      <p><strong>Solicitantes o Titulares:</strong> ${properties.SOLICITANTES_O_TITULARES || "N/A"}</p>
-      <p><strong>Minerales:</strong> ${properties.MINERALES || "N/A"}</p>
-      <p><strong>Fecha de Solicitud:</strong> ${formatDate(properties.FECHA_DE_SOLICITUD)}</p>
-      <p><strong>Fecha de Expedición:</strong> ${formatDate(properties.FECHA_DE_EXPEDICION)}</p>
-      <p><strong>Fecha de Aniversario:</strong> ${formatDate(properties.FECHA_DE_ANIVERSARIO)}</p>
-      <p><strong>Fecha de Expiración:</strong> ${formatDate(properties.FECHA_DE_EXPIRACION)}</p>
-      <p><strong>PAR:</strong> ${properties.PAR || "N/A"}</p>
+      <p><strong>Código Expediente:</strong> ${field(properties.CODIGO_EXPEDIENTE || properties.TENURE_ID)}</p>
+      <p><strong>Modalidad:</strong> ${field(properties.MODALIDAD)}</p>
+      <p><strong>Estado del Título:</strong> ${field(properties.TITULO_ESTADO || properties.STATUS)}</p>
+      <p><strong>Área (ha):</strong> ${escapeXml(area)}</p>
+      <p><strong>Clasificación Minería:</strong> ${field(properties.CLASIFICACION_MINERIA)}</p>
+      <p><strong>Etapa:</strong> ${field(properties.ETAPA)}</p>
+      <p><strong>Solicitantes o Titulares:</strong> ${field(properties.SOLICITANTES_O_TITULARES)}</p>
+      <p><strong>Minerales:</strong> ${field(properties.MINERALES)}</p>
+      <p><strong>Fecha de Solicitud:</strong> ${escapeXml(formatDate(properties.FECHA_DE_SOLICITUD))}</p>
+      <p><strong>Fecha de Expedición:</strong> ${escapeXml(formatDate(properties.FECHA_DE_EXPEDICION))}</p>
+      <p><strong>Fecha de Aniversario:</strong> ${escapeXml(formatDate(properties.FECHA_DE_ANIVERSARIO))}</p>
+      <p><strong>Fecha de Expiración:</strong> ${escapeXml(formatDate(properties.FECHA_DE_EXPIRACION))}</p>
+      <p><strong>PAR:</strong> ${field(properties.PAR)}</p>
     </div>
   `
 }

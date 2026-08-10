@@ -1,7 +1,14 @@
 import { useEffect, useRef, useCallback } from "react"
 import L from "leaflet"
-import { getLabelCoordinates, getFeatureLabel, createPopupContent, extractRings } from "../../utils/mapUtils"
+import { createPopupContent, extractRings } from "../../utils/mapUtils"
+import { createLabelMarker } from "../../utils/mapLabels"
 import { fetchArcgisJson } from "../../utils/arcgis"
+import {
+  findTenureLayerNumbers,
+  REQUEST_LAYER_NAME,
+  TITLE_LAYER_NAME,
+  tenureLayerUrl,
+} from "../../utils/tenureLayers"
 
 export const useExpedientSearch = (
   mapRef,
@@ -9,7 +16,6 @@ export const useExpedientSearch = (
   expedientCode,
   searchTrigger,
   onCoordinatesUpdate,
-  findLayerNumbers,
   setError,
   setShowErrorBanner,
   geoJsonLayerRef,
@@ -35,27 +41,31 @@ export const useExpedientSearch = (
     const searchId = searchIdRef.current
     const isStale = () => searchId !== searchIdRef.current
 
-    const layerNumbers = await findLayerNumbers()
+    const layerNumbers = await findTenureLayerNumbers()
     if (isStale()) return
 
-    const layers = [
-      {
-        url: `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/${layerNumbers["Título Vigente"]}/query`,
-        style: { color: "#894444", weight: 3, fillColor: "#A46F48", fillOpacity: 0.6 },
-      },
+    // Una capa que no se pudo descubrir se omite en vez de construir una URL con
+    // ".../MapServer/undefined/query", pero sigue contando en el total para que el
+    // mensaje de error no mienta sobre cuántas capas se consultaron de verdad.
+    const dynamicLayer = (layerName, style) => {
+      const layerNumber = layerNumbers[layerName]
+      return layerNumber === undefined ? null : { url: `${tenureLayerUrl(layerNumber)}/query`, style }
+    }
+
+    const allLayers = [
+      dynamicLayer(TITLE_LAYER_NAME, { color: "#894444", weight: 3, fillColor: "#A46F48", fillOpacity: 0.6 }),
       {
         url: "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query",
         style: { color: "#6E4B3A", weight: 3, fillColor: "#B68863", fillOpacity: 0.6 },
       },
-      {
-        url: `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/${layerNumbers["Solicitud Vigente"]}/query`,
-        style: { color: "#F0C567", weight: 3, fillColor: "#FFF0AF", fillOpacity: 0.6 },
-      },
+      dynamicLayer(REQUEST_LAYER_NAME, { color: "#F0C567", weight: 3, fillColor: "#FFF0AF", fillOpacity: 0.6 }),
       {
         url: "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query",
         style: { color: "#22577A", weight: 3, fillColor: "#38A3A5", fillOpacity: 0.6 },
       },
     ]
+    const layers = allLayers.filter(Boolean)
+    const totalLayers = allLayers.length
 
     // Los vértices también: antes una búsqueda fallida dejaba en el mapa los
     // círculos rojos del expediente anterior.
@@ -73,7 +83,7 @@ export const useExpedientSearch = (
     // tiene el expediente. Solo cuenta como caída si fallan las dos: cada capa se
     // sondea con TENURE_ID y con CODIGO_EXPEDIENTE, y es normal que una de ellas
     // devuelva un error de campo inexistente.
-    let unreachableLayers = 0
+    let unreachableLayers = totalLayers - layers.length
 
     for (const layer of layers) {
       const queries = [
@@ -102,36 +112,27 @@ export const useExpedientSearch = (
             geoJsonLayerRef.current = L.geoJSON(data, {
               style: layer.style,
               onEachFeature: (feature, layer) => {
-                const bestPoint = getLabelCoordinates(feature)
+                const marker = createLabelMarker(feature)
 
-                if (bestPoint) {
-                  const [long, lat] = bestPoint
-
-                  const label = L.divIcon({
-                    className: "map-label",
-                    html: `<div>${getFeatureLabel(feature.properties)}</div>`,
-                    iconSize: [100, 40],
-                    iconAnchor: [50, 20],
-                  })
-
+                if (marker) {
                   if (!labelsLayerRef.current) {
                     labelsLayerRef.current = L.layerGroup()
                   }
-                  const marker = L.marker([lat, long], { icon: label })
                   labelsLayerRef.current.addLayer(marker)
                 }
 
-                const popupContent = createPopupContent(feature.properties)
-                layer.bindPopup(popupContent)
+                layer.bindPopup(createPopupContent(feature.properties))
               },
             }).addTo(mapRef.current)
 
-            const currentZoom = mapRef.current.getZoom()
-            if (currentZoom >= 15 && currentZoom <= 19 && labelsLayerRef.current) {
+            mapRef.current.fitBounds(geoJsonLayerRef.current.getBounds())
+
+            // La etiqueta del expediente buscado se muestra siempre: es un único
+            // resultado que el usuario pidió explícitamente, y fitBounds suele dejar
+            // el mapa por debajo del zoom mínimo de las capas masivas.
+            if (labelsLayerRef.current) {
               mapRef.current.addLayer(labelsLayerRef.current)
             }
-
-            mapRef.current.fitBounds(geoJsonLayerRef.current.getBounds())
 
             // Todas las features y todos sus anillos, no solo la primera.
             const rings = extractRings(data)
@@ -158,16 +159,16 @@ export const useExpedientSearch = (
     if (isStale()) return
 
     setShowErrorBanner(true)
-    if (unreachableLayers === layers.length) {
+    if (unreachableLayers === totalLayers) {
       setError("No se pudo consultar ninguna de las capas de la ANM. Revisa tu conexión e inténtalo de nuevo.")
     } else if (unreachableLayers > 0) {
-      setError(`${unreachableLayers} de ${layers.length} capas de la ANM no respondieron, y el expediente '${expedientCode}' no se encontró en las demás.`)
+      setError(`${unreachableLayers} de ${totalLayers} capas de la ANM no respondieron, y el expediente '${expedientCode}' no se encontró en las demás.`)
     } else {
       setError(`No se encontró un polígono con el expediente introducido '${expedientCode}'.`)
     }
     onCoordinatesUpdate([], null)
   }, [
-    expedientCode, onCoordinatesUpdate, findLayerNumbers, mapInstance,
+    expedientCode, onCoordinatesUpdate, mapInstance,
     setError, setShowErrorBanner, geoJsonLayerRef, labelsLayerRef, verticesLayerRef
   ])
 

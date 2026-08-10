@@ -12,6 +12,7 @@ import { useGeolocation } from "./hooks/map/useGeolocation"
 import { useMapLayers } from "./hooks/map/useMapLayers"
 import { useExpedientSearch } from "./hooks/map/useExpedientSearch"
 import { formatDistance, formatArea, formatDegrees } from "./utils/mapUtils"
+import { shouldShowLabels } from "./utils/mapLabels"
 import { MapControls } from "./components/MapControls"
 import { ColorPicker } from "./components/ColorPicker"
 
@@ -33,6 +34,7 @@ export default function MapComponent({
   const drawControlRef = useRef(null)
   const drawnItemsRef = useRef(null)
   const measureControlRef = useRef(null)
+  const activeMeasureRef = useRef(null)
   const geoJsonLayerRef = useRef(null)
   const verticesLayerRef = useRef(null)
   const labelsLayerRef = useRef(null)
@@ -45,10 +47,11 @@ export default function MapComponent({
 
   const {
     drawingColor,
+    drawingColorRef,
     handleColorChange,
     showColorPicker,
     setShowColorPicker
-  } = useDrawControl(mapRef, drawControlRef, drawnItemsRef)
+  } = useDrawControl(mapRef, mapInstance, drawControlRef, drawnItemsRef, measureControlRef)
 
   const {
     isLocating,
@@ -60,7 +63,6 @@ export default function MapComponent({
   } = useGeolocation(mapRef, setError, setShowErrorBanner)
 
   const {
-    findLayerNumbers,
     showZoomInHint,
     titleLabelsLayerRef,
     requestLabelsLayerRef,
@@ -87,7 +89,6 @@ export default function MapComponent({
     expedientCode,
     searchTrigger,
     onCoordinatesUpdate,
-    findLayerNumbers,
     setError,
     setShowErrorBanner,
     geoJsonLayerRef,
@@ -116,58 +117,32 @@ export default function MapComponent({
       drawnItemsRef.current = new L.FeatureGroup()
       mapInstanceLocal.addLayer(drawnItemsRef.current)
 
-      const markerIcon = new L.Icon({
-        iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-        shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-        iconSize: [25, 41],
-        iconAnchor: [12, 41],
-        popupAnchor: [1, -34],
-        shadowSize: [41, 41],
-      })
+      // El control de dibujo lo crea useDrawControl, que también lo recrea cuando
+      // cambia el color; aquí se duplicaban sus cincuenta líneas de opciones.
 
-      drawControlRef.current = new L.Control.Draw({
-        position: "topright",
-        draw: {
-          polyline: {
-            shapeOptions: { color: drawingColor, weight: 5 },
-          },
-          polygon: {
-            allowIntersection: false,
-            drawError: {
-              color: "#e1e100",
-              message: "<strong>¡Error!</strong> No se permiten polígonos que se intersecten.",
-            },
-            shapeOptions: { color: drawingColor },
-          },
-          circle: { shapeOptions: { color: drawingColor } },
-          rectangle: { shapeOptions: { color: drawingColor } },
-          marker: { icon: markerIcon },
-          circlemarker: false,
-        },
-        edit: {
-          featureGroup: drawnItemsRef.current,
-          remove: true,
-        },
-      })
-
-      mapInstanceLocal.addControl(drawControlRef.current)
-
-      const startDistanceMeasure = () => {
-        const drawer = new L.Draw.Polyline(mapInstanceLocal, {
-          shapeOptions: { color: drawingColor, weight: 5 },
-        })
+      // Cada clic en medir habilitaba un dibujante nuevo sin apagar el anterior, y
+      // el color se leía del primer render. El ref resuelve lo segundo.
+      const startMeasure = (createDrawer) => {
+        activeMeasureRef.current?.disable()
+        const drawer = createDrawer(drawingColorRef.current)
         drawer.enable()
+        activeMeasureRef.current = drawer
       }
 
-      const startAreaMeasure = () => {
-        const drawer = new L.Draw.Polygon(mapInstanceLocal, {
-          allowIntersection: false,
-          showArea: true,
-          shapeOptions: { color: drawingColor },
-        })
-        drawer.enable()
-      }
+      const startDistanceMeasure = () =>
+        startMeasure(
+          (color) => new L.Draw.Polyline(mapInstanceLocal, { shapeOptions: { color, weight: 5 } }),
+        )
+
+      const startAreaMeasure = () =>
+        startMeasure(
+          (color) =>
+            new L.Draw.Polygon(mapInstanceLocal, {
+              allowIntersection: false,
+              showArea: true,
+              shapeOptions: { color },
+            }),
+        )
 
       const MeasureControl = L.Control.extend({
         options: { position: "topright" },
@@ -204,6 +179,7 @@ export default function MapComponent({
 
       mapInstanceLocal.on(L.Draw.Event.CREATED, (event) => {
         const layer = event.layer
+        activeMeasureRef.current = null
         drawnItemsRef.current.addLayer(layer)
 
         if (event.layerType === "polyline") {
@@ -223,25 +199,22 @@ export default function MapComponent({
       })
 
       const handleZoom = () => {
-        const currentZoom = mapInstanceLocal.getZoom()
+        // Solo las capas masivas se ocultan por zoom. La etiqueta del expediente
+        // buscado permanece visible: es un único resultado que el usuario pidió.
+        const showLabels = shouldShowLabels(mapInstanceLocal.getZoom())
         const labelsLayers = [
-          labelsLayerRef.current,
           titleLabelsLayerRef.current,
           requestLabelsLayerRef.current,
           anmServiceLabelsLayerRef.current,
           historicalTitleLabelsLayerRef.current,
         ]
+
         labelsLayers.forEach((layer) => {
-          if (layer) {
-            if (currentZoom >= 15 && currentZoom <= 19) {
-              if (!mapInstanceLocal.hasLayer(layer)) {
-                mapInstanceLocal.addLayer(layer)
-              }
-            } else {
-              if (mapInstanceLocal.hasLayer(layer)) {
-                mapInstanceLocal.removeLayer(layer)
-              }
-            }
+          if (!layer) return
+          if (showLabels && !mapInstanceLocal.hasLayer(layer)) {
+            mapInstanceLocal.addLayer(layer)
+          } else if (!showLabels && mapInstanceLocal.hasLayer(layer)) {
+            mapInstanceLocal.removeLayer(layer)
           }
         })
 
