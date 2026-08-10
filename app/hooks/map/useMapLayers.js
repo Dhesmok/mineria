@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react"
 import L from "leaflet"
 import * as EsriLeaflet from "esri-leaflet"
-import { getLabelCoordinates, createPopupContent } from "../../utils/mapUtils"
+import { getLabelCoordinates, getFeatureLabel, createPopupContent } from "../../utils/mapUtils"
 
 export const useMapLayers = (
   mapRef,
@@ -100,20 +100,23 @@ export const useMapLayers = (
             style: layerStyle,
             onEachFeature: (feature, layer) => {
               const bestPoint = getLabelCoordinates(feature)
-              const [long, lat] = bestPoint
 
-              const label = L.divIcon({
-                className: "map-label",
-                html: `<div>${feature.properties.TENURE_ID || "N/A"}</div>`,
-                iconSize: [100, 40],
-                iconAnchor: [50, 20],
-              })
+              if (bestPoint) {
+                const [long, lat] = bestPoint
 
-              if (!labelsLayerRef.current) {
-                labelsLayerRef.current = L.layerGroup()
+                const label = L.divIcon({
+                  className: "map-label",
+                  html: `<div>${getFeatureLabel(feature.properties)}</div>`,
+                  iconSize: [100, 40],
+                  iconAnchor: [50, 20],
+                })
+
+                if (!labelsLayerRef.current) {
+                  labelsLayerRef.current = L.layerGroup()
+                }
+                const marker = L.marker([lat, long], { icon: label })
+                labelsLayerRef.current.addLayer(marker)
               }
-              const marker = L.marker([lat, long], { icon: label })
-              labelsLayerRef.current.addLayer(marker)
 
               const popupContent = createPopupContent(feature.properties)
               layer.bindPopup(popupContent)
@@ -129,8 +132,13 @@ export const useMapLayers = (
           layerRef.current.setStyle(layerStyle)
         }
       } else if (layerRef.current) {
-        if (labelsLayerRef.current && mapRef.current.hasLayer(labelsLayerRef.current)) {
-          mapRef.current.removeLayer(labelsLayerRef.current)
+        // Anular el ref siempre, no solo cuando el grupo está en el mapa: fuera del
+        // rango de zoom de etiquetas nunca lo está, y conservarlo hacía que al
+        // reencender la capa los marcadores nuevos se apilaran sobre los viejos.
+        if (labelsLayerRef.current) {
+          if (mapRef.current.hasLayer(labelsLayerRef.current)) {
+            mapRef.current.removeLayer(labelsLayerRef.current)
+          }
           labelsLayerRef.current = null
         }
         if (mapRef.current.hasLayer(layerRef.current)) {
