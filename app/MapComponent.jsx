@@ -12,6 +12,7 @@ import { useGeolocation } from "./hooks/map/useGeolocation"
 import { useMapLayers } from "./hooks/map/useMapLayers"
 import { useExpedientSearch } from "./hooks/map/useExpedientSearch"
 import { formatDistance, formatArea, formatDegrees } from "./utils/mapUtils"
+import { shouldShowLabels } from "./utils/mapLabels"
 import { MapControls } from "./components/MapControls"
 import { ColorPicker } from "./components/ColorPicker"
 
@@ -223,25 +224,22 @@ export default function MapComponent({
       })
 
       const handleZoom = () => {
-        const currentZoom = mapInstanceLocal.getZoom()
+        // Solo las capas masivas se ocultan por zoom. La etiqueta del expediente
+        // buscado permanece visible: es un único resultado que el usuario pidió.
+        const showLabels = shouldShowLabels(mapInstanceLocal.getZoom())
         const labelsLayers = [
-          labelsLayerRef.current,
           titleLabelsLayerRef.current,
           requestLabelsLayerRef.current,
           anmServiceLabelsLayerRef.current,
           historicalTitleLabelsLayerRef.current,
         ]
+
         labelsLayers.forEach((layer) => {
-          if (layer) {
-            if (currentZoom >= 15 && currentZoom <= 19) {
-              if (!mapInstanceLocal.hasLayer(layer)) {
-                mapInstanceLocal.addLayer(layer)
-              }
-            } else {
-              if (mapInstanceLocal.hasLayer(layer)) {
-                mapInstanceLocal.removeLayer(layer)
-              }
-            }
+          if (!layer) return
+          if (showLabels && !mapInstanceLocal.hasLayer(layer)) {
+            mapInstanceLocal.addLayer(layer)
+          } else if (!showLabels && mapInstanceLocal.hasLayer(layer)) {
+            mapInstanceLocal.removeLayer(layer)
           }
         })
 

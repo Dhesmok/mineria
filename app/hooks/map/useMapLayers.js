@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback, useState } from "react"
 import L from "leaflet"
 import * as EsriLeaflet from "esri-leaflet"
-import { getLabelCoordinates, getFeatureLabel, createPopupContent } from "../../utils/mapUtils"
+import { createPopupContent } from "../../utils/mapUtils"
+import { createLabelMarker, shouldShowLabels, syncLabelsWithFeatures } from "../../utils/mapLabels"
 import { fetchArcgisJson } from "../../utils/arcgis"
 
 const TENURE_LAYERS_URL = "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer"
@@ -61,13 +62,11 @@ export const useMapLayers = (
     historicalTitleOpacityRef.current = historicalTitleOpacity
   }, [historicalTitleOpacity])
 
-  const shouldShowTitleLayer = showTitleLayer && titleOpacity > 0
-  const shouldShowRequestLayer = showRequestLayer && requestOpacity > 0
-  const shouldShowAnmServiceLayer = showAnmServiceLayer && anmServiceOpacity > 0
-  const shouldShowHistoricalTitleLayer = showHistoricalTitleLayer && historicalTitleOpacity > 0
-
+  // El interruptor decide si la capa existe; el slider solo controla el relleno.
+  // Antes una opacidad de 0 destruía la capa entera —contorno incluido— y forzaba a
+  // recargarla desde el servidor al volver a subir el slider.
   const anyLayerEnabled =
-    shouldShowTitleLayer || shouldShowRequestLayer || shouldShowAnmServiceLayer || shouldShowHistoricalTitleLayer
+    showTitleLayer || showRequestLayer || showAnmServiceLayer || showHistoricalTitleLayer
 
   const findLayerNumbers = useCallback(async () => {
     if (layerNumbersCacheRef.current) {
@@ -145,37 +144,33 @@ export const useMapLayers = (
 
       if (show) {
         if (!layerRef.current) {
+          // Poblado desde onEachFeature; syncLabelsWithFeatures lo usa para quitar y
+          // reponer las etiquetas según entran y salen del viewport.
+          const labelMarkers = new Map()
+
           layerRef.current = EsriLeaflet.featureLayer({
             url: layerUrl,
             style: layerStyle,
             minZoom: LAYERS_MIN_ZOOM,
             onEachFeature: (feature, layer) => {
-              const bestPoint = getLabelCoordinates(feature)
+              const marker = createLabelMarker(feature)
 
-              if (bestPoint) {
-                const [long, lat] = bestPoint
-
-                const label = L.divIcon({
-                  className: "map-label",
-                  html: `<div>${getFeatureLabel(feature.properties)}</div>`,
-                  iconSize: [100, 40],
-                  iconAnchor: [50, 20],
-                })
-
+              if (marker) {
                 if (!labelsLayerRef.current) {
                   labelsLayerRef.current = L.layerGroup()
                 }
-                const marker = L.marker([lat, long], { icon: label })
                 labelsLayerRef.current.addLayer(marker)
+                labelMarkers.set(feature.id, marker)
               }
 
-              const popupContent = createPopupContent(feature.properties)
-              layer.bindPopup(popupContent)
+              layer.bindPopup(createPopupContent(feature.properties))
             },
-          }).addTo(mapRef.current)
+          })
 
-          const currentZoom = mapRef.current.getZoom()
-          if (currentZoom >= 15 && currentZoom <= 19 && labelsLayerRef.current) {
+          syncLabelsWithFeatures(layerRef.current, labelsLayerRef, labelMarkers)
+          layerRef.current.addTo(mapRef.current)
+
+          if (shouldShowLabels(mapRef.current.getZoom()) && labelsLayerRef.current) {
             mapRef.current.addLayer(labelsLayerRef.current)
           }
         } else {
@@ -206,14 +201,14 @@ export const useMapLayers = (
       try {
         await Promise.all([
           updateLayer(
-            shouldShowTitleLayer,
+            showTitleLayer,
             titleLayerRef,
             titleLabelsLayerRef,
             "Título Vigente",
             { color: "#894444", weight: 2, fillColor: "#A46F48", fillOpacity: titleOpacity },
           ),
           updateLayer(
-            shouldShowAnmServiceLayer,
+            showAnmServiceLayer,
             anmServiceLayerRef,
             anmServiceLabelsLayerRef,
             null,
@@ -221,14 +216,14 @@ export const useMapLayers = (
             "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3",
           ),
           updateLayer(
-            shouldShowRequestLayer,
+            showRequestLayer,
             requestLayerRef,
             requestLabelsLayerRef,
             "Solicitud Vigente",
             { color: "#F0C567", weight: 2, fillColor: "#FFF0AF", fillOpacity: requestOpacity },
           ),
           updateLayer(
-            shouldShowHistoricalTitleLayer,
+            showHistoricalTitleLayer,
             historicalTitleLayerRef,
             historicalTitleLabelsLayerRef,
             null,
@@ -250,10 +245,10 @@ export const useMapLayers = (
     run()
   }, [
     mapInstance,
-    shouldShowTitleLayer,
-    shouldShowRequestLayer,
-    shouldShowAnmServiceLayer,
-    shouldShowHistoricalTitleLayer,
+    showTitleLayer,
+    showRequestLayer,
+    showAnmServiceLayer,
+    showHistoricalTitleLayer,
     titleOpacity,
     requestOpacity,
     anmServiceOpacity,

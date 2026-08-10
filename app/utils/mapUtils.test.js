@@ -1,5 +1,5 @@
 import * as turf from "@turf/turf"
-import { extractRings, formatDegrees, getLabelCoordinates, getFeatureLabel } from "./mapUtils"
+import { createPopupContent, extractRings, formatDegrees, getLabelCoordinates, getFeatureLabel } from "./mapUtils"
 
 const polygonFeature = (coordinates) => ({
   type: "Feature",
@@ -207,5 +207,24 @@ describe("getFeatureLabel", () => {
   it("devuelve N/A sin lanzar cuando no hay propiedades", () => {
     expect(getFeatureLabel(undefined)).toBe("N/A")
     expect(getFeatureLabel({})).toBe("N/A")
+  })
+})
+
+describe("createPopupContent", () => {
+  it("escapa los atributos que vienen del servicio", () => {
+    // Los atributos se interpolan directamente en el HTML del popup.
+    const html = createPopupContent({
+      TENURE_ID: '<script>alert(1)</script>',
+      SOLICITANTES_O_TITULARES: 'Minas "El Roble" & Cía',
+    })
+
+    expect(html).not.toContain("<script>")
+    expect(html).toContain("&lt;script&gt;")
+    expect(html).toContain("Minas &quot;El Roble&quot; &amp; Cía")
+  })
+
+  it("no lanza sin propiedades", () => {
+    expect(() => createPopupContent()).not.toThrow()
+    expect(createPopupContent()).toContain("N/A")
   })
 })

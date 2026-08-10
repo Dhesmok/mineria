@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react"
 import L from "leaflet"
-import { getLabelCoordinates, getFeatureLabel, createPopupContent, extractRings } from "../../utils/mapUtils"
+import { createPopupContent, extractRings } from "../../utils/mapUtils"
+import { createLabelMarker } from "../../utils/mapLabels"
 import { fetchArcgisJson } from "../../utils/arcgis"
 
 export const useExpedientSearch = (
@@ -102,36 +103,27 @@ export const useExpedientSearch = (
             geoJsonLayerRef.current = L.geoJSON(data, {
               style: layer.style,
               onEachFeature: (feature, layer) => {
-                const bestPoint = getLabelCoordinates(feature)
+                const marker = createLabelMarker(feature)
 
-                if (bestPoint) {
-                  const [long, lat] = bestPoint
-
-                  const label = L.divIcon({
-                    className: "map-label",
-                    html: `<div>${getFeatureLabel(feature.properties)}</div>`,
-                    iconSize: [100, 40],
-                    iconAnchor: [50, 20],
-                  })
-
+                if (marker) {
                   if (!labelsLayerRef.current) {
                     labelsLayerRef.current = L.layerGroup()
                   }
-                  const marker = L.marker([lat, long], { icon: label })
                   labelsLayerRef.current.addLayer(marker)
                 }
 
-                const popupContent = createPopupContent(feature.properties)
-                layer.bindPopup(popupContent)
+                layer.bindPopup(createPopupContent(feature.properties))
               },
             }).addTo(mapRef.current)
 
-            const currentZoom = mapRef.current.getZoom()
-            if (currentZoom >= 15 && currentZoom <= 19 && labelsLayerRef.current) {
+            mapRef.current.fitBounds(geoJsonLayerRef.current.getBounds())
+
+            // La etiqueta del expediente buscado se muestra siempre: es un único
+            // resultado que el usuario pidió explícitamente, y fitBounds suele dejar
+            // el mapa por debajo del zoom mínimo de las capas masivas.
+            if (labelsLayerRef.current) {
               mapRef.current.addLayer(labelsLayerRef.current)
             }
-
-            mapRef.current.fitBounds(geoJsonLayerRef.current.getBounds())
 
             // Todas las features y todos sus anillos, no solo la primera.
             const rings = extractRings(data)
