@@ -6,12 +6,12 @@ import "leaflet/dist/leaflet.css"
 import "leaflet-draw"
 import "leaflet-draw/dist/leaflet.draw.css"
 
-import { useMapInitialization } from "./hooks/map/useMapInitialization"
+import { useMapInitialization, OSM_OPTIONS } from "./hooks/map/useMapInitialization"
 import { useDrawControl } from "./hooks/map/useDrawControl"
 import { useGeolocation } from "./hooks/map/useGeolocation"
 import { useMapLayers } from "./hooks/map/useMapLayers"
 import { useExpedientSearch } from "./hooks/map/useExpedientSearch"
-import { formatDistance, formatArea } from "./utils/mapUtils"
+import { formatDistance, formatArea, formatDegrees } from "./utils/mapUtils"
 import { MapControls } from "./components/MapControls"
 import { ColorPicker } from "./components/ColorPicker"
 
@@ -61,13 +61,7 @@ export default function MapComponent({
 
   const {
     findLayerNumbers,
-    titleLayerRef,
-    requestLayerRef,
-    historicalTitleLayerRef,
-    anmServiceLayerRef,
-    titleOpacityRef,
-    requestOpacityRef,
-    historicalTitleOpacityRef,
+    showZoomInHint,
     titleLabelsLayerRef,
     requestLabelsLayerRef,
     anmServiceLabelsLayerRef,
@@ -116,9 +110,7 @@ export default function MapComponent({
 
       L.control.zoom({ position: "topright" }).addTo(mapInstanceLocal)
 
-      const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap contributors",
-      })
+      const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", OSM_OPTIONS)
       osmLayer.addTo(mapInstanceLocal)
 
       drawnItemsRef.current = new L.FeatureGroup()
@@ -253,22 +245,19 @@ export default function MapComponent({
           }
         })
 
-        if (titleLayerRef.current && titleOpacityRef.current !== undefined) {
-          titleLayerRef.current.setStyle({ fillOpacity: titleOpacityRef.current })
-        }
-        if (requestLayerRef.current && requestOpacityRef.current !== undefined) {
-          requestLayerRef.current.setStyle({ fillOpacity: requestOpacityRef.current })
-        }
-        if (historicalTitleLayerRef.current && historicalTitleOpacityRef.current !== undefined) {
-          historicalTitleLayerRef.current.setStyle({ fillOpacity: historicalTitleOpacityRef.current })
-        }
+        // La opacidad la reaplica useMapLayers en su propio manejador de zoomend, que
+        // fusiona el estilo previo y cubre también la capa de Subcontratos. Duplicarla
+        // aquí con un setStyle que no fusiona hacía que los dos se pisaran.
       }
 
       mapInstanceLocal.on("zoomend", handleZoom)
 
       mapRef.current = mapInstanceLocal
 
-      mapRef.current.addVertices = (coordinates) => {
+      // Recibe los anillos en orden GeoJSON ([lon, lat]) y desestructura por nombre.
+      // La versión anterior recibía [lat, lon] y luego leía coord[1] como latitud,
+      // así que el tooltip mostraba la longitud etiquetada como "Lat" y viceversa.
+      mapRef.current.addVertices = (rings) => {
         if (verticesLayerRef.current) {
           if (mapInstanceLocal.hasLayer(verticesLayerRef.current)) {
             mapInstanceLocal.removeLayer(verticesLayerRef.current)
@@ -276,25 +265,31 @@ export default function MapComponent({
         }
         verticesLayerRef.current = L.layerGroup().addTo(mapInstanceLocal)
 
-        coordinates.forEach((coord, index) => {
-          const circle = L.circleMarker(coord, {
-            radius: 10,
-            fillColor: "red",
-            color: "#fff",
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 0.5,
-          }).addTo(verticesLayerRef.current)
+        const showPart = rings.length > 1
+        let vertexNumber = 0
 
-          circle.bindTooltip(
-            `Vértice ${index + 1}<br>Lat: ${coord[1].toFixed(5).replace(".", ",")}<br>Lon: ${coord[0]
-              .toFixed(5)
-              .replace(".", ",")}`,
-            {
-              permanent: false,
-              direction: "top",
-            },
-          )
+        rings.forEach((ring) => {
+          ring.coordinates.forEach(([lon, lat]) => {
+            vertexNumber += 1
+
+            const circle = L.circleMarker([lat, lon], {
+              radius: 10,
+              fillColor: "red",
+              color: "#fff",
+              weight: 1,
+              opacity: 1,
+              fillOpacity: 0.5,
+            }).addTo(verticesLayerRef.current)
+
+            const part = showPart ? `${ring.label}<br>` : ""
+            circle.bindTooltip(
+              `${part}Vértice ${vertexNumber}<br>Lat: ${formatDegrees(lat)}<br>Lon: ${formatDegrees(lon)}`,
+              {
+                permanent: false,
+                direction: "top",
+              },
+            )
+          })
         })
       }
 
@@ -343,6 +338,9 @@ export default function MapComponent({
       requestLabelsLayerRef.current = null
       anmServiceLabelsLayerRef.current = null
       historicalTitleLabelsLayerRef.current = null
+      // Sin esto los hooks seguían viendo el mapa anterior mientras mapRef.current ya
+      // era null, y reventaban en la siguiente llamada a mapRef.current.getZoom().
+      setMapInstance(null)
     }
   }, [onMapInitialized])
 
@@ -366,6 +364,12 @@ export default function MapComponent({
         isCompassActive={isCompassActive}
         handleToggleCompass360={handleToggleCompass360}
       />
+
+      {showZoomInHint && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/95 text-gray-700 text-sm px-4 py-2 rounded-full shadow-md">
+          Acerca el mapa para ver las capas de títulos y solicitudes
+        </div>
+      )}
 
       {error && showErrorBanner && (
         <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 z-10 flex items-center justify-between gap-2">

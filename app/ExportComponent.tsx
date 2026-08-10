@@ -4,6 +4,7 @@ import proj4 from 'proj4'
 import shpwrite from '@mapbox/shp-write'
 import * as turf from '@turf/turf'
 import { saveAs } from 'file-saver'
+import { buildKml } from './utils/exportUtils'
 
 // Define the coordinate systems
 proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
@@ -12,14 +13,19 @@ proj4.defs("EPSG:9377", "+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000
 
 const PRJ_9377 = 'PROJCS["MAGNA-SIRGAS_2018_Origen-Nacional",GEOGCS["MAGNA-SIRGAS_2018",DATUM["Marco_Geocentrico_Nacional_de_Referencia_2018",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",5000000.0],PARAMETER["False_Northing",2000000.0],PARAMETER["Central_Meridian",-73.0],PARAMETER["Scale_Factor",0.9992],PARAMETER["Latitude_Of_Origin",4.0],UNIT["Meter",1.0]]';
 
+const PRJ_4686 = 'GEOGCS["MAGNA-SIRGAS",DATUM["D_MAGNA",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
 
-const URLS = [
-  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3',
-  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/4',
-  'https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87'
-];
+// Las coordenadas que llegan de la ANM son geográficas. Se declara 4686 (y no 4326)
+// para que el SHP coincida exactamente con lo que muestra la tabla de coordenadas,
+// que usa este mismo par de sistemas.
+const SOURCE_PROJ = "EPSG:4686";
 
-export default function ExportComponent({ selectedCoordinateSystem, expedientCode }) {
+const TARGETS = {
+  "4686": { proj: "EPSG:4686", prj: PRJ_4686, suffix: "EPSG-4686" },
+  "9377": { proj: "EPSG:9377", prj: PRJ_9377, suffix: "EPSG-9377" },
+};
+
+export default function ExportComponent({ geoJsonData, selectedCoordinateSystem, expedientCode }) {
   const [isExportingSHP, setIsExportingSHP] = useState(false)
   const [isExportingKML, setIsExportingKML] = useState(false)
 
@@ -36,78 +42,37 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
     return transformCoords(coords);
   }, []);
 
-  const fetchMapData = useCallback(async () => {
-    const controller = new AbortController();
-    const { signal } = controller;
-
-    const promises = URLS.map(async (url) => {
-      const params = new URLSearchParams({
-        where: `TENURE_ID='${expedientCode}'`,
-        outFields: '*',
-        f: 'geojson'
-      });
-
-      console.log(`Fetching data from ${url}...`);
-      const response = await fetch(`${url}/query?${params}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log(`Data received from ${url}:`, data);
-
-      if (data.features && data.features.length > 0) {
-        return data;
-      }
-
-      throw new Error(`No valid features found from ${url}`);
-    });
-
-    try {
-      const result = await Promise.any(promises);
-      controller.abort();
-      return result;
-    } catch (error) {
-      console.error('All fetch attempts failed:', error);
-      throw new Error('No se encontraron datos para el expediente especificado en ninguna de las fuentes');
+  // Se exporta el GeoJSON que ya dibujó el mapa. Antes se volvía a consultar al
+  // servidor con un `where` más restrictivo (solo TENURE_ID, sin UPPER y sin la capa
+  // de Subcontratos), así que exportar fallaba para expedientes que el mapa sí había
+  // encontrado.
+  const requireMapData = useCallback(() => {
+    if (!expedientCode) {
+      throw new Error('No hay expediente para exportar');
     }
-  }, [expedientCode]);
+    if (!geoJsonData?.features?.length) {
+      throw new Error('No hay un resultado de búsqueda para exportar. Busca un expediente primero.');
+    }
+    return geoJsonData;
+  }, [expedientCode, geoJsonData]);
 
   const exportSHP = useCallback(async () => {
-    if (!expedientCode) {
-      alert('No hay expediente para exportar');
-      return;
-    }
-
     setIsExportingSHP(true);
 
     try {
-      const mapData = await fetchMapData();
+      const mapData = requireMapData();
+      const target = TARGETS[selectedCoordinateSystem] ?? TARGETS["9377"];
 
-      if (!mapData.features || mapData.features.length === 0) {
-        throw new Error('No se encontraron datos para el expediente especificado');
-      }
-
-      const fromProj = "EPSG:4326";
-      const toProj = `EPSG:9377`;
-
-      let transformedGeoJson: any = {
+      const transformedGeoJson: any = {
         type: "FeatureCollection",
         features: mapData.features.map(feature => {
           // Primero transformamos las coordenadas
           const transformedCoords = transformCoordinates(
-            feature.geometry.coordinates, 
-            fromProj, 
-            toProj
+            feature.geometry.coordinates,
+            SOURCE_PROJ,
+            target.proj
           );
-          
+
           let fixedGeometry = {
             type: feature.geometry.type,
             coordinates: transformedCoords
@@ -117,7 +82,7 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
           // ArcGIS requiere que los anillos exteriores sean Clockwise (sentido horario)
           // y los anillos interiores (huecos) Counter-Clockwise (antihorario).
           turf.rewind(fixedGeometry, { mutate: true, reverse: true });
-          
+
           return {
             type: "Feature",
             properties: feature.properties,
@@ -126,7 +91,7 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
         })
       };
 
-      const folderName = expedientCode+"_EPSG-9377";
+      const folderName = `${expedientCode}_${target.suffix}`;
       const options: any = {
         folder: folderName,
         types: {
@@ -134,7 +99,7 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
           polygon: expedientCode,
           line: 'lines'
         },
-        prj: PRJ_9377,
+        prj: target.prj,
         outputType: 'blob'
       };
 
@@ -147,58 +112,20 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
     } finally {
       setIsExportingSHP(false);
     }
-  }, [expedientCode, selectedCoordinateSystem, fetchMapData, transformCoordinates]);
+  }, [expedientCode, selectedCoordinateSystem, requireMapData, transformCoordinates]);
 
   const exportKML = useCallback(async () => {
-    if (!expedientCode) {
-      alert('No hay expediente para exportar');
-      return;
-    }
-
     setIsExportingKML(true);
 
     try {
-      const mapData = await fetchMapData();
+      const mapData = requireMapData();
 
-      if (!mapData.features || mapData.features.length === 0) {
-        throw new Error('No se encontraron datos para el expediente especificado');
+      // KML siempre va en coordenadas geográficas, sin importar el sistema elegido
+      // para la tabla y el SHP.
+      const kml = buildKml(mapData, expedientCode);
+      if (!kml) {
+        throw new Error('El resultado no contiene geometrías que se puedan exportar a KML');
       }
-
-      // Create KML content
-      let kml = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <Style id="polygonStyle">
-      <LineStyle>
-        <color>ff00ffff</color>
-        <width>2</width>
-      </LineStyle>
-      <PolyStyle>
-        <color>00ffffff</color>
-      </PolyStyle>
-    </Style>
-    <Placemark>
-      <styleUrl>#polygonStyle</styleUrl>
-      <name>${expedientCode}</name>
-      <Polygon>
-        <outerBoundaryIs>
-          <LinearRing>
-            <coordinates>
-`;
-
-      // Add coordinates
-      const coordinates = mapData.features[0].geometry.coordinates[0];
-      coordinates.forEach(coord => {
-        kml += `              ${coord[0]},${coord[1]},0\n`;
-      });
-
-      kml += `            </coordinates>
-          </LinearRing>
-        </outerBoundaryIs>
-      </Polygon>
-    </Placemark>
-  </Document>
-</kml>`;
 
       const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
       const url = URL.createObjectURL(blob);
@@ -215,21 +142,21 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
     } finally {
       setIsExportingKML(false);
     }
-  }, [expedientCode, fetchMapData]);
+  }, [expedientCode, requireMapData]);
 
   return (
     <div className="flex flex-col justify-center gap-4">
-      <Button 
-        variant="default" 
-        className="w-full bg-green-500 text-white" 
+      <Button
+        variant="default"
+        className="w-full bg-green-500 text-white"
         onClick={exportSHP}
         disabled={isExportingSHP || isExportingKML}
       >
         {isExportingSHP ? 'Exportando...' : 'Exportar SHP'}
       </Button>
-      <Button 
-        variant="default" 
-        className="w-full bg-green-500 text-white" 
+      <Button
+        variant="default"
+        className="w-full bg-green-500 text-white"
         onClick={exportKML}
         disabled={isExportingSHP || isExportingKML}
       >
@@ -238,4 +165,3 @@ export default function ExportComponent({ selectedCoordinateSystem, expedientCod
     </div>
   )
 }
-  

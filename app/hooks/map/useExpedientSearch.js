@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react"
 import L from "leaflet"
-import { getLabelCoordinates, getFeatureLabel, createPopupContent } from "../../utils/mapUtils"
+import { getLabelCoordinates, getFeatureLabel, createPopupContent, extractRings } from "../../utils/mapUtils"
+import { fetchArcgisJson } from "../../utils/arcgis"
 
 export const useExpedientSearch = (
   mapRef,
@@ -16,12 +17,26 @@ export const useExpedientSearch = (
   verticesLayerRef
 ) => {
   const lastSearchTriggerRef = useRef(0)
+  const searchIdRef = useRef(0)
+  const abortControllerRef = useRef(null)
 
   const fetchData = useCallback(async () => {
     if (!mapInstance || !expedientCode) return
     const normalizedCode = expedientCode.trim().toUpperCase().replace(/'/g, "''")
 
+    // Una búsqueda invalida a la anterior. Sin esto, pulsar "Aplicar" varias veces
+    // dejaba una copia huérfana del polígono en el mapa por cada búsqueda en vuelo:
+    // la nueva sobrescribía geoJsonLayerRef antes de que la anterior terminara, así
+    // que la capa vieja se quedaba dibujada y ya nadie podía quitarla.
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    searchIdRef.current += 1
+    const searchId = searchIdRef.current
+    const isStale = () => searchId !== searchIdRef.current
+
     const layerNumbers = await findLayerNumbers()
+    if (isStale()) return
 
     const layers = [
       {
@@ -42,26 +57,31 @@ export const useExpedientSearch = (
       },
     ]
 
-    if (geoJsonLayerRef.current) {
-      if (mapRef.current.hasLayer(geoJsonLayerRef.current)) {
-        mapRef.current.removeLayer(geoJsonLayerRef.current)
+    // Los vértices también: antes una búsqueda fallida dejaba en el mapa los
+    // círculos rojos del expediente anterior.
+    const layersToClear = [geoJsonLayerRef, labelsLayerRef, verticesLayerRef]
+    layersToClear.forEach((ref) => {
+      if (ref.current) {
+        if (mapRef.current.hasLayer(ref.current)) {
+          mapRef.current.removeLayer(ref.current)
+        }
+        ref.current = null
       }
-      geoJsonLayerRef.current = null
-    }
-    if (labelsLayerRef.current) {
-      if (mapRef.current.hasLayer(labelsLayerRef.current)) {
-        mapRef.current.removeLayer(labelsLayerRef.current)
-      }
-      labelsLayerRef.current = null
-    }
+    })
 
-    let hasFetchError = false;
+    // Una capa que responde a alguna de sus dos consultas está sana y simplemente no
+    // tiene el expediente. Solo cuenta como caída si fallan las dos: cada capa se
+    // sondea con TENURE_ID y con CODIGO_EXPEDIENTE, y es normal que una de ellas
+    // devuelva un error de campo inexistente.
+    let unreachableLayers = 0
 
     for (const layer of layers) {
       const queries = [
         `UPPER(TENURE_ID)='${normalizedCode}'`,
         `UPPER(CODIGO_EXPEDIENTE)='${normalizedCode}'`
       ];
+
+      let layerResponded = false
 
       for (const whereClause of queries) {
         const params = new URLSearchParams({
@@ -72,8 +92,11 @@ export const useExpedientSearch = (
         })
 
         try {
-          const response = await fetch(`${layer.url}?${params}`)
-          const data = await response.json()
+          const data = await fetchArcgisJson(`${layer.url}?${params}`, { signal: controller.signal })
+          layerResponded = true
+
+          // Otra búsqueda arrancó mientras esperábamos: no tocar el mapa.
+          if (isStale()) return
 
           if (data.features && data.features.length > 0) {
             geoJsonLayerRef.current = L.geoJSON(data, {
@@ -110,44 +133,35 @@ export const useExpedientSearch = (
 
             mapRef.current.fitBounds(geoJsonLayerRef.current.getBounds())
 
-            let allCoordinates = []
-            const firstFeature = data.features[0]
-            const geomType = firstFeature.geometry.type
+            // Todas las features y todos sus anillos, no solo la primera.
+            const rings = extractRings(data)
+            const allCoordinates = rings.flatMap((ring) => ring.coordinates)
 
-            if (geomType === "Polygon") {
-              const rings = firstFeature.geometry.coordinates
-              rings.forEach((ring) => {
-                const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring
-                allCoordinates = [...allCoordinates, ...ringCoords]
-              })
-            } else if (geomType === "MultiPolygon") {
-              const multiRings = firstFeature.geometry.coordinates
-              multiRings.forEach((polygon) => {
-                polygon.forEach((ring) => {
-                  const ringCoords = ring[0] === ring[ring.length - 1] ? ring.slice(0, -1) : ring
-                  allCoordinates = [...allCoordinates, ...ringCoords]
-                })
-              })
-            }
-
-            const mappedCoordinates = allCoordinates.map((coord) => [coord[1], coord[0]])
             if (mapRef.current.addVertices) {
-              mapRef.current.addVertices(mappedCoordinates)
+              mapRef.current.addVertices(rings)
             }
 
-            onCoordinatesUpdate(allCoordinates, data)
+            onCoordinatesUpdate(allCoordinates, data, rings)
             return
           }
         } catch (error) {
+          if (error?.name === "AbortError") return
           console.error("Error al obtener los datos:", error)
-          hasFetchError = true
         }
+      }
+
+      if (!layerResponded) {
+        unreachableLayers += 1
       }
     }
 
+    if (isStale()) return
+
     setShowErrorBanner(true)
-    if (hasFetchError) {
-      setError(`No se pudo obtener la información de algunas capas debido a un error del servidor, y no se encontró el expediente introducido '${expedientCode}'.`)
+    if (unreachableLayers === layers.length) {
+      setError("No se pudo consultar ninguna de las capas de la ANM. Revisa tu conexión e inténtalo de nuevo.")
+    } else if (unreachableLayers > 0) {
+      setError(`${unreachableLayers} de ${layers.length} capas de la ANM no respondieron, y el expediente '${expedientCode}' no se encontró en las demás.`)
     } else {
       setError(`No se encontró un polígono con el expediente introducido '${expedientCode}'.`)
     }
@@ -165,4 +179,10 @@ export const useExpedientSearch = (
       fetchData()
     }
   }, [searchTrigger, fetchData, setError, setShowErrorBanner])
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+    }
+  }, [])
 }

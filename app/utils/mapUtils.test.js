@@ -1,5 +1,5 @@
 import * as turf from "@turf/turf"
-import { getLabelCoordinates, getFeatureLabel } from "./mapUtils"
+import { extractRings, formatDegrees, getLabelCoordinates, getFeatureLabel } from "./mapUtils"
 
 const polygonFeature = (coordinates) => ({
   type: "Feature",
@@ -120,6 +120,78 @@ describe("getLabelCoordinates", () => {
     }
 
     expect(getLabelCoordinates(feature)).toEqual([-75.5, 6.2])
+  })
+})
+
+describe("extractRings", () => {
+  const collection = (...features) => ({ type: "FeatureCollection", features })
+  const polygon = (coordinates) => ({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates } })
+
+  it("quita el vértice de cierre repetido", () => {
+    // Regresión: la comprobación anterior comparaba ring[0] === ring[ring.length - 1],
+    // dos arreglos distintos, así que siempre era falsa y el duplicado se colaba en la
+    // tabla de coordenadas y en los marcadores de vértices.
+    const rings = extractRings(collection(polygon(SQUARE_3KM)))
+
+    expect(rings).toHaveLength(1)
+    expect(rings[0].coordinates).toHaveLength(4)
+    expect(rings[0].coordinates[0]).not.toEqual(rings[0].coordinates[3])
+  })
+
+  it("conserva el anillo tal cual si no viene cerrado", () => {
+    const open = [[[-75.6, 6.2], [-75.57, 6.2], [-75.57, 6.23], [-75.6, 6.23]]]
+
+    expect(extractRings(collection(polygon(open)))[0].coordinates).toHaveLength(4)
+  })
+
+  it("separa el contorno exterior de los huecos", () => {
+    const withHole = [
+      [[-75.6, 6.2], [-75.5, 6.2], [-75.5, 6.3], [-75.6, 6.3], [-75.6, 6.2]],
+      [[-75.58, 6.22], [-75.56, 6.22], [-75.56, 6.24], [-75.58, 6.24], [-75.58, 6.22]],
+    ]
+
+    const rings = extractRings(collection(polygon(withHole)))
+
+    expect(rings.map((ring) => ring.label)).toEqual(["Polígono 1", "Polígono 1 · hueco 1"])
+    expect(rings.map((ring) => ring.isHole)).toEqual([false, true])
+  })
+
+  it("numera las partes de un MultiPolygon", () => {
+    const multi = {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [SQUARE_3KM, [[[-74.1, 4.6], [-74.09, 4.6], [-74.09, 4.61], [-74.1, 4.61], [-74.1, 4.6]]]],
+      },
+    }
+
+    expect(extractRings(collection(multi)).map((ring) => ring.label)).toEqual(["Polígono 1", "Polígono 2"])
+  })
+
+  it("recorre todas las features, no solo la primera", () => {
+    // Antes solo se procesaba data.features[0] y el resto se perdía en la tabla,
+    // en los vértices y en la exportación.
+    const second = [[[-74.1, 4.6], [-74.09, 4.6], [-74.09, 4.61], [-74.1, 4.61], [-74.1, 4.6]]]
+
+    const rings = extractRings(collection(polygon(SQUARE_3KM), polygon(second)))
+
+    expect(rings).toHaveLength(2)
+    expect(rings.map((ring) => ring.polygonNumber)).toEqual([1, 2])
+  })
+
+  it("devuelve una lista vacía para entradas inservibles", () => {
+    expect(extractRings(undefined)).toEqual([])
+    expect(extractRings({ features: [] })).toEqual([])
+    expect(extractRings(collection({ type: "Feature", properties: {} }))).toEqual([])
+    expect(extractRings(collection({ geometry: { type: "Point", coordinates: [-75, 6] } }))).toEqual([])
+  })
+})
+
+describe("formatDegrees", () => {
+  it("usa cinco decimales y coma decimal", () => {
+    expect(formatDegrees(-75.123456)).toBe("-75,12346")
+    expect(formatDegrees(6.2)).toBe("6,20000")
   })
 })
 
