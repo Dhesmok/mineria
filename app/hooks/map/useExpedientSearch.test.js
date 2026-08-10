@@ -164,6 +164,43 @@ describe("useExpedientSearch", () => {
     expect(map.hasLayer(staleVertices)).toBe(false)
   })
 
+  it("distingue un servicio caído de un expediente inexistente", async () => {
+    // Regresión: ArcGIS devuelve HTTP 200 con {"error": ...} cuando el servicio falla.
+    // Como response.ok era true y data.features quedaba undefined, un servicio caído
+    // se reportaba como "no se encontró un polígono con ese expediente".
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ error: { code: 500, message: "Service unavailable" } }),
+    }))
+
+    const map = createMap()
+    const { rerender, setError } = renderSearch(map)
+
+    rerender({ searchTrigger: 1 })
+
+    await waitFor(() => expect(setError).toHaveBeenCalledWith(expect.stringContaining("No se pudo consultar")))
+    expect(setError).not.toHaveBeenCalledWith(expect.stringContaining("No se encontró un polígono"))
+  })
+
+  it("no culpa al servidor cuando una capa solo rechaza uno de los dos campos", async () => {
+    // Cada capa se sondea con TENURE_ID y con CODIGO_EXPEDIENTE; es normal que una de
+    // las dos consultas falle porque el campo no existe en esa capa.
+    global.fetch = jest.fn(async (url) => ({
+      ok: true,
+      json: async () =>
+        String(url).includes("CODIGO_EXPEDIENTE")
+          ? { error: { code: 400, message: "Invalid field: CODIGO_EXPEDIENTE" } }
+          : { features: [] },
+    }))
+
+    const map = createMap()
+    const { rerender, setError } = renderSearch(map)
+
+    rerender({ searchTrigger: 1 })
+
+    await waitFor(() => expect(setError).toHaveBeenCalledWith(expect.stringContaining("No se encontró un polígono")))
+  })
+
   it("entrega los anillos sin el vértice de cierre duplicado", async () => {
     global.fetch = jest.fn(async () => ({ ok: true, json: async () => featureCollection() }))
 

@@ -11,6 +11,7 @@ import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight } from 
 import proj4 from "proj4"
 import ExportComponent from "./ExportComponent"
 import { formatDegrees } from "./utils/mapUtils"
+import { fetchArcgisJson } from "./utils/arcgis"
 import { debounce } from "@/lib/utils"
 
 const MapComponent = dynamic(() => import("./MapComponent"), {
@@ -156,15 +157,11 @@ export default function Component() {
         `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`,
       ]
 
-      const settledResponses = await Promise.allSettled(urls.map((url) => fetch(url)))
-      const successfulResponses = settledResponses
-        .filter((result) => result.status === "fulfilled" && result.value.ok)
-        .map((result) => result.value)
-
-      const settledPayloads = await Promise.allSettled(successfulResponses.map((res) => res.json()))
-      const data = settledPayloads
-        .filter((result) => result.status === "fulfilled")
-        .map((result) => result.value)
+      // fetchArcgisJson reconoce los errores que ArcGIS devuelve con HTTP 200; antes
+      // una capa que respondía {"error": ...} se contaba como consulta exitosa sin
+      // resultados, y las sugerencias salían incompletas en silencio.
+      const settled = await Promise.allSettled(urls.map((url) => fetchArcgisJson(url)))
+      const data = settled.filter((result) => result.status === "fulfilled").map((result) => result.value)
 
       const expedients = data.flatMap((d) =>
         (d.features || [])
@@ -172,12 +169,9 @@ export default function Component() {
           .filter(Boolean),
       )
       const uniqueExpedients = [...new Set(expedients)]
-      if (uniqueExpedients.length > 0) {
-        setExpedientSuggestions(uniqueExpedients.slice(0, 10))
-      } else {
-        setExpedientSuggestions([])
-      }
-      if (successfulResponses.length === 0) {
+      setExpedientSuggestions(uniqueExpedients.slice(0, 10))
+
+      if (data.length === 0) {
         throw new Error("No fue posible consultar las capas de sugerencias.")
       }
     } catch (error) {
