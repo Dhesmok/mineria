@@ -61,7 +61,6 @@ export default function MapComponent({
   } = useGeolocation(mapRef, setError, setShowErrorBanner)
 
   const {
-    findLayerNumbers,
     showZoomInHint,
     titleLabelsLayerRef,
     requestLabelsLayerRef,
@@ -88,7 +87,6 @@ export default function MapComponent({
     expedientCode,
     searchTrigger,
     onCoordinatesUpdate,
-    findLayerNumbers,
     setError,
     setShowErrorBanner,
     geoJsonLayerRef,
