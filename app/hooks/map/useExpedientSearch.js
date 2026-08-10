@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from "react"
 import L from "leaflet"
-import { getLabelCoordinates, createPopupContent } from "../../utils/mapUtils"
+import { getLabelCoordinates, getFeatureLabel, createPopupContent } from "../../utils/mapUtils"
 
 export const useExpedientSearch = (
   mapRef,
@@ -80,20 +80,23 @@ export const useExpedientSearch = (
               style: layer.style,
               onEachFeature: (feature, layer) => {
                 const bestPoint = getLabelCoordinates(feature)
-                const [long, lat] = bestPoint
 
-                const label = L.divIcon({
-                  className: "map-label",
-                  html: `<div>${feature.properties.TENURE_ID}</div>`,
-                  iconSize: [100, 40],
-                  iconAnchor: [50, 20],
-                })
+                if (bestPoint) {
+                  const [long, lat] = bestPoint
 
-                if (!labelsLayerRef.current) {
-                  labelsLayerRef.current = L.layerGroup()
+                  const label = L.divIcon({
+                    className: "map-label",
+                    html: `<div>${getFeatureLabel(feature.properties)}</div>`,
+                    iconSize: [100, 40],
+                    iconAnchor: [50, 20],
+                  })
+
+                  if (!labelsLayerRef.current) {
+                    labelsLayerRef.current = L.layerGroup()
+                  }
+                  const marker = L.marker([lat, long], { icon: label })
+                  labelsLayerRef.current.addLayer(marker)
                 }
-                const marker = L.marker([lat, long], { icon: label })
-                labelsLayerRef.current.addLayer(marker)
 
                 const popupContent = createPopupContent(feature.properties)
                 layer.bindPopup(popupContent)

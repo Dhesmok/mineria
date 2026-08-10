@@ -38,59 +38,122 @@ export const formatDate = (value) => {
   return value || "N/A"
 }
 
+// Un anillo GeoJSON válido necesita al menos 4 posiciones (la última repite la primera).
+const MIN_RING_POSITIONS = 4
+// polylabel se detiene cuando ya no puede mejorar más que la precisión pedida.
+// Una milésima del tamaño del polígono da una posición sub-métrica sin encarecer el cálculo.
+const LABEL_PRECISION_RATIO = 1 / 1000
+const MIN_LABEL_PRECISION = 1e-7
+
+const isUsableRing = (ring) => Array.isArray(ring) && ring.length >= MIN_RING_POSITIONS
+
+const usableRingsOf = (rings) => (Array.isArray(rings) ? rings.filter(isUsableRing) : [])
+
 /**
- * Función auxiliar para obtener un punto interno usando polylabel
- * @param {Object} feature - GeoJSON Feature (Polygon o MultiPolygon)
- * @returns {Array} [long, lat] del punto más "interno" del polígono
+ * polylabel interpreta la precisión en las mismas unidades que las coordenadas.
+ * Trabajando en grados, un valor fijo como 0.1 equivale a ~11 km: el algoritmo se
+ * detiene en la primera iteración y devuelve un vértice del borde en lugar de un
+ * punto interior. Escalarla al tamaño del polígono la hace correcta a cualquier escala.
+ */
+const precisionForRing = (ring) => {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+
+  for (const [x, y] of ring) {
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+
+  const size = Math.max(maxX - minX, maxY - minY)
+  if (!Number.isFinite(size) || size <= 0) {
+    return MIN_LABEL_PRECISION
+  }
+  return Math.max(size * LABEL_PRECISION_RATIO, MIN_LABEL_PRECISION)
+}
+
+const interiorPointOf = (rings) => {
+  const validRings = usableRingsOf(rings)
+  if (validRings.length === 0) {
+    return null
+  }
+
+  const candidate = polylabel(validRings, precisionForRing(validRings[0]))
+  const point = [candidate[0], candidate[1]]
+
+  // `ignoreBoundary` es imprescindible: sin él un punto que cae justo sobre el borde
+  // cuenta como interior y el respaldo nunca se activa.
+  const isInside = turf.booleanPointInPolygon(turf.point(point), turf.polygon(validRings), {
+    ignoreBoundary: true,
+  })
+
+  return isInside ? point : turf.pointOnFeature(turf.polygon(validRings)).geometry.coordinates
+}
+
+/**
+ * Punto interior donde anclar la etiqueta de una feature.
+ * Nunca lanza: esri-leaflet aborta el lote completo de features si `onEachFeature` falla.
+ * @param {Object} feature - GeoJSON Feature
+ * @returns {Array|null} [long, lat], o null si la geometría no permite ubicar la etiqueta
  */
 export const getLabelCoordinates = (feature) => {
-  const { type, coordinates } = feature.geometry
+  try {
+    const geometry = feature?.geometry
+    if (!geometry) {
+      return null
+    }
 
-  if (type === "Polygon") {
-    let bestPoint = polylabel(coordinates, 0.1)
-    if (
-      !turf.booleanPointInPolygon(
-        turf.point(bestPoint),
-        turf.polygon(coordinates),
-      )
-    ) {
-      bestPoint = turf.pointOnFeature(feature).geometry.coordinates
+    const { type, coordinates } = geometry
+
+    if (type === "Polygon") {
+      return interiorPointOf(coordinates)
     }
-    return bestPoint
-  } else if (type === "MultiPolygon") {
-    let largestArea = 0
-    let bestOverallPoint = [0, 0]
-    let polygonForBestPoint = null
-    for (const polygonCoords of coordinates) {
-      let labelPoint = polylabel(polygonCoords, 0.1)
-      if (
-        !turf.booleanPointInPolygon(
-          turf.point(labelPoint),
-          turf.polygon(polygonCoords),
-        )
-      ) {
-        labelPoint = turf.pointOnFeature(turf.polygon(polygonCoords)).geometry.coordinates
-      }
-      const area = turf.area(turf.polygon(polygonCoords))
-      if (area > largestArea) {
+
+    if (type === "MultiPolygon") {
+      let bestPoint = null
+      let largestArea = 0
+
+      for (const polygonCoords of coordinates) {
+        const rings = usableRingsOf(polygonCoords)
+        if (rings.length === 0) {
+          continue
+        }
+
+        const area = turf.area(turf.polygon(rings))
+        if (bestPoint && area <= largestArea) {
+          continue
+        }
+
+        const point = interiorPointOf(rings)
+        if (!point) {
+          continue
+        }
+
+        bestPoint = point
         largestArea = area
-        bestOverallPoint = labelPoint
-        polygonForBestPoint = polygonCoords
       }
+
+      return bestPoint
     }
-    if (
-      polygonForBestPoint &&
-      !turf.booleanPointInPolygon(
-        turf.point(bestOverallPoint),
-        turf.polygon(polygonForBestPoint),
-      )
-    ) {
-      bestOverallPoint = turf.pointOnFeature(feature).geometry.coordinates
-    }
-    return bestOverallPoint
+
+    // Puntos, líneas y demás: un punto sobre la geometría es mejor que [0, 0],
+    // que dejaba la etiqueta en la Isla Nula (0°N 0°E).
+    return turf.pointOnFeature(feature).geometry.coordinates
+  } catch (error) {
+    console.error("No se pudo calcular la posición de la etiqueta:", error)
+    return null
   }
-  return [0, 0]
 }
+
+/**
+ * Texto de la etiqueta. Las capas de Subcontratos e Histórico no exponen TENURE_ID,
+ * por eso el respaldo a CODIGO_EXPEDIENTE.
+ */
+export const getFeatureLabel = (properties) =>
+  properties?.TENURE_ID || properties?.CODIGO_EXPEDIENTE || "N/A"
 
 export const createPopupContent = (properties) => {
   return `
