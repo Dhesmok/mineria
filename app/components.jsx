@@ -7,11 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
-import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight } from "lucide-react"
-import proj4 from "proj4"
+import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight, MapPin } from "lucide-react"
 import ExportComponent from "./ExportComponent"
-import { formatDegrees } from "./utils/mapUtils"
 import { fetchArcgisJson } from "./utils/arcgis"
+import { CRS_LIST, axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
+import { parseCoordinateInput } from "./utils/coordinateInput"
 import {
   findTenureLayerNumbers,
   REQUEST_LAYER_NAME,
@@ -28,10 +28,9 @@ const MapComponent = dynamic(() => import("./MapComponentGL"), {
   loading: () => <p>Cargando mapa...</p>,
 })
 
-// Definición de los sistemas de coordenadas
-const epsg4686 = "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs"
-const epsg9377 =
-  "+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+// Los sistemas de coordenadas viven en utils/crs.js, no aquí: la tabla, la
+// exportación y el campo de "ir a una coordenada" tienen que usar exactamente
+// las mismas definiciones o mostrarían números distintos para el mismo punto.
 
 const MIN_SUGGESTION_LENGTH = 3
 const MAX_SUGGESTIONS = 10
@@ -70,6 +69,8 @@ export default function Component() {
   const [showExportModal, setShowExportModal] = useState(false)
   const [selectedCoordinateSystem, setSelectedCoordinateSystem] = useState("4686")
   const [expedientCode, setExpedientCode] = useState("")
+  const [coordinateText, setCoordinateText] = useState("")
+  const [coordinateMessage, setCoordinateMessage] = useState(null)
   const [searchTrigger, setSearchTrigger] = useState(0)
   const [coordinatesAvailable, setCoordinatesAvailable] = useState(false)
   const [geoJsonData, setGeoJsonData] = useState(null)
@@ -159,6 +160,42 @@ export default function Component() {
     setActiveSuggestion(-1)
   }, [expedientSuggestions])
 
+  /**
+   * Marca en el mapa una coordenada escrita a mano.
+   *
+   * El punto se añade por el control de dibujo (`addPointAt`), no como un
+   * marcador aparte: así se ve con el mismo símbolo que los puntos del ratón, se
+   * borra con la misma papelera y sale en la exportación. Y se pueden poner
+   * varios, uno tras otro, que es lo que no permitía la versión anterior.
+   */
+  const handleGoToCoordinate = useCallback(() => {
+    const result = parseCoordinateInput(coordinateText, selectedCoordinateSystem)
+
+    if (result.error) {
+      setCoordinateMessage({ tone: "error", text: result.error })
+      return
+    }
+
+    const map = mapRef.current
+    if (!map) return
+
+    map.addPointAt?.([result.lon, result.lat])
+    map.flyTo({ center: [result.lon, result.lat], zoom: 16, duration: 1200 })
+
+    // Fuera de Colombia no es un error —puede ser a propósito—, pero casi
+    // siempre significa haber intercambiado los dos números o haber elegido el
+    // sistema equivocado, así que se avisa sin impedir nada.
+    setCoordinateMessage(
+      result.outsideColombia
+        ? {
+            tone: "warning",
+            text: "Ese punto queda fuera de Colombia. Revisa el orden de los números y el sistema elegido.",
+          }
+        : null,
+    )
+    setCoordinateText("")
+  }, [coordinateText, selectedCoordinateSystem])
+
   const handleShowCoordinates = () => {
     if (coordinatesAvailable) {
       setShowTable(true)
@@ -216,13 +253,6 @@ export default function Component() {
     return labels
   }, [coordinateRings])
 
-  const transformCoordinates = useCallback((coords, fromEPSG, toEPSG) => {
-    return coords.map((coord) => {
-      const [x, y] = proj4(fromEPSG, toEPSG, coord)
-      return [x, y]
-    })
-  }, [])
-
   useEffect(() => {
     // Recalcular también cuando no hay coordenadas: antes se conservaban las del
     // expediente anterior tras una búsqueda sin resultados.
@@ -230,12 +260,10 @@ export default function Component() {
       setTransformedCoordinates([])
       return
     }
-    if (selectedCoordinateSystem === "4686") {
-      setTransformedCoordinates(coordinates)
-    } else {
-      setTransformedCoordinates(transformCoordinates(coordinates, epsg4686, epsg9377))
-    }
-  }, [coordinates, selectedCoordinateSystem, transformCoordinates])
+    setTransformedCoordinates(
+      coordinates.map((coord) => fromGeographic(coord, selectedCoordinateSystem)),
+    )
+  }, [coordinates, selectedCoordinateSystem])
 
   const handleMapInitialized = useCallback((map) => {
     mapRef.current = map
@@ -352,7 +380,15 @@ export default function Component() {
       <div
         // -translate-x-full solo desplaza el ancho del panel, y al estar en left-4
         // quedaba una franja de 16px asomando bajo el botón de mostrar.
-        className={`absolute top-4 left-4 z-10 w-[350px] bg-white shadow-lg rounded-xl transition-transform duration-300 ease-in-out ${showSidebar ? "translate-x-0" : "-translate-x-[calc(100%+1rem)]"}`}
+        //
+        // El alto máximo con desplazamiento interno no es un adorno: el panel
+        // crece cada vez que se le añade algo, y al añadirle el campo de
+        // coordenadas su fila de botones bajó hasta meterse debajo de los
+        // controles del mapa, que quedaban por encima e impedían pulsarla. Con
+        // un tope, el panel se desplaza por dentro en vez de invadir la
+        // pantalla. Los 5rem de abajo son para la escala y la lectura del
+        // cursor, que viven en esa esquina.
+        className={`absolute top-4 left-4 z-10 flex max-h-[calc(100vh-5rem)] w-[350px] flex-col overflow-y-auto overflow-x-hidden bg-white shadow-lg rounded-xl transition-transform duration-300 ease-in-out ${showSidebar ? "translate-x-0" : "-translate-x-[calc(100%+1rem)]"}`}
       >
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between mb-4">
@@ -435,6 +471,70 @@ export default function Component() {
           <Button onClick={handleApply} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
             Aplicar
           </Button>
+
+          {/* Marcar un punto escribiéndolo. Antes solo se podía con el ratón, y
+              una coordenada casi siempre llega escrita: en una resolución, en un
+              correo, en la libreta de campo. */}
+          <div className="space-y-2 border-t pt-3">
+            <Label htmlFor="coordenada" className="text-sm font-medium">
+              Ir a una coordenada
+            </Label>
+            <select
+              value={selectedCoordinateSystem}
+              onChange={(event) => setSelectedCoordinateSystem(event.target.value)}
+              className="w-full rounded-md border px-2 py-1.5 text-xs"
+              aria-label="Sistema de coordenadas"
+            >
+              {CRS_LIST.map((crs) => (
+                <option key={crs.id} value={crs.id}>
+                  {crs.label}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <Input
+                id="coordenada"
+                value={coordinateText}
+                onChange={(event) => {
+                  setCoordinateText(event.target.value)
+                  setCoordinateMessage(null)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") handleGoToCoordinate()
+                }}
+                placeholder={
+                  crsById(selectedCoordinateSystem).projected
+                    ? "2247195 4713441"
+                    : "6,2308 -75,5906"
+                }
+                className="flex-1 text-sm"
+                autoComplete="off"
+              />
+              <Button
+                onClick={handleGoToCoordinate}
+                className="bg-blue-500 px-3 hover:bg-blue-600"
+                title="Marcar el punto y llevar el mapa hasta él"
+                aria-label="Ir a la coordenada"
+              >
+                <MapPin size={18} />
+              </Button>
+            </div>
+            <p className="text-[11px] leading-tight text-gray-500">
+              {axisLabels(selectedCoordinateSystem).first} y{" "}
+              {axisLabels(selectedCoordinateSystem).second.toLowerCase()}, en ese orden.
+              {!crsById(selectedCoordinateSystem).projected &&
+                " También entiende grados, minutos y segundos."}
+            </p>
+            {coordinateMessage && (
+              <p
+                className={`text-xs ${
+                  coordinateMessage.tone === "error" ? "text-red-500" : "text-amber-600"
+                }`}
+              >
+                {coordinateMessage.text}
+              </p>
+            )}
+          </div>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <LayerControl
@@ -538,23 +638,27 @@ export default function Component() {
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md m-4">
             <h2 className="text-2xl font-bold mb-4 text-gray-800">Coordenadas</h2>
-            <div className="mb-4 flex justify-center">
-              <div className="bg-gray-100 p-1 rounded-full flex items-center">
-                <Button
-                  variant={selectedCoordinateSystem === "4686" ? "default" : "ghost"}
-                  onClick={() => setSelectedCoordinateSystem("4686")}
-                  className={`rounded-full px-4 ${selectedCoordinateSystem === "4686" ? "bg-blue-500 text-white" : "text-gray-700"}`}
-                >
-                  Magna-Sirgas
-                </Button>
-                <Button
-                  variant={selectedCoordinateSystem === "9377" ? "default" : "ghost"}
-                  onClick={() => setSelectedCoordinateSystem("9377")}
-                  className={`rounded-full px-4 ${selectedCoordinateSystem === "9377" ? "bg-blue-500 text-white" : "text-gray-700"}`}
-                >
-                  Origen Nacional
-                </Button>
-              </div>
+            {/* Eran dos botones con los dos únicos sistemas que había. Ahora son
+                diez —incluidos los orígenes antiguos, donde están inscritos
+                muchos títulos viejos—, y diez botones no caben. El sistema
+                elegido aquí manda también en la exportación a SHP. */}
+            <div className="mb-4">
+              <Label htmlFor="sistema-coordenadas" className="mb-1 block text-sm font-medium">
+                Sistema de coordenadas
+              </Label>
+              <select
+                id="sistema-coordenadas"
+                value={selectedCoordinateSystem}
+                onChange={(event) => setSelectedCoordinateSystem(event.target.value)}
+                className="w-full rounded-md border px-3 py-2 text-sm"
+              >
+                {CRS_LIST.map((crs) => (
+                  <option key={crs.id} value={crs.id}>
+                    {crs.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">{crsById(selectedCoordinateSystem).hint}</p>
             </div>
             <div className="overflow-auto max-h-[60vh]">
               <Table>
@@ -562,10 +666,10 @@ export default function Component() {
                   <TableRow>
                     <TableHead className="bg-gray-100 text-gray-700">Punto</TableHead>
                     <TableHead className="bg-gray-100 text-gray-700">
-                      {selectedCoordinateSystem === "4686" ? "Latitud" : "Norte"}
+                      {axisLabels(selectedCoordinateSystem).first}
                     </TableHead>
                     <TableHead className="bg-gray-100 text-gray-700">
-                      {selectedCoordinateSystem === "4686" ? "Longitud" : "Este"}
+                      {axisLabels(selectedCoordinateSystem).second}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -584,11 +688,14 @@ export default function Component() {
                       )}
                       <TableRow>
                         <TableCell className="text-center">{index + 1}</TableCell>
+                        {/* Primero la ordenada —latitud o norte—, que es como se
+                            leen las dos columnas de la cabecera; el par viene de
+                            proj4 como [x, y], al revés. */}
                         <TableCell className="text-center">
-                          {selectedCoordinateSystem === "4686" ? formatDegrees(coord[1]) : Math.round(coord[1])}
+                          {formatCoordinate(coord[1], selectedCoordinateSystem)}
                         </TableCell>
                         <TableCell className="text-center">
-                          {selectedCoordinateSystem === "4686" ? formatDegrees(coord[0]) : Math.round(coord[0])}
+                          {formatCoordinate(coord[0], selectedCoordinateSystem)}
                         </TableCell>
                       </TableRow>
                     </Fragment>

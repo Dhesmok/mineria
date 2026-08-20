@@ -5,25 +5,19 @@ import shpwrite from '@mapbox/shp-write'
 import * as turf from '@turf/turf'
 import { saveAs } from 'file-saver'
 import { buildKml } from './utils/exportUtils'
+import { crsById, SOURCE_CRS } from './utils/crs'
 
-// Define the coordinate systems
-proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
-proj4.defs("EPSG:4686", "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs");
-proj4.defs("EPSG:9377", "+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
-
-const PRJ_9377 = 'PROJCS["MAGNA-SIRGAS_2018_Origen-Nacional",GEOGCS["MAGNA-SIRGAS_2018",DATUM["Marco_Geocentrico_Nacional_de_Referencia_2018",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["False_Easting",5000000.0],PARAMETER["False_Northing",2000000.0],PARAMETER["Central_Meridian",-73.0],PARAMETER["Scale_Factor",0.9992],PARAMETER["Latitude_Of_Origin",4.0],UNIT["Meter",1.0]]';
-
-const PRJ_4686 = 'GEOGCS["MAGNA-SIRGAS",DATUM["D_MAGNA",SPHEROID["GRS_1980",6378137.0,298.257222101]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+// Los sistemas ya no se declaran aquí. Había dos listas: la de la tabla de
+// coordenadas y esta, con solo 4686 y 9377 y un respaldo silencioso a 9377. Al
+// añadir sistemas a la tabla, elegir cualquiera de los nuevos habría exportado
+// un SHP en Origen Nacional con un .prj que decía Origen Nacional — es decir,
+// un archivo coherente consigo mismo y distinto de lo que pidió el usuario, que
+// es la clase de error que nadie detecta hasta que los planos no cuadran.
+// Ahora ambas leen utils/crs.js.
 
 // Las coordenadas que llegan de la ANM son geográficas. Se declara 4686 (y no 4326)
-// para que el SHP coincida exactamente con lo que muestra la tabla de coordenadas,
-// que usa este mismo par de sistemas.
-const SOURCE_PROJ = "EPSG:4686";
-
-const TARGETS = {
-  "4686": { proj: "EPSG:4686", prj: PRJ_4686, suffix: "EPSG-4686" },
-  "9377": { proj: "EPSG:9377", prj: PRJ_9377, suffix: "EPSG-9377" },
-};
+// para que el SHP coincida exactamente con lo que muestra la tabla de coordenadas.
+const SOURCE_PROJ = crsById(SOURCE_CRS).proj;
 
 export default function ExportComponent({ geoJsonData, selectedCoordinateSystem, expedientCode }) {
   const [isExportingSHP, setIsExportingSHP] = useState(false)
@@ -61,7 +55,7 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
 
     try {
       const mapData = requireMapData();
-      const target = TARGETS[selectedCoordinateSystem] ?? TARGETS["9377"];
+      const target = crsById(selectedCoordinateSystem);
 
       const transformedGeoJson: any = {
         type: "FeatureCollection",
@@ -91,7 +85,7 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
         })
       };
 
-      const folderName = `${expedientCode}_${target.suffix}`;
+      const folderName = `${expedientCode}_EPSG-${target.id}`;
       const options: any = {
         folder: folderName,
         types: {
