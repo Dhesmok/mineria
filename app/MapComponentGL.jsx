@@ -31,13 +31,14 @@ import {
 } from "lucide-react"
 
 /**
- * Visor sobre MapLibre. Convive con MapComponent.jsx (Leaflet) a propósito: se
- * llega a él por la ruta /gl y se compara lado a lado con el visor de siempre
- * hasta que alcance a hacer lo mismo. Entonces el de Leaflet se borra.
+ * El visor del proyecto, sobre MapLibre. Es el único: el de Leaflet se borró en
+ * la Fase 7 del plan, una vez que este hacía todo lo que hacía aquel.
  *
- * Estado: Fases 1–5 del plan (docs/PLAN-MAPLIBRE.md) más GPS y brújula. Con esto
- * /gl iguala en funciones al visor Leaflet. Pendiente: el DEM recortado (Fase 5,
- * decisión de fuente por tomar) y las nuevas entidades (Fase 6).
+ * Se sirve en la raíz (`/`). Durante la migración vivió en `/gl` para poder
+ * compararlos lado a lado; esa ruta ya no existe.
+ *
+ * Pendiente (ver docs/PLAN-MAPLIBRE.md): el DEM recortado en la descarga por
+ * área —falta decidir la fuente— y las capas de otras entidades.
  *
  * Nota sobre la importación: maplibre-gl 6 dejó de tener exportación por
  * defecto. `import maplibregl from "maplibre-gl"` compila sin quejarse y
@@ -155,9 +156,10 @@ export default function MapComponentGL({
   anmServiceOpacity,
   historicalTitleOpacity,
 }) {
-  // El contenedor se pasa por referencia y no por id. El visor Leaflet ya usa
-  // el id "map"; con los dos montados a la vez, MapLibre podía apoderarse del
-  // div equivocado.
+  // El contenedor se pasa por referencia y no por id. Durante la migración
+  // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
+  // podía apoderarse del div equivocado. Se deja por referencia porque además
+  // es lo correcto en React: el id es un nombre global y la referencia no.
   const containerRef = useRef(null)
   const mapRef = useRef(null)
   const [mapInstance, setMapInstance] = useState(null)
@@ -468,10 +470,6 @@ export default function MapComponentGL({
       />
 
       <DrawToolbar mode={mode} startMode={startMode} deleteSelected={deleteSelected} />
-
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 rounded bg-amber-100/95 px-3 py-1 text-xs text-amber-900 shadow-md">
-        MapLibre · GPS y brújula (paridad con Leaflet)
-      </div>
 
       <CursorCoordinates map={mapInstance} />
 

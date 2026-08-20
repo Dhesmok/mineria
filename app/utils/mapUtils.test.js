@@ -1,5 +1,12 @@
 import * as turf from "@turf/turf"
-import { createPopupContent, extractRings, formatDegrees, getLabelCoordinates, getFeatureLabel } from "./mapUtils"
+import {
+  createPopupContent,
+  extractRings,
+  formatDegrees,
+  getLabelCoordinates,
+  getFeatureLabel,
+  shouldShowLabels,
+} from "./mapUtils"
 
 const polygonFeature = (coordinates) => ({
   type: "Feature",
@@ -288,5 +295,21 @@ describe("createPopupContent", () => {
       // FECHA_DE_SOLICITUD llega como 1488788145000, no como texto.
       expect(createPopupContent({ FECHA_DE_SOLICITUD: 1488788145000 })).toContain("06/03/2017")
     })
+  })
+})
+
+// Estos dos tests venían de mapLabels.test.js, que se borró junto con el visor
+// Leaflet. La función se mudó a mapUtils y su cobertura se mudó con ella.
+describe("shouldShowLabels", () => {
+  it("oculta las etiquetas por debajo del zoom mínimo", () => {
+    expect(shouldShowLabels(14)).toBe(false)
+    expect(shouldShowLabels(15)).toBe(true)
+  })
+
+  it("las mantiene visibles por encima de z19", () => {
+    // Regresión: el rango era 15..19, así que en satélite (z22) desaparecían al
+    // acercarse más de la cuenta.
+    expect(shouldShowLabels(20)).toBe(true)
+    expect(shouldShowLabels(22)).toBe(true)
   })
 })

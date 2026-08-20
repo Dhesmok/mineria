@@ -20,23 +20,28 @@ polígonos de títulos mineros), estilo declarativo, y `setTerrain()` nativo.
 
 ## Qué sobrevive sin tocarse
 
-Esto es el argumento de que la migración es abordable. De ~3.900 líneas, se
-reescriben ~800.
+Esto era el argumento de que la migración era abordable. **Cerrado en la Fase 7:**
+la columna de estado ya no es un pronóstico, es lo que pasó.
 
-| Módulo | Estado |
+| Módulo | Estado final |
 |---|---|
 | `utils/arcgis.js` | Intacto — es `fetch` puro |
 | `utils/tenureLayers.js` | Intacto |
 | `utils/exportUtils.js` | Intacto |
-| `utils/mapUtils.js` | Intacto, y creció: se le mudaron `shouldShowLabels` y respaldos de la ficha |
-| `utils/mapLabels.js` | Reescrito para MapLibre en `mapLabelsGL.js`; el original sigue para Leaflet |
-| ~~`hooks/useExpedientSearch.js`~~ | **Reescribir.** La tabla se equivocaba: usa `L.geoJSON` y `fitBounds`. Hecho en la Fase 3 |
+| `utils/mapUtils.js` | Intacto, y creció: se le mudaron `shouldShowLabels` y los respaldos de la ficha |
 | `components/ui/*` | Intacto |
-| `hooks/useMapLayers.js` | Reescribir |
-| `hooks/useDrawControl.js` | Reescribir (mapbox-gl-draw) |
-| `hooks/useMapInitialization.js` | Reescribir |
-| `hooks/useGeolocation.js` | Reescrito para MapLibre en `useGeolocationGL.js` (GPS + brújula) |
-| `MapComponent.jsx` | Reescribir |
+| `utils/mapLabels.js` | → `mapLabelsGL.js`. **Borrado** |
+| `utils/drawOptions.js` | → `drawStyles.js`. **Borrado** |
+| `hooks/useExpedientSearch.js` | → `useExpedientSearchGL.js`. **Borrado** (la tabla original se equivocaba al darlo por intacto: usaba `L.geoJSON` y `fitBounds`) |
+| `hooks/useMapLayers.js` | → `useMapLayersGL.js`. **Borrado** |
+| `hooks/useDrawControl.js` | → `useDrawControlGL.js` (mapbox-gl-draw). **Borrado** |
+| `hooks/useMapInitialization.js` | → `useMapInitializationGL.js`. **Borrado** |
+| `hooks/useGeolocation.js` | → `useGeolocationGL.js` (GPS + brújula). **Borrado** |
+| `MapComponent.jsx` | → `MapComponentGL.jsx`. **Borrado** |
+
+Nuevos, sin equivalente en el visor viejo: `utils/mapStyles.js`,
+`utils/anmLayers.js`, `utils/measure.js`, `utils/bboxDownload.js`,
+`hooks/map/useTerrainGL.js`, `hooks/map/useAreaDownloadGL.js`.
 
 **Regla:** si un test pasa antes de la migración, tiene que pasar después. Los
 tests de `utils/` son la red de seguridad de todo este trabajo.
@@ -139,8 +144,11 @@ Orden sugerido por utilidad:
 
 ## Fase 7 — Cierre
 
-- [ ] Borrar `MapComponent.jsx` (Leaflet) y desinstalar `leaflet`,
+- [x] Borrar `MapComponent.jsx` (Leaflet) y desinstalar `leaflet`,
       `react-leaflet`, `leaflet-draw`, `esri-leaflet`, `leaflet.wms`
+- [x] Borrar los seis hooks y los dos módulos de utilidades que dependían de Leaflet
+- [x] Borrar la ruta `/gl`: el visor MapLibre pasa a servirse en `/`
+- [x] Portar los tests de regresión que vivían en los módulos borrados
 - [ ] Merge a `main`
 
 ---
@@ -578,3 +586,54 @@ la forma de las respuestas de ArcGIS. **Falta abrir `/gl` en tu máquina, encend
 las cuatro capas sobre una zona con títulos y confirmar que se ven igual que
 en `/`.** Es lo único que puede confirmar que el servicio real responde como se
 supone.
+
+### Fase 7 — 2026-08-20
+
+**Leaflet ya no está en el proyecto.** Se borró después —no antes— de que Fabio
+probara el visor MapLibre contra los servicios reales de la ANM y confirmara
+que funciona. Ese orden importa: mientras el visor viejo siguiera montado había
+a dónde volver, y borrarlo antes de la prueba con datos reales habría sido
+quemar el bote sin haber tocado tierra.
+
+**Qué se borró** (11 archivos): `MapComponent.jsx`, la ruta `app/gl/page.js`,
+los seis hooks de `hooks/map/` que dependían de Leaflet —incluido el archivo de
+tests de `useExpedientSearch`—, y `utils/drawOptions.js`, `utils/mapLabels.js`
+con su test. Y del `package.json` salieron cinco dependencias: `leaflet`,
+`react-leaflet`, `leaflet-draw`, `esri-leaflet` y `leaflet.wms`. npm se llevó
+26 paquetes en total contando lo que arrastraban.
+
+**El visor MapLibre pasó a `/`.** Durante la migración vivía en `/gl` para poder
+comparar los dos lado a lado; ya no hay con qué comparar, así que `components.jsx`
+quedó con un solo import dinámico y sin la propiedad `engine` que elegía motor.
+También se quitó el aviso ámbar de "versión en pruebas".
+
+**Los tests que vivían en los módulos borrados se portaron, no se perdieron.**
+Las seis regresiones de `useExpedientSearch` —la búsqueda que llega tarde, el
+aborto de la anterior, los vértices del expediente previo, el servicio caído
+frente al expediente inexistente, la capa que rechaza uno de los dos campos, y
+el vértice de cierre duplicado— están ahora en `useExpedientSearchGL.test.js`,
+más una séptima nueva: que el resultado se pinta con el color de la capa donde
+apareció. Las dos de `shouldShowLabels` se mudaron a `mapUtils.test.js`, que es
+donde vive ahora esa función. **Ninguna de estas regresiones documenta un bug
+teórico: cada una es un fallo que este proyecto ya tuvo.** Borrarlas junto con
+Leaflet habría sido perder la memoria de los errores.
+
+**Una trampa nueva de Jest:** `maplibre-gl` 6 se publica solo como módulo ESM y
+el resolvedor de Jest es CommonJS, así que `jest.mock("maplibre-gl", ...)` falla
+con "Cannot find module" —ni siquiera llega a sustituirlo—. La solución es
+`{ virtual: true }`, que le dice a Jest que registre el doble sin buscar el
+original. Queda anotado en el propio archivo de tests.
+
+**Qué se verificó:** 134 tests unitarios en verde (11 suites), `npm run build`
+compila sin rastro de Leaflet, y las cinco baterías de navegador se repitieron
+apuntando a `/` en vez de `/gl`: 30 de la Fase 2, 24 de la Fase 3, 21 de la
+Fase 4, 16 de la Fase 5 y 14 de GPS y brújula. **105 comprobaciones, todas en
+verde después del borrado.** Y un barrido de texto por todo el código: las
+únicas menciones a Leaflet que quedan son comentarios que explican por qué algo
+está como está —que es justo lo que pide CLAUDE.md—, no código que dependa de él.
+De paso se corrigieron los comentarios que hablaban del visor Leaflet en
+presente, porque ya no existe.
+
+**Lo que queda pendiente no es deuda de la migración**, es trabajo nuevo: el DEM
+recortado de la Fase 5 (falta que Fabio elija la fuente) y las entidades de la
+Fase 6 (falta que diga cuáles). La paridad con el visor viejo está completa.

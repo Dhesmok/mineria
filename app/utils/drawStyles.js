@@ -1,8 +1,8 @@
 /**
- * El color con que se empieza a dibujar. Vive aquí, y no en `drawOptions.js`
- * junto al resto de opciones de dibujo, porque aquel módulo importa Leaflet:
- * leer la constante desde allá obligaría al visor MapLibre a arrastrar Leaflet
- * entero en su descarga solo para conocer un color.
+ * El color con que se empieza a dibujar. Vivió un tiempo en `drawOptions.js`,
+ * que era el módulo de opciones de dibujo de Leaflet; se mudó aquí para que el
+ * visor MapLibre no tuviera que arrastrar Leaflet entero solo para leer un
+ * color, y aquí se quedó cuando aquel módulo se borró con el visor viejo.
  */
 export const DEFAULT_DRAWING_COLOR = "#f357a1"
 

@@ -44,10 +44,9 @@ export const formatDegrees = (value) => value.toFixed(5).replace(".", ",")
 // Por debajo de este zoom las etiquetas se apiñan y son ilegibles. No hay límite
 // superior: el satélite llega a z22 y antes desaparecían al pasar de z19.
 //
-// Vive aquí, y no en mapLabels.js, porque mapLabels importa Leaflet: dejarlo
-// allá obligaba al visor MapLibre a arrastrar Leaflet entero en su descarga solo
-// para leer un número. mapLabels lo reexporta para no romper a quien ya lo
-// importaba de allá.
+// Vivía en mapLabels.js, el módulo de etiquetas de Leaflet, y se mudó aquí
+// porque aquel importaba Leaflet: leer este número obligaba al visor MapLibre a
+// arrastrar Leaflet entero en su descarga. mapLabels.js ya no existe.
 export const LABELS_MIN_ZOOM = 15
 
 export const shouldShowLabels = (zoom) => zoom >= LABELS_MIN_ZOOM
