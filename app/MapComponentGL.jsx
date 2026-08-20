@@ -274,14 +274,8 @@ export default function MapComponentGL({
   expedientCode,
   searchTrigger,
   onCoordinatesUpdate,
-  showTitleLayer,
-  showRequestLayer,
-  showAnmServiceLayer,
-  showHistoricalTitleLayer,
-  titleOpacity,
-  requestOpacity,
-  anmServiceOpacity,
-  historicalTitleOpacity,
+  layerState,
+  layerOrder,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
@@ -295,34 +289,14 @@ export default function MapComponentGL({
 
   const { baseLayer, toggleBaseLayer } = useMapInitializationGL(mapRef)
 
-  // El panel lateral entrega ocho props sueltas; las capas se manejan por clave.
-  // useMemo no es un adorno: sin él estos objetos serían nuevos en cada render y
-  // los efectos del hook se re-ejecutarían sin que haya cambiado nada.
-  const layerVisibility = useMemo(
-    () => ({
-      title: showTitleLayer,
-      request: showRequestLayer,
-      anmService: showAnmServiceLayer,
-      historicalTitle: showHistoricalTitleLayer,
-    }),
-    [showTitleLayer, showRequestLayer, showAnmServiceLayer, showHistoricalTitleLayer],
-  )
-
-  const layerOpacity = useMemo(
-    () => ({
-      title: titleOpacity,
-      request: requestOpacity,
-      anmService: anmServiceOpacity,
-      historicalTitle: historicalTitleOpacity,
-    }),
-    [titleOpacity, requestOpacity, anmServiceOpacity, historicalTitleOpacity],
-  )
-
+  // El panel entrega el estado de las capas ya agrupado por clave: encendida,
+  // opacidad y colores. Antes llegaban ocho props sueltas que había que volver a
+  // juntar aquí con dos useMemo.
   const { showZoomInHint, truncatedLayers } = useMapLayersGL(
     mapRef,
     mapInstance,
-    layerVisibility,
-    layerOpacity,
+    layerState,
+    layerOrder,
     setError,
     setShowErrorBanner,
   )
@@ -339,6 +313,18 @@ export default function MapComponentGL({
     getDrawnFeatures,
     hasArea,
   } = useDrawControlGL(mapRef, mapInstance)
+
+  // La descarga por área solo necesita saber qué está encendido, no con qué
+  // color ni en qué orden. Se le entrega esa vista reducida para no obligar a
+  // `bboxDownload` —que es lógica pura y con pruebas propias— a aprenderse la
+  // forma del estado del panel.
+  const layerVisibility = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(layerState).map(([key, estado]) => [key, Boolean(estado?.on)]),
+      ),
+    [layerState],
+  )
 
   const { isDownloading, downloadArea } = useAreaDownloadGL(
     getDrawnFeatures,

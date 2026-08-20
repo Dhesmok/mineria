@@ -12,6 +12,8 @@ import ExportComponent from "./ExportComponent"
 import { fetchArcgisJson } from "./utils/arcgis"
 import { CRS_LIST, axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
 import { parseCoordinateInput } from "./utils/coordinateInput"
+import { DEFAULT_ORDER, initialLayerState } from "./utils/themeAreas"
+import { LayerPanel } from "./components/LayerPanel"
 import {
   findTenureLayerNumbers,
   REQUEST_LAYER_NAME,
@@ -34,30 +36,6 @@ const MapComponent = dynamic(() => import("./MapComponentGL"), {
 
 const MIN_SUGGESTION_LENGTH = 3
 const MAX_SUGGESTIONS = 10
-
-/** Etiqueta, slider de opacidad e interruptor de una capa. */
-const LayerControl = ({ id, label, checked, onCheckedChange, opacity, onOpacityChange }) => (
-  <>
-    {/* Ancho fijo para que las cuatro filas queden alineadas: sin él la etiqueta más
-        larga partía en dos líneas y desnivelaba su fila. */}
-    <Label htmlFor={id} className="w-36 shrink-0 whitespace-nowrap text-sm">
-      {label}
-    </Label>
-    <input
-      type="range"
-      min="0"
-      max="1"
-      step="0.1"
-      value={opacity}
-      onChange={(e) => onOpacityChange(parseFloat(e.target.value))}
-      className="flex-1 disabled:opacity-40"
-      // El slider no hace nada con la capa apagada; deshabilitarlo lo deja claro.
-      disabled={!checked}
-      aria-label={`Opacidad de ${label}`}
-    />
-    <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
-  </>
-)
 
 export default function Component() {
   const [showSidebar, setShowSidebar] = useState(true)
@@ -84,14 +62,32 @@ export default function Component() {
   const searchBoxRef = useRef(null)
   const suggestionAbortRef = useRef(null)
   const skipNextSuggestionFetchRef = useRef(false)
-  const [showTitleLayer, setShowTitleLayer] = useState(false)
-  const [showRequestLayer, setShowRequestLayer] = useState(false)
-  const [showAnmServiceLayer, setShowAnmServiceLayer] = useState(false)
-  const [showHistoricalTitleLayer, setShowHistoricalTitleLayer] = useState(false)
-  const [titleOpacity, setTitleOpacity] = useState(0.6)
-  const [requestOpacity, setRequestOpacity] = useState(0.7)
-  const [anmServiceOpacity, setAnmServiceOpacity] = useState(0.7)
-  const [historicalTitleOpacity, setHistoricalTitleOpacity] = useState(0.5)
+  // Estado de las capas: encendida, opacidad y colores, todo por clave. Antes
+  // eran ocho estados sueltos —uno por interruptor y otro por deslizador—, que
+  // con trece capas y su color serían treinta y nueve.
+  const [layers, setLayers] = useState(initialLayerState)
+  // El orden de pintado, de arriba abajo. Es lo que el usuario reordena
+  // arrastrando en la pestaña "Activas".
+  const [layerOrder, setLayerOrder] = useState(DEFAULT_ORDER)
+
+  const actualizarCapa = useCallback((key, cambios) => {
+    setLayers((current) => ({ ...current, [key]: { ...current[key], ...cambios } }))
+  }, [])
+
+  const alternarCapa = useCallback(
+    (key) => setLayers((current) => ({ ...current, [key]: { ...current[key], on: !current[key].on } })),
+    [],
+  )
+
+  const cambiarOpacidad = useCallback(
+    (key, opacity) => actualizarCapa(key, { opacity }),
+    [actualizarCapa],
+  )
+
+  const cambiarColor = useCallback(
+    (key, fillColor, lineColor) => actualizarCapa(key, { fillColor, lineColor }),
+    [actualizarCapa],
+  )
 
   const handleApply = useCallback(() => {
     if (!expedientCode) {
@@ -535,48 +531,14 @@ export default function Component() {
               </p>
             )}
           </div>
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <LayerControl
-                id="titleLayer"
-                label="Títulos Vigentes"
-                checked={showTitleLayer}
-                onCheckedChange={setShowTitleLayer}
-                opacity={titleOpacity}
-                onOpacityChange={setTitleOpacity}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <LayerControl
-                id="requestLayer"
-                label="Solicitudes Vigentes"
-                checked={showRequestLayer}
-                onCheckedChange={setShowRequestLayer}
-                opacity={requestOpacity}
-                onOpacityChange={setRequestOpacity}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <LayerControl
-                id="anmServiceLayer"
-                label="Subcontratos"
-                checked={showAnmServiceLayer}
-                onCheckedChange={setShowAnmServiceLayer}
-                opacity={anmServiceOpacity}
-                onOpacityChange={setAnmServiceOpacity}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <LayerControl
-                id="historicalTitleLayer"
-                label="Título Histórico"
-                checked={showHistoricalTitleLayer}
-                onCheckedChange={setShowHistoricalTitleLayer}
-                opacity={historicalTitleOpacity}
-                onOpacityChange={setHistoricalTitleOpacity}
-              />
-            </div>
-          </div>
+          <LayerPanel
+            layers={layers}
+            order={layerOrder}
+            onToggle={alternarCapa}
+            onOpacity={cambiarOpacidad}
+            onColor={cambiarColor}
+            onReorder={setLayerOrder}
+          />
 
           {showToggle && (
             <div className="space-y-4">
@@ -613,14 +575,8 @@ export default function Component() {
           onCoordinatesUpdate={handleCoordinatesUpdate}
           searchTrigger={searchTrigger}
           onMapInitialized={handleMapInitialized}
-          showTitleLayer={showTitleLayer}
-          showRequestLayer={showRequestLayer}
-          showAnmServiceLayer={showAnmServiceLayer}
-          showHistoricalTitleLayer={showHistoricalTitleLayer}
-          titleOpacity={titleOpacity}
-          requestOpacity={requestOpacity}
-          anmServiceOpacity={anmServiceOpacity}
-          historicalTitleOpacity={historicalTitleOpacity}
+          layerState={layers}
+          layerOrder={layerOrder}
         />
         {!showSidebar && (
           <Button

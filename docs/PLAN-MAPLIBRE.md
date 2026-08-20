@@ -4,7 +4,8 @@ Documento de trabajo. Marca las casillas a medida que avances y actualiza el
 estado al final de cada sesión, para que la siguiente sesión sepa dónde quedó.
 
 **Estado:** migración terminada (fases 0–7) y en `main`; Leaflet ya no existe.
-Ajustes de uso de la Fase 8, hechos salvo los filtros. Pendiente: recorte de DEM
+Ajustes de uso de la Fase 8, hechos salvo los filtros. Panel por áreas (Fase 9)
+hecho, a la espera de las direcciones de los servicios nuevos. Pendiente: recorte de DEM
 (Fase 5, fuente ya decidida), entidades nuevas (Fase 6) y filtros (Fase 8).
 **Última actualización:** 2026-08-20
 
@@ -190,6 +191,18 @@ herramienta.
 - [ ] **Filtros** (por departamento, municipio, área, clasificación, etapa). Ver
       la nota de sesión: hace falta antes inventariar qué campos traen de verdad
       los servicios, y eso no se puede comprobar sin salida a internet.
+
+## Fase 9 — Panel de capas por áreas
+
+- [x] Agrupar las capas por área temática: Minería, Geología, Hidrocarburos,
+      Catastro. Se diseñaron tres paneles y Fabio eligió la lista continua.
+- [x] Cambiar el color de una capa desde el panel, con el contorno derivado.
+- [x] Arrastrar en "Activas" para decidir qué capa tapa a cuál, en la lista y en
+      el mapa.
+- [ ] Conectar los servicios de SGC, ANH e IGAC. Las nueve capas ya están en el
+      panel, deshabilitadas: falta la dirección pública de cada una, que Fabio
+      está buscando. Añadir una es ponerle `url` en `utils/themeAreas.js` y
+      quitarle `pending`.
 
 ---
 
@@ -769,3 +782,77 @@ coordenadas y el lector de coordenadas escritas) y 137 comprobaciones en
 navegador —las 105 de regresión de las fases anteriores, todas en verde, más 32
 nuevas para estos ajustes—, con capturas de la ficha, del punto marcado, de la
 paleta, del panel de 3D y de la brújula en sus dos tamaños.
+
+### Fase 9, panel por áreas — 2026-08-20
+
+Se diseñaron tres paneles alternativos en un lienzo aparte —acordeón, pestañas y
+lista continua— y Fabio eligió la lista continua. Se implementó esa, con dos
+añadidos que pidió: cambiar el color de una capa y reordenarlas arrastrando.
+
+**El orden de la lista es el orden de pintado.** Es la parte con más miga.
+MapLibre dibuja las capas en el orden en que están en el estilo, y `moveLayer(id,
+antesDe)` coloca una *debajo* de otra. Para que "arriba en la lista" signifique
+"encima en el mapa" se recorre la lista al revés, de abajo arriba, empujando cada
+capa justo antes del resultado de la búsqueda: cada llamada deja su capa por
+encima de la anterior, y al terminar la primera de la lista quedó arriba del
+todo. El resultado de la búsqueda se queda siempre por encima de las demás, que
+es lo que el usuario acaba de pedir expresamente.
+
+**En "Activas" la lista es plana, y no es un descuido.** En "Todas" las filas van
+agrupadas por área con los encabezados pegados arriba; ahí no se puede arrastrar,
+porque un orden de pintado global y un agrupamiento por área se contradicen: la
+tercera fila de Geología no tiene un puesto en la pila. En "Activas" desaparecen
+los encabezados y queda una sola lista ordenable, con una franja del color del
+área en el borde izquierdo de cada fila para no perder de dónde viene cada capa.
+
+**Arrastrar mueve dentro de un subconjunto.** El usuario ordena entre las capas
+encendidas, que son unas pocas de las trece. `moveWithinSubset` reordena solo
+esas y devuelve cada una a los huecos que ocupaban las activas dentro de la lista
+completa, así que las apagadas conservan su sitio exacto: al volver a encender
+una, reaparece donde el usuario la había dejado y no al final de la pila.
+
+**El arrastre va con eventos de puntero y no con la API de arrastre de HTML.**
+Aquella no existe en pantallas táctiles y el visor se usa en campo desde el
+celular. La cuenta de en qué posición cae el puntero se compara contra el
+*centro* de cada fila, no contra su borde: con los bordes, arrastrar un puesto
+nunca llegaba a mover nada.
+
+**Un fallo evitado a tiempo:** la fila estaba definida dentro del componente del
+panel. Un componente definido dentro de otro es un tipo nuevo en cada render, así
+que React desmonta y vuelve a montar todas las filas ante cualquier cambio — y
+eso rompe justo las dos funciones nuevas: el arrastre pierde el elemento que
+tenía agarrado y el deslizador de opacidad pierde el foco a media pulsación. Se
+sacó a nivel de módulo.
+
+**El color se elige uno y se derivan dos.** El usuario escoge el relleno y el
+contorno sale de oscurecerlo un 35 %. Pedir los dos sería más exacto y bastante
+más pesado, y la pareja "relleno claro, borde oscuro" es la que hace legible un
+polígono sobre satélite y sobre mapa claro por igual. El selector se queda
+abierto al elegir, a propósito: escoger el color de una capa es compararlo contra
+el mapa, y cerrarse en el primer clic obliga a reabrirlo por cada prueba.
+
+**Una consulta que se disparaba de más.** El estado de las capas pasó de ocho
+props sueltas a un solo objeto por clave. Como ese objeto cambia también al mover
+la opacidad o elegir un color, el efecto que consulta a la ANM habría lanzado una
+petición por cada roce del deslizador. Se le puso una huella —una cadena de unos
+y ceros con qué capas están encendidas— y solo eso dispara la consulta.
+
+**Las nueve capas nuevas están en el panel pero deshabilitadas.** Geología,
+Hidrocarburos y Catastro se ven con su interruptor apagado y sin poder pulsarse,
+porque todavía no se conocen las direcciones públicas de SGC, ANH e IGAC. Es
+deliberado: enseña a dónde va el panel sin fingir que ya funciona. Conectar una
+es ponerle `url` en `utils/themeAreas.js` y quitarle `pending`.
+
+**Dos comprobaciones de las suites viejas se actualizaron, y ninguna era una
+regresión.** La de la opacidad usaba la escala vieja del deslizador (iba de 0 a 1
+y ahora va de 0 a 100). La de la línea dibujaba en un punto que el panel, ahora
+más alto, tapa: el clic no llegaba al mapa. La segunda vale como aviso — el panel
+ocupa bastante más alto que las cuatro filas de antes—, pero el panel lateral
+tiene tope y desplazamiento propio, y su botón de ocultar sigue ahí.
+
+**Comprobado**: 200 pruebas unitarias (44 nuevas: colores, reordenamiento,
+registro de áreas y el panel) y 159 comprobaciones en navegador — las 137
+anteriores en verde más 22 nuevas—, incluida la prueba que de verdad importa:
+`queryRenderedFeatures` devuelve las capas en el orden en que MapLibre las va a
+dibujar, y tras arrastrar devuelve el orden nuevo. Con capturas de la lista, del
+selector de color, del arrastre a medias y del mapa repintado.

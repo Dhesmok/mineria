@@ -10,6 +10,7 @@ import {
   fetchLayerFeatures,
   LAYERS_MIN_ZOOM,
 } from "../../utils/anmLayers"
+import { SEARCH_LAYERS } from "../../utils/mapStyles"
 import { createLabelElement } from "../../utils/mapLabelsGL"
 import { createPopupContent, shouldShowLabels } from "../../utils/mapUtils"
 import { findTenureLayerNumbers, tenureLayerUrl } from "../../utils/tenureLayers"
@@ -30,15 +31,20 @@ const REFRESH_DELAY_MS = 400
  * consulta el servicio y con qué recuadro.
  *
  * Las capas del estilo no se crean ni se destruyen: ya están declaradas (ver
- * `createBaseStyle`) y aquí solo se les cambia la visibilidad, la opacidad y los
- * datos. Así el orden de apilamiento no depende de en qué orden pulse el usuario
- * los interruptores.
+ * `createBaseStyle`) y aquí solo se les cambia la visibilidad, la opacidad, el
+ * color, el orden y los datos.
+ *
+ * @param layerState  {clave: {on, opacity, fillColor, lineColor}} — lo que el
+ *   panel sabe de cada capa. Va en un solo objeto y no en cuatro paralelos
+ *   porque los cuatro cambian juntos y separarlos solo daba ocasión de que se
+ *   descuadraran.
+ * @param layerOrder  claves de arriba abajo: la primera se pinta encima de todo.
  */
 export const useMapLayersGL = (
   mapRef,
   mapInstance,
-  layerVisibility,
-  layerOpacity,
+  layerState,
+  layerOrder,
   setError,
   setShowErrorBanner,
 ) => {
@@ -57,10 +63,20 @@ export const useMapLayersGL = (
   const keysWithDataRef = useRef(new Set())
   // La visibilidad se lee dentro de una función asíncrona; con el valor de la
   // prop, esa función se quedaría viendo el estado del render en que se creó.
-  const visibilityRef = useRef(layerVisibility)
-  visibilityRef.current = layerVisibility
+  const stateRef = useRef(layerState)
+  stateRef.current = layerState
 
-  const anyLayerEnabled = ANM_LAYERS.some(({ key }) => layerVisibility[key])
+  const isOn = (key) => Boolean(layerState[key]?.on)
+  const anyLayerEnabled = ANM_LAYERS.some(({ key }) => isOn(key))
+
+  /**
+   * Huella de qué capas están encendidas, como "1010".
+   *
+   * Es lo que dispara la consulta al servicio, en vez del objeto de estado
+   * entero: ese objeto cambia también al mover la opacidad o al elegir un color,
+   * y sin esta huella cada roce del deslizador lanzaba una consulta a la ANM.
+   */
+  const visibilitySignature = ANM_LAYERS.map(({ key }) => (isOn(key) ? "1" : "0")).join("")
 
   const clearLabels = useCallback((key) => {
     const markers = labelMarkersRef.current[key]
@@ -115,13 +131,14 @@ export const useMapLayersGL = (
     const controller = new AbortController()
     abortRef.current = controller
 
-    const visibility = visibilityRef.current
-    const activeLayers = ANM_LAYERS.filter(({ key }) => visibility[key])
+    const estado = stateRef.current
+    const encendida = (key) => Boolean(estado[key]?.on)
+    const activeLayers = ANM_LAYERS.filter(({ key }) => encendida(key))
 
     // Las capas apagadas se vacían aquí y no en el efecto de visibilidad: sin
     // esto, al apagar el interruptor los polígonos se ocultaban pero seguían
     // cargados, y volvían a aparecer con datos viejos al reencenderla.
-    ANM_LAYERS.filter(({ key }) => !visibility[key]).forEach(({ key }) => clearLayerData(key))
+    ANM_LAYERS.filter(({ key }) => !encendida(key)).forEach(({ key }) => clearLayerData(key))
 
     const belowMinZoom = map.getZoom() < LAYERS_MIN_ZOOM
     setIsBelowMinZoom(belowMinZoom)
@@ -190,39 +207,70 @@ export const useMapLayersGL = (
 
   const debouncedRefresh = useMemo(() => debounce(() => refresh(), REFRESH_DELAY_MS), [refresh])
 
-  // Visibilidad y opacidad: baratas, no tocan la red. Van en su propio efecto
-  // para que mover el slider no dispare una consulta al servicio.
+  // Visibilidad, opacidad y color: baratas, no tocan la red. Van en su propio
+  // efecto para que mover el slider o elegir un color no dispare una consulta.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
 
-    ANM_LAYERS.forEach(({ key }) => {
-      const visible = layerVisibility[key] ? "visible" : "none"
-      if (!map.getLayer(anmFillLayerId(key))) return
+    ANM_LAYERS.forEach(({ key, fillColor, lineColor }) => {
+      const estado = layerState[key]
+      if (!estado || !map.getLayer(anmFillLayerId(key))) return
 
+      const visible = estado.on ? "visible" : "none"
       map.setLayoutProperty(anmFillLayerId(key), "visibility", visible)
       map.setLayoutProperty(anmLineLayerId(key), "visibility", visible)
       // Solo el relleno responde al slider. El contorno se queda opaco, como en
       // el visor Leaflet: con opacidad 0 la capa sigue existiendo y se ve dónde
       // está, en vez de desaparecer del todo.
-      map.setPaintProperty(anmFillLayerId(key), "fill-opacity", layerOpacity[key])
+      map.setPaintProperty(anmFillLayerId(key), "fill-opacity", estado.opacity)
+      map.setPaintProperty(anmFillLayerId(key), "fill-color", estado.fillColor ?? fillColor)
+      map.setPaintProperty(anmLineLayerId(key), "line-color", estado.lineColor ?? lineColor)
     })
-  }, [mapInstance, layerVisibility, layerOpacity, mapRef])
+  }, [mapInstance, layerState, mapRef])
+
+  /**
+   * Orden de pintado, según el orden de la lista del panel.
+   *
+   * `moveLayer(id, antesDe)` coloca la capa *debajo* de `antesDe`. Recorriendo
+   * la lista de abajo arriba y empujando cada capa justo antes del resultado de
+   * la búsqueda, cada nueva llamada deja su capa por encima de la anterior: al
+   * terminar, la primera de la lista quedó arriba del todo, que es lo que el
+   * usuario acaba de decir arrastrándola.
+   *
+   * El resultado de la búsqueda se queda siempre por encima: es lo que el
+   * usuario pidió expresamente y no debería tapárselo una capa de fondo.
+   */
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !map.getLayer(SEARCH_LAYERS.fill)) return
+
+    ;[...layerOrder].reverse().forEach((key) => {
+      const fill = anmFillLayerId(key)
+      const line = anmLineLayerId(key)
+      if (!map.getLayer(fill)) return
+      // El contorno se mueve después que el relleno para quedar sobre él; al
+      // revés, el relleno translúcido de la propia capa apagaría su borde.
+      map.moveLayer(fill, SEARCH_LAYERS.fill)
+      map.moveLayer(line, SEARCH_LAYERS.fill)
+    })
+  }, [mapInstance, layerOrder, mapRef])
 
   // Las etiquetas son marcadores HTML, no capas del estilo, así que la
   // visibilidad de la capa no las apaga: hay que quitarlas a mano.
   useEffect(() => {
     ANM_LAYERS.forEach(({ key }) => {
-      if (!layerVisibility[key]) clearLabels(key)
+      if (!layerState[key]?.on) clearLabels(key)
     })
-  }, [layerVisibility, clearLabels])
+  }, [layerState, clearLabels])
 
   // Encender o apagar una capa sí obliga a consultar; aquí sin esperar, que el
-  // usuario acaba de pedirlo explícitamente.
+  // usuario acaba de pedirlo explícitamente. Depende de la huella y no del
+  // estado entero: ver `visibilitySignature`.
   useEffect(() => {
     if (!mapInstance) return
     refresh()
-  }, [mapInstance, layerVisibility, refresh])
+  }, [mapInstance, visibilitySignature, refresh])
 
   // Y cada vez que cambia el área visible.
   useEffect(() => {

@@ -102,10 +102,87 @@ describe("buscador de expedientes", () => {
     await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument())
   })
 
-  it("deshabilita el slider de opacidad mientras la capa está apagada", async () => {
+  it("la barra de opacidad solo existe con la capa encendida", async () => {
+    // Antes estaba siempre, deshabilitada. Con trece capas eso son trece barras
+    // muertas ocupando la lista, así que ahora aparece al encender la capa.
+    const user = userEvent.setup()
     render(<Component />)
 
-    expect(screen.getByLabelText("Opacidad de Títulos Vigentes")).toBeDisabled()
-    expect(screen.getByLabelText("Opacidad de Subcontratos")).toBeDisabled()
+    expect(screen.queryByLabelText("Opacidad de Títulos Vigentes")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("switch", { name: "Títulos Vigentes" }))
+
+    expect(screen.getByLabelText("Opacidad de Títulos Vigentes")).toBeInTheDocument()
+  })
+})
+
+describe("panel de capas por áreas", () => {
+  it("agrupa las capas bajo su área", async () => {
+    render(<Component />)
+
+    expect(screen.getByText("Minería")).toBeInTheDocument()
+    expect(screen.getByText("Geología")).toBeInTheDocument()
+    expect(screen.getByText("Hidrocarburos")).toBeInTheDocument()
+    expect(screen.getByText("Catastro")).toBeInTheDocument()
+    // Las cuatro de la ANM están conectadas; el contador lo dice.
+    expect(screen.getByText("0/4")).toBeInTheDocument()
+  })
+
+  it("deja apagadas las capas cuyo servicio todavía no existe", async () => {
+    render(<Component />)
+
+    expect(screen.getByRole("switch", { name: "Planchas geológicas" })).toBeDisabled()
+    expect(screen.getByRole("switch", { name: "Predios" })).toBeDisabled()
+    // Las que sí tienen servicio se pueden pulsar.
+    expect(screen.getByRole("switch", { name: "Títulos Vigentes" })).toBeEnabled()
+  })
+
+  it("en Activas solo salen las capas encendidas, en orden", async () => {
+    const user = userEvent.setup()
+    render(<Component />)
+
+    await user.click(screen.getByRole("switch", { name: "Títulos Vigentes" }))
+    await user.click(screen.getByRole("button", { name: "Activas" }))
+
+    expect(screen.getByRole("switch", { name: "Títulos Vigentes" })).toBeInTheDocument()
+    expect(screen.queryByRole("switch", { name: "Subcontratos" })).not.toBeInTheDocument()
+    expect(screen.getByText(/Arrastra para ordenar/)).toBeInTheDocument()
+  })
+
+  it("solo se puede reordenar en Activas", async () => {
+    // En "Todas" las filas van agrupadas por área, y un orden de pintado global
+    // contradiría a ese agrupamiento: por eso ahí no hay asas de arrastre.
+    const user = userEvent.setup()
+    render(<Component />)
+
+    await user.click(screen.getByRole("switch", { name: "Títulos Vigentes" }))
+    expect(screen.queryByRole("button", { name: /Reordenar/ })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Activas" }))
+    expect(screen.getByRole("button", { name: "Reordenar Títulos Vigentes" })).toBeInTheDocument()
+  })
+
+  it("el selector de color cambia el color de la capa", async () => {
+    const user = userEvent.setup()
+    render(<Component />)
+
+    const boton = screen.getByRole("button", { name: "Cambiar el color de Títulos Vigentes" })
+    // El color va en el cuadrito de dentro; el botón que lo envuelve solo existe
+    // para dar un blanco de 24 px al dedo.
+    const cuadrito = boton.querySelector("span")
+    expect(cuadrito).toHaveStyle({ backgroundColor: "#A46F48" })
+
+    await user.click(boton)
+    await user.click(await screen.findByRole("button", { name: "Usar el color #3D5A80" }))
+
+    expect(cuadrito).toHaveStyle({ backgroundColor: "#3D5A80" })
+    // Y el contorno se deriva oscureciendo, no se queda con el de antes.
+    // (61, 90, 128) al 65 % es (40, 59, 83).
+    expect(cuadrito).toHaveStyle({ border: "1.5px solid #283b53" })
+  })
+
+  it("no deja tocar el color de una capa sin servicio", async () => {
+    render(<Component />)
+    expect(screen.getByRole("button", { name: "Cambiar el color de Predios" })).toBeDisabled()
   })
 })
