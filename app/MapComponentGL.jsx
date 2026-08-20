@@ -9,6 +9,7 @@ import { useTerrainGL, EXAGGERATION_MAX, EXAGGERATION_MIN } from "./hooks/map/us
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
 import { useAreaDownloadGL } from "./hooks/map/useAreaDownloadGL"
+import { useGeolocationGL } from "./hooks/map/useGeolocationGL"
 import { useExpedientSearchGL } from "./hooks/map/useExpedientSearchGL"
 import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } from "./utils/mapStyles"
 import { formatDegrees } from "./utils/mapUtils"
@@ -16,6 +17,8 @@ import { ColorPicker } from "./components/ColorPicker"
 import { Button } from "@/components/ui/button"
 import {
   Box,
+  Compass,
+  Crosshair,
   Download,
   Loader2,
   MapIcon,
@@ -32,9 +35,9 @@ import {
  * llega a él por la ruta /gl y se compara lado a lado con el visor de siempre
  * hasta que alcance a hacer lo mismo. Entonces el de Leaflet se borra.
  *
- * Estado: Fase 5 del plan (docs/PLAN-MAPLIBRE.md). Mapa base, las cuatro capas
- * de la ANM, búsqueda por expediente, dibujo con medición, exportación, terreno
- * 3D y descarga por área. Falta el GPS y la brújula, y el DEM recortado.
+ * Estado: Fases 1–5 del plan (docs/PLAN-MAPLIBRE.md) más GPS y brújula. Con esto
+ * /gl iguala en funciones al visor Leaflet. Pendiente: el DEM recortado (Fase 5,
+ * decisión de fuente por tomar) y las nuevas entidades (Fase 6).
  *
  * Nota sobre la importación: maplibre-gl 6 dejó de tener exportación por
  * defecto. `import maplibregl from "maplibre-gl"` compila sin quejarse y
@@ -214,6 +217,9 @@ export default function MapComponentGL({
     setError,
     setShowErrorBanner,
   )
+
+  const { isLocating, hasLocated, isCompassActive, handleLocateUser, handleToggleCompass360 } =
+    useGeolocationGL(mapRef, setError, setShowErrorBanner)
 
   const {
     is3D,
@@ -423,6 +429,35 @@ export default function MapComponentGL({
             </p>
           </div>
         )}
+
+        <Button
+          onClick={handleLocateUser}
+          className={`transition-colors ${
+            isLocating
+              ? "bg-blue-50 text-blue-500 animate-pulse"
+              : hasLocated
+                ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                : "bg-white text-black hover:bg-gray-200"
+          }`}
+          title="Mostrar tu ubicación con el GPS"
+        >
+          <Crosshair className={`mr-2 h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
+          {isLocating ? "Ubicando..." : hasLocated ? "Ubicación activa" : "Activar GPS"}
+        </Button>
+
+        <Button
+          onClick={handleToggleCompass360}
+          aria-pressed={isCompassActive}
+          title="Girar una rosa de los vientos con la orientación del celular"
+          className={`transition-colors ${
+            isCompassActive
+              ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+              : "bg-white text-black hover:bg-gray-200"
+          }`}
+        >
+          <Compass className={`mr-2 h-4 w-4 ${isCompassActive ? "text-blue-600" : ""}`} />
+          {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
+        </Button>
       </div>
 
       <ColorPicker
@@ -435,7 +470,7 @@ export default function MapComponentGL({
       <DrawToolbar mode={mode} startMode={startMode} deleteSelected={deleteSelected} />
 
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 rounded bg-amber-100/95 px-3 py-1 text-xs text-amber-900 shadow-md">
-        MapLibre · Fase 5: descarga por área
+        MapLibre · GPS y brújula (paridad con Leaflet)
       </div>
 
       <CursorCoordinates map={mapInstance} />
@@ -540,6 +575,49 @@ export default function MapComponentGL({
         }
         .maplibregl-map.mouse-move .maplibregl-canvas-container {
           cursor: move;
+        }
+        /* Marcador de GPS y brújula. Mismo aspecto que en el visor Leaflet: el
+           punto azul con su pulso, y la rosa de los vientos cuando la brújula
+           está activa. La aguja la rota useGeolocationGL por estilo en línea. */
+        .gps-compass-marker {
+          background: transparent;
+          border: none;
+        }
+        .gps-compass__ring {
+          position: relative;
+          border-radius: 9999px;
+          background: transparent;
+        }
+        .gps-compass__dot {
+          position: absolute;
+          width: 16px;
+          height: 16px;
+          border-radius: 9999px;
+          transform: translate(-50%, -50%);
+          background: #007aff;
+          border: 3px solid #ffffff;
+          box-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
+          z-index: 3;
+        }
+        .gps-compass__pulse {
+          position: absolute;
+          width: 60px;
+          height: 60px;
+          border-radius: 9999px;
+          transform: translate(-50%, -50%);
+          background: rgba(0, 122, 255, 0.2);
+          animation: gps-pulse 2.5s ease-out infinite;
+          z-index: 1;
+        }
+        @keyframes gps-pulse {
+          0% {
+            transform: translate(-50%, -50%) scale(0.3);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1.5);
+            opacity: 0;
+          }
         }
       `}</style>
     </>

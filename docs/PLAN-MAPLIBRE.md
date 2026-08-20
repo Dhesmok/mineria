@@ -3,7 +3,7 @@
 Documento de trabajo. Marca las casillas a medida que avances y actualiza el
 estado al final de cada sesión, para que la siguiente sesión sepa dónde quedó.
 
-**Estado:** Fase 5 hecha salvo el DEM (decisión de Fabio). Siguiente: DEM, o Fase 6.
+**Estado:** /gl iguala a Leaflet (fases 1–5 + GPS). Pendiente: DEM (Fase 5) y Fase 6.
 **Última actualización:** 2026-08-20
 
 ---
@@ -35,6 +35,7 @@ reescriben ~800.
 | `hooks/useMapLayers.js` | Reescribir |
 | `hooks/useDrawControl.js` | Reescribir (mapbox-gl-draw) |
 | `hooks/useMapInitialization.js` | Reescribir |
+| `hooks/useGeolocation.js` | Reescrito para MapLibre en `useGeolocationGL.js` (GPS + brújula) |
 | `MapComponent.jsx` | Reescribir |
 
 **Regla:** si un test pasa antes de la migración, tiene que pasar después. Los
@@ -371,6 +372,30 @@ en un segundo polígono la ficha desaparecía en lugar de cambiar. Ahora hay un
 único manejador de clic para todo el mapa, con `closeOnClick: false`, y el
 cierre lo decide el código: si el clic no cae sobre ninguna capa de la ANM,
 cierra; si cae, reemplaza el contenido.
+
+### GPS y brújula — 2026-08-20 (sesión autónoma)
+
+Portado `useGeolocation` → `useGeolocationGL`. **Con esto `/gl` hace ya todo lo
+que hace el visor Leaflet**, que era el requisito para poder borrarlo en la Fase
+7. No era una fase del plan, pero sin esto la Fase 7 no se puede hacer.
+
+El marcador —el punto azul con su pulso, la rosa de los vientos de 250 px y la
+aguja que gira con la orientación del celular— se conserva idéntico: mismo SVG,
+mismo CSS. Lo único que cambió es el motor: `Marker` de MapLibre con un elemento
+HTML en vez de `L.divIcon`, `setLngLat` en vez de `setLatLng` (con el eterno
+cuidado del orden [lon, lat]), y `flyTo({center, zoom})` en vez de la firma de
+Leaflet. La lectura de `deviceorientation` va igual, es API del navegador.
+
+Verificado en Chromium con geolocalización simulada (Playwright puede conceder el
+permiso y fijar una posición): 14 comprobaciones. El marcador aparece anclado
+exactamente sobre la ubicación (a menos de 20 px de su proyección), el mapa vuela
+a ella, la brújula agranda el marcador y la aguja gira al rumbo correcto al
+simular un evento de orientación (alpha 90 → rumbo 270), y apagar cada cosa
+limpia lo suyo. Las fases 2–5 siguen verdes.
+
+Con esto la única deuda de paridad con Leaflet que queda es ninguna: lo pendiente
+son cosas nuevas (el DEM de la Fase 5 y las entidades de la Fase 6), no cosas que
+el visor viejo tuviera y el nuevo no.
 
 ### Fase 5 — 2026-08-20 (sesión autónoma)
 
