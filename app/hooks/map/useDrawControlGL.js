@@ -76,6 +76,10 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
   const [drawingColor, setDrawingColor] = useState(DEFAULT_DRAWING_COLOR)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [mode, setMode] = useState("simple_select")
+  // ¿Hay al menos un polígono dibujado? Lo usa el botón de descarga por área,
+  // que no tiene sentido sin un área. Se actualiza al crear y borrar, no en cada
+  // cuadro de render.
+  const [hasArea, setHasArea] = useState(false)
 
   const drawRef = useRef(null)
   // Una etiqueta por figura, indexada por su id, para poder actualizarlas y
@@ -132,6 +136,18 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
   const clearMeasurements = useCallback(() => {
     labelsRef.current.forEach((marker) => marker.remove())
     labelsRef.current.clear()
+  }, [])
+
+  /** Recalcula si hay algún polígono dibujado. */
+  const refreshHasArea = useCallback(() => {
+    const draw = drawRef.current
+    if (!draw) {
+      setHasArea(false)
+      return
+    }
+    setHasArea(
+      draw.getAll().features.some((feature) => feature?.geometry?.type === "Polygon"),
+    )
   }, [])
 
   useEffect(() => {
@@ -196,14 +212,20 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
         // una.
         control.changeMode("simple_select")
         setMode("simple_select")
+        refreshHasArea()
       }, 0)
+    }
+
+    const handleDelete = () => {
+      syncMeasurements()
+      refreshHasArea()
     }
 
     const handleModeChange = (event) => setMode(event.mode)
 
     mapInstance.on("draw.create", handleCreate)
     mapInstance.on("draw.update", syncMeasurements)
-    mapInstance.on("draw.delete", syncMeasurements)
+    mapInstance.on("draw.delete", handleDelete)
     // Mientras se arrastra un vértice, para que la medida se mueva con él.
     mapInstance.on("draw.render", syncMeasurements)
     mapInstance.on("draw.modechange", handleModeChange)
@@ -211,7 +233,7 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
     return () => {
       mapInstance.off("draw.create", handleCreate)
       mapInstance.off("draw.update", syncMeasurements)
-      mapInstance.off("draw.delete", syncMeasurements)
+      mapInstance.off("draw.delete", handleDelete)
       mapInstance.off("draw.render", syncMeasurements)
       mapInstance.off("draw.modechange", handleModeChange)
       clearMeasurements()
@@ -226,7 +248,7 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
       }
       drawRef.current = null
     }
-  }, [mapInstance, syncMeasurements, clearMeasurements])
+  }, [mapInstance, syncMeasurements, clearMeasurements, refreshHasArea])
 
   const startMode = useCallback((nextMode) => {
     if (!drawRef.current) return
@@ -247,12 +269,14 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
       draw.deleteAll()
     }
     syncMeasurements()
-  }, [syncMeasurements])
+    refreshHasArea()
+  }, [syncMeasurements, refreshHasArea])
 
   const clearDrawings = useCallback(() => {
     drawRef.current?.deleteAll()
     clearMeasurements()
-  }, [clearMeasurements])
+    refreshHasArea()
+  }, [clearMeasurements, refreshHasArea])
 
   /** Lo dibujado, en GeoJSON estándar. Es lo que consume la exportación. */
   const getDrawnFeatures = useCallback(
@@ -270,5 +294,6 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
     deleteSelected,
     clearDrawings,
     getDrawnFeatures,
+    hasArea,
   }
 }

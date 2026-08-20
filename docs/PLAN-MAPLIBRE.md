@@ -3,7 +3,7 @@
 Documento de trabajo. Marca las casillas a medida que avances y actualiza el
 estado al final de cada sesión, para que la siguiente sesión sepa dónde quedó.
 
-**Estado:** Fases 0 a 4 completas. Siguiente: Fase 5 (descarga por bbox).
+**Estado:** Fase 5 hecha salvo el DEM (decisión de Fabio). Siguiente: DEM, o Fase 6.
 **Última actualización:** 2026-08-20
 
 ---
@@ -105,14 +105,19 @@ tests de `utils/` son la red de seguridad de todo este trabajo.
 
 ## Fase 5 — Descarga por bbox (la función diferenciadora)
 
-- [ ] Dado el rectángulo dibujado, consultar cada capa activa con
-      `geometry` + `geometryType=esriGeometryEnvelope` + `f=geojson`
-- [ ] Recortar DEM al bbox (evaluar: OpenTopography API vs lectura por ventana
-      de COGs de Copernicus GLO-30 — la segunda no tiene cuota)
-- [ ] Empaquetar todo con `jszip`, incluyendo un `README.txt` generado con:
-      fuente de cada capa, URL del servicio, fecha de consulta, CRS, y nota
-      sobre alturas elipsoidales del DEM
-- [ ] La trazabilidad de ese README es lo que separa esto de un juguete
+- [x] Dado el polígono dibujado, consultar cada capa activa por su envolvente
+      (`geometryType=esriGeometryEnvelope`). Se reusa `fetchLayerFeatures` de la
+      Fase 2, así que la salida es GeoJSON aunque el cable vaya en `f=json`.
+- [~] Recortar DEM al bbox — **NO hecho, y a propósito.** Es la única casilla de
+      esta fase que queda abierta. Ver nota de sesión: la fuente del DEM es una
+      decisión por evaluar (que Fabio debe tomar) y no se puede probar desde el
+      entorno. El README ya reserva su sección y advierte de las alturas
+      elipsoidales; añadir el archivo es enchufar una función más al pipeline.
+- [x] Empaquetar todo con `jszip`: README.txt + el polígono dibujado
+      (`area.geojson`) + un `.geojson` y un `.kml` por capa. El README lleva
+      fuente, URL del servicio, fecha de consulta, número de registros, aviso de
+      recorte, los dos CRS y la nota del DEM elipsoidal.
+- [x] La trazabilidad de ese README es lo que separa esto de un juguete.
 
 ## Fase 6 — Nuevas entidades
 
@@ -366,6 +371,60 @@ en un segundo polígono la ficha desaparecía en lugar de cambiar. Ahora hay un
 único manejador de clic para todo el mapa, con `closeOnClick: false`, y el
 cierre lo decide el código: si el clic no cae sobre ninguna capa de la ANM,
 cierra; si cae, reemplaza el contenido.
+
+### Fase 5 — 2026-08-20 (sesión autónoma)
+
+Hecha de madrugada con autorización previa de Fabio para seguir con todas las
+fases. **La descarga por área ya funciona: dibujas un polígono, enciendes las
+capas que quieras y sale un ZIP con los archivos de esa área.** Es la ventaja
+competitiva del proyecto —"dibuja un cuadro y sal con los archivos"— y ya está
+en pie.
+
+**Qué trae el ZIP:** un `.geojson` y un `.kml` por cada capa encendida (lo que
+cae dentro de la envolvente del polígono), el propio polígono como
+`area.geojson`, y un `README.txt` con la trazabilidad completa: fuente de cada
+capa, URL exacta del servicio, fecha y hora de consulta en UTC, número de
+registros, aviso si el servicio recortó la respuesta, los dos CRS del proyecto
+(4686 para geometrías, 9377 para cálculos) y la advertencia de que las alturas
+de un DEM son elipsoidales. Ese README es lo que vuelve la descarga un insumo
+para un informe y no un archivo suelto sin procedencia.
+
+**Reutiliza todo lo de antes:** las consultas van por `fetchLayerFeatures` (Fase
+2), así que heredan el manejo de los errores HTTP-200 de ArcGIS, la detección de
+recorte y el descubrimiento de índices en runtime. El KML sale de `buildKml`
+(intacto desde antes de la migración). Nada de esto se reescribió.
+
+**El DEM recortado NO se hizo, y es una decisión, no un olvido.** El plan mismo
+deja la fuente del DEM "por evaluar" (OpenTopography, con cuota y clave, frente a
+los COG de Copernicus GLO-30, sin cuota pero con más trabajo de implementación).
+Esa elección es de Fabio, no mía, y además desde el entorno de desarrollo no se
+alcanza ninguna de las dos para probar que funcione. Meter código sin poder
+verificarlo y decidiendo por él una cosa que dejó abierta habría sido justo lo
+contrario de lo prudente. En su lugar: el pipeline de empaquetado está armado
+para que añadir el DEM sea enchufar una función más (una que devuelva el archivo
+del DEM recortado), el README ya tiene su sección diciendo que está pendiente, y
+la advertencia de alturas elipsoidales ya está escrita. Cuando Fabio decida la
+fuente, es un añadido acotado.
+
+**Detalle de UI que salió al verificar:** el botón "Descargar área" estaba al
+principio pegado bajo la barra de dibujo y se solapaba con el botón de la
+papelera —un clic en "Borrar" caía sobre el de descarga—. Lo delató la Fase 3 al
+reventar con un timeout de Playwright, no un fallo de lógica. Se movió a la
+columna de acciones de abajo a la izquierda (con Satélite/Relieve/3D), que es su
+sitio permanente; el banner de fase de arriba es temporal y no había que diseñar
+alrededor de él.
+
+**Verificación:** 16 comprobaciones en Chromium, **descargando el ZIP de verdad
+y abriéndolo** para revisar su contenido: que trae README + área + un archivo por
+capa en los dos formatos, que el README nombra cada servicio con su fecha y sus
+CRS y la nota del DEM, y que el GeoJSON descargado tiene polígonos reales con los
+atributos de la ANM. Que sin área dibujada el botón no aparece, y que sin capas
+encendidas avisa en vez de generar un ZIP vacío. Las fases 2, 3 y 4 siguen
+verdes (30, 24 y 21). 140 tests unitarios (19 nuevos, de `bboxDownload`).
+
+**Pendiente que arrastro desde la Fase 3 y sigo sin cerrar:** el GPS y la brújula
+360° (`useGeolocation`) no están portados a MapLibre. No son ninguna fase del
+plan, pero hacen falta antes de borrar el visor Leaflet en la Fase 7.
 
 ### Fase 4 — 2026-08-20
 

@@ -8,21 +8,33 @@ import { useMapInitializationGL } from "./hooks/map/useMapInitializationGL"
 import { useTerrainGL, EXAGGERATION_MAX, EXAGGERATION_MIN } from "./hooks/map/useTerrainGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
+import { useAreaDownloadGL } from "./hooks/map/useAreaDownloadGL"
 import { useExpedientSearchGL } from "./hooks/map/useExpedientSearchGL"
 import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } from "./utils/mapStyles"
 import { formatDegrees } from "./utils/mapUtils"
 import { ColorPicker } from "./components/ColorPicker"
 import { Button } from "@/components/ui/button"
-import { Box, MapIcon, MapPin, Mountain, Pentagon, Satellite, Spline, Trash2 } from "lucide-react"
+import {
+  Box,
+  Download,
+  Loader2,
+  MapIcon,
+  MapPin,
+  Mountain,
+  Pentagon,
+  Satellite,
+  Spline,
+  Trash2,
+} from "lucide-react"
 
 /**
  * Visor sobre MapLibre. Convive con MapComponent.jsx (Leaflet) a propósito: se
  * llega a él por la ruta /gl y se compara lado a lado con el visor de siempre
  * hasta que alcance a hacer lo mismo. Entonces el de Leaflet se borra.
  *
- * Estado: Fase 4 del plan (docs/PLAN-MAPLIBRE.md). Mapa base, las cuatro capas
- * de la ANM, búsqueda por expediente, dibujo con medición, exportación y
- * terreno 3D. Falta el GPS y la brújula.
+ * Estado: Fase 5 del plan (docs/PLAN-MAPLIBRE.md). Mapa base, las cuatro capas
+ * de la ANM, búsqueda por expediente, dibujo con medición, exportación, terreno
+ * 3D y descarga por área. Falta el GPS y la brújula, y el DEM recortado.
  *
  * Nota sobre la importación: maplibre-gl 6 dejó de tener exportación por
  * defecto. `import maplibregl from "maplibre-gl"` compila sin quejarse y
@@ -192,7 +204,16 @@ export default function MapComponentGL({
     startMode,
     deleteSelected,
     clearDrawings,
+    getDrawnFeatures,
+    hasArea,
   } = useDrawControlGL(mapRef, mapInstance)
+
+  const { isDownloading, downloadArea } = useAreaDownloadGL(
+    getDrawnFeatures,
+    layerVisibility,
+    setError,
+    setShowErrorBanner,
+  )
 
   const {
     is3D,
@@ -320,6 +341,26 @@ export default function MapComponentGL({
       <div ref={containerRef} className="absolute inset-0 h-full w-full z-0" />
 
       <div className="absolute bottom-4 left-4 z-10 flex flex-col space-y-2">
+        {/* La función diferenciadora: dibujar un polígono y salir con los
+            archivos de las capas encendidas dentro de esa área. Va en esta
+            columna de acciones del mapa, no junto a la barra de dibujo, para no
+            solaparse con ella; solo aparece cuando hay un área dibujada. */}
+        {hasArea && (
+          <Button
+            onClick={downloadArea}
+            disabled={isDownloading}
+            title="Descargar en un ZIP las capas encendidas dentro del área dibujada"
+            className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+          >
+            {isDownloading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            {isDownloading ? "Preparando…" : "Descargar área"}
+          </Button>
+        )}
+
         <Button onClick={toggleBaseLayer} className="bg-white text-black hover:bg-gray-200">
           {baseLayer === "osm" ? (
             <Satellite className="mr-2 h-4 w-4" />
@@ -394,7 +435,7 @@ export default function MapComponentGL({
       <DrawToolbar mode={mode} startMode={startMode} deleteSelected={deleteSelected} />
 
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 rounded bg-amber-100/95 px-3 py-1 text-xs text-amber-900 shadow-md">
-        MapLibre · Fase 4: capas ANM, búsqueda, dibujo y terreno 3D
+        MapLibre · Fase 5: descarga por área
       </div>
 
       <CursorCoordinates map={mapInstance} />
