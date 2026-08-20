@@ -3,7 +3,7 @@
 Documento de trabajo. Marca las casillas a medida que avances y actualiza el
 estado al final de cada sesión, para que la siguiente sesión sepa dónde quedó.
 
-**Estado:** Fase 0 completa. Siguiente: Fase 1 (mapa base en MapLibre).
+**Estado:** Fases 0 y 1 completas. Siguiente: Fase 2 (capas ANM).
 **Última actualización:** 2026-08-20
 
 ---
@@ -55,13 +55,16 @@ tests de `utils/` son la red de seguridad de todo este trabajo.
 
 ## Fase 1 — Mapa base en MapLibre
 
-- [ ] Rama `feat/maplibre`
-- [ ] `npm i maplibre-gl @mapbox/mapbox-gl-draw`
-- [ ] Nuevo `MapComponentGL.jsx` en paralelo al actual — **no borres el viejo
-      todavía**, se compara lado a lado
-- [ ] Estilo base: teselas OSM raster para empezar (simple), vectorial después
-- [ ] Portar `useMapInitialization` → `useMapInitializationGL`
-- [ ] Verificar: zoom, pan, escala, coordenadas del cursor
+- [x] Rama de trabajo (`claude/maplibre-fase-0-fc5six`, no `feat/maplibre`)
+- [x] `npm i maplibre-gl @mapbox/mapbox-gl-draw` — maplibre-gl 6.4.1,
+      mapbox-gl-draw 1.5.1. El de dibujo queda instalado sin usar hasta la Fase 3.
+- [x] Nuevo `MapComponentGL.jsx` en paralelo al actual — **no borres el viejo
+      todavía**, se compara lado a lado. Se llega por la ruta `/gl`.
+- [x] Estilo base: teselas OSM raster para empezar (simple), vectorial después.
+      En `utils/mapStyles.js`, como dato puro y con tests.
+- [x] Portar `useMapInitialization` → `useMapInitializationGL`
+- [x] Verificar: zoom, pan, escala, coordenadas del cursor — comprobado en
+      Chromium con Playwright, ver notas de sesión.
 
 ## Fase 2 — Capas ANM
 
@@ -151,3 +154,74 @@ cambiaron, decisiones que tomaste y por qué.)_
 - Se dejó `test_perf.js`, `benchmark.js`, `verify.py` y `.Jules/` como están:
   son ruido, pero borrarlos no es parte de la Fase 0 y no estorban a la
   migración.
+
+### Fase 1 — 2026-08-20
+
+**Cómo comparar.** `npm run dev` y se abren dos pestañas: `/` es el visor
+Leaflet de siempre, `/gl` es el nuevo sobre MapLibre. El panel lateral es el
+mismo en las dos; lo único que cambia es el motor del mapa. `components.jsx`
+recibe ahora una prop `engine` y carga uno u otro con `dynamic`, así que la
+página que no se visita ni siquiera descarga el motor que no usa.
+
+**Decisiones y trampas encontradas:**
+
+1. **maplibre-gl 6 no tiene exportación por defecto.** `import maplibregl from
+   "maplibre-gl"` compila sin una sola queja y devuelve `undefined`; el error
+   solo salta al construir el mapa. Hay que importar por nombre:
+   `import { Map as MapLibreMap } from "maplibre-gl"`. Casi todos los tutoriales
+   que hay en internet son de la versión 3 o 4 y usan la forma vieja.
+
+2. **El CSS de MapLibre pisa a Tailwind y el mapa colapsaba a 0 px de alto.**
+   Al construir el mapa, MapLibre le añade al contenedor la clase
+   `.maplibregl-map`, cuyo CSS declara `position: relative`. Esa regla y la
+   clase `absolute` de Tailwind tienen la misma especificidad, así que gana la
+   que se cargue de último — la de MapLibre. Con el contenedor en `relative`,
+   `inset-0` deja de dimensionar nada y el div queda sin altura. Se arregla
+   poniendo también `h-full w-full`, que funciona gane quien gane. Leaflet no
+   sufría esto porque su CSS no toca `position` en el contenedor. Costó un rato
+   porque el síntoma era raro: el mapa aparecía, pero recortado a una franja.
+
+3. **Alternar mapa/satélite NO se hace con `setStyle()`.** `setStyle` reemplaza
+   el estilo entero, y con él se irían las capas de la ANM, lo dibujado por el
+   usuario y el resultado de la búsqueda. En vez de eso, las dos capas base se
+   declaran desde el arranque y el botón solo cambia su `visibility`. Como la
+   capa oculta no se pinta, tampoco pide teselas: no cuesta nada tenerla ahí.
+   Esto hay que respetarlo al agregar capas en la Fase 2.
+
+4. **El bug del mapa en gris de Leaflet desaparece solo.** En Leaflet había que
+   poner `maxNativeZoom: 19` a mano o la capa dejaba de pedir teselas al pasarse
+   de zoom. En MapLibre eso se declara en la fuente (`maxzoom: 19`) y el motor
+   estira la última tesela real. Un problema menos.
+
+5. **Coordenadas del cursor:** se agregaron abajo a la derecha (no existían en
+   el visor Leaflet). Van en su propio componente porque el ratón dispara
+   eventos decenas de veces por segundo y así solo se repinta ese recuadro. Se
+   usa `lngLat.wrap()`; sin eso, arrastrar dando la vuelta al mundo muestra
+   longitudes como -434°.
+
+6. **El satélite sigue siendo el de Google**, heredado tal cual para que la
+   comparación sea justa. Pendiente de decidir: ese uso de las teselas de Google
+   está fuera de sus condiciones de servicio. Cuando toque el terreno 3D
+   conviene evaluar Esri World Imagery, que sí publica condiciones de uso.
+
+**Qué se verificó y cómo.** Con Chromium y Playwright, sobre `/gl`:
+lienzo de 1280×800; zoom con la rueda (la barra de escala pasó de 200 km a
+100 km); arrastre (la coordenada bajo el mismo punto de la pantalla cambió de
+4°N 72°O a 2,13°N 68,26°O); control de zoom y brújula; barra de escala;
+atribución; recuadro de coordenadas del cursor. El botón de satélite se
+comprobó por red, no por la etiqueta: en modo mapa se pidieron 108 teselas de
+OSM y 0 de Google, y tras pulsarlo, 0 de OSM y 35 de Google. Cero errores de
+JavaScript. También se comprobó que `/` sigue funcionando y que ahí no se carga
+MapLibre.
+
+**Limitación del entorno:** el proxy de la sesión no deja salir a
+`tile.openstreetmap.org` ni a los servidores de Google, así que las teselas
+reales no se pudieron ver. Se sirvieron teselas sintéticas para confirmar que
+MapLibre las pinta. **Falta mirar el mapa con teselas de verdad en tu máquina**
+(`npm run dev` y abrir `/gl`).
+
+**Lo que todavía no hace `/gl`:** capas de la ANM, búsqueda por expediente,
+dibujo, medición, GPS y brújula. Los métodos que el panel lateral llama sobre el
+mapa (`clearDrawings`, `clearSearchResult`, `addVertices`, `removeVertices`)
+existen como funciones vacías para que el botón «Borrar» no reviente; las
+fases 2 y 3 los llenan.

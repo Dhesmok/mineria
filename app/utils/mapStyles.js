@@ -1,0 +1,106 @@
+/**
+ * Estilo base del mapa en MapLibre.
+ *
+ * MapLibre no arma el mapa a punta de llamadas como Leaflet: recibe un objeto
+ * JSON que describe de dónde salen las teselas y cómo se pintan. Ese objeto es
+ * el "estilo". Vive aquí, aparte del componente, porque es un dato puro: se
+ * puede revisar con un test sin abrir un navegador ni una tarjeta gráfica.
+ *
+ * Ojo con el orden de las coordenadas: MapLibre usa [longitud, latitud] y
+ * Leaflet usa [latitud, longitud]. Es la fuente número uno de mapas que
+ * aparecen en medio del océano Índico al portar código de uno a otro.
+ */
+
+/** Centro y zoom iniciales, los mismos del visor Leaflet pero en orden [lon, lat]. */
+export const INITIAL_CENTER = [-72, 4]
+export const INITIAL_ZOOM = 5
+
+/**
+ * Hasta dónde deja acercarse el mapa. Ninguna fuente publica teselas propias a
+ * z22; de ahí para arriba MapLibre estira la última tesela real. Ver la nota de
+ * `maxzoom` más abajo.
+ */
+export const MAX_ZOOM = 22
+
+/**
+ * Identificadores de las dos capas base. Se toca la visibilidad de estas capas
+ * por nombre, así que conviene tenerlos en un solo sitio.
+ */
+export const BASE_LAYERS = {
+  osm: "base-osm",
+  satellite: "base-satellite",
+}
+
+/**
+ * OSM ya no necesita repartir las peticiones entre a/b/c.tile: eso era un truco
+ * para HTTP/1.1, que limitaba las descargas simultáneas por dominio. MapLibre
+ * habla HTTP/2, donde el truco no aporta nada y solo multiplica las conexiones.
+ *
+ * `maxzoom: 19` dice "no existen teselas más allá de z19". MapLibre entonces
+ * estira la tesela de z19 al acercarse más. Esto elimina de raíz el bug que
+ * había en Leaflet, donde volver de satélite a OSM desde un zoom alto dejaba el
+ * mapa en gris porque la capa simplemente dejaba de pedir teselas.
+ */
+const OSM_SOURCE = {
+  type: "raster",
+  tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+  tileSize: 256,
+  maxzoom: 19,
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+}
+
+/**
+ * Satélite de Google, heredado tal cual del visor Leaflet para que la
+ * comparación lado a lado sea justa. `lyrs=s,h` es satélite con nombres y vías
+ * encima. Los cuatro subdominios mt0..mt3 sí se conservan porque el reparto lo
+ * hace el propio servicio de Google, no el navegador.
+ */
+const SATELLITE_SOURCE = {
+  type: "raster",
+  tiles: [
+    "https://mt0.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
+    "https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
+    "https://mt2.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
+    "https://mt3.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
+  ],
+  tileSize: 256,
+  maxzoom: 21,
+  attribution: "© Google",
+}
+
+/**
+ * Construye el estilo con las dos capas base cargadas desde el principio y una
+ * de ellas oculta.
+ *
+ * La alternativa obvia —cambiar el estilo entero al alternar mapa/satélite— es
+ * una trampa: `setStyle()` reemplaza el estilo completo, y con él se van todas
+ * las capas de la ANM, lo dibujado por el usuario y el resultado de la
+ * búsqueda. Teniendo las dos capas base declaradas desde el arranque, alternar
+ * es solo prender una y apagar la otra, y nada más del mapa se entera.
+ *
+ * El costo es que el navegador conoce las dos fuentes desde el inicio; como la
+ * capa oculta no se pinta, tampoco pide teselas. Es decir: no cuesta nada.
+ *
+ * @param {"osm"|"satellite"} initialBaseLayer capa visible al arrancar
+ */
+export const createBaseStyle = (initialBaseLayer = "osm") => ({
+  version: 8,
+  sources: {
+    osm: OSM_SOURCE,
+    satellite: SATELLITE_SOURCE,
+  },
+  layers: [
+    {
+      id: BASE_LAYERS.osm,
+      type: "raster",
+      source: "osm",
+      layout: { visibility: initialBaseLayer === "osm" ? "visible" : "none" },
+    },
+    {
+      id: BASE_LAYERS.satellite,
+      type: "raster",
+      source: "satellite",
+      layout: { visibility: initialBaseLayer === "satellite" ? "visible" : "none" },
+    },
+  ],
+})

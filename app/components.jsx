@@ -20,10 +20,20 @@ import {
 } from "./utils/tenureLayers"
 import { debounce } from "@/lib/utils"
 
-const MapComponent = dynamic(() => import("./MapComponent"), {
-  ssr: false,
-  loading: () => <p>Cargando mapa...</p>,
-})
+// Los dos motores de mapa conviven mientras dura la migración a MapLibre. La
+// ruta / sigue sirviendo el visor Leaflet de siempre y /gl sirve el nuevo, para
+// poder abrirlos en dos pestañas y compararlos. `dynamic` los carga bajo
+// demanda, así que la página que no se visita no descarga su motor.
+const MAP_ENGINES = {
+  leaflet: dynamic(() => import("./MapComponent"), {
+    ssr: false,
+    loading: () => <p>Cargando mapa...</p>,
+  }),
+  maplibre: dynamic(() => import("./MapComponentGL"), {
+    ssr: false,
+    loading: () => <p>Cargando mapa...</p>,
+  }),
+}
 
 // Definición de los sistemas de coordenadas
 const epsg4686 = "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs"
@@ -57,7 +67,8 @@ const LayerControl = ({ id, label, checked, onCheckedChange, opacity, onOpacityC
   </>
 )
 
-export default function Component() {
+export default function Component({ engine = "leaflet" }) {
+  const MapComponent = MAP_ENGINES[engine] ?? MAP_ENGINES.leaflet
   const [showSidebar, setShowSidebar] = useState(true)
   const [showTable, setShowTable] = useState(false)
   const [coordinates, setCoordinates] = useState([])
