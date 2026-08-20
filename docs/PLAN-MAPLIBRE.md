@@ -314,6 +314,52 @@ aparecen a partir de z15 y desaparecen con su capa; que el slider cambia la
 opacidad sin volver a consultar; que las cuatro capas conviven. Y lo mismo sobre
 una compilación de producción.
 
+### Datos reales de la ANM — 2026-08-20
+
+Fabio abrió los servicios desde su máquina y pegó respuestas reales. De ahí
+salieron dos cosas.
+
+**1. Los tres servicios sí responden a `f=geojson`.** Aun así **se decidió no
+cambiar** y seguir pidiendo `f=json` con conversión propia. Motivo: con
+`f=geojson` es el servidor de la ANM quien traduce las geometrías, y ahí está
+justo la trampa 4 de `CLAUDE.md` —polígonos con huecos y multiparte—. Las
+muestras obtenidas eran todas de un solo anillo, así que no prueban nada sobre
+huecos. Cambiar quién traduce, en el punto exacto donde el proyecto ya tuvo un
+bug, a cambio de quitar una dependencia, no compensa. Queda como posible
+simplificación futura: `scripts/probar-geojson.mjs` repite la comprobación, y si
+alguna vez se verifica el caso de los huecos, basta cambiar `f: "json"` por
+`f: "geojson"` en `anmLayers.js` y dejar de llamar a `arcgisResponseToGeoJSON`.
+
+Confirmado de paso: los servicios sí mandan `exceededTransferLimit`, así que el
+aviso de respuesta recortada funciona con el servicio real y no solo con el
+simulacro.
+
+**2. Cada capa bautiza sus campos a su manera, y la ficha emergente lo ignoraba.**
+La capa de Subcontratos no trae `TITULO_ESTADO` ni `SOLICITANTES_O_TITULARES`
+sino `ESTADO` y `NOMBRE_DE_TITULAR`; tampoco `PAR`, sino `GRUPO_DE_TRABAJO`. La
+ficha mostraba 10 de 13 filas en "N/A", tres de ellas teniendo el dato al lado
+con otro nombre —incluido el nombre del titular—. Era un fallo previo a la
+migración: la ficha es código compartido, así que el visor Leaflet lo tiene
+igual. Arreglado con respaldos en `createPopupContent`, con los nombres
+comprobados contra respuestas reales y tests que usan esas mismas muestras.
+
+`FECHA_DE_INSCRIPCION` **no** se usa como respaldo de `FECHA_DE_SOLICITUD`
+aunque tentara: inscribir y solicitar son actos distintos, y etiquetar mal una
+fecha en un expediente minero es peor que no mostrarla. Va en su propia fila, y
+solo cuando existe.
+
+Pendiente decidido pero no hecho: las capas de Subcontratos y de tenencia traen
+`DEPARTAMENTOS` y `MUNICIPIOS`, que hoy no se muestran en ningún lado. Se dejó
+fuera a propósito; es decisión de producto, no de código.
+
+**3. Un bug de las fichas que solo salió al probar dos clics seguidos.** Los
+popups de MapLibre se cierran solos al siguiente clic en el mapa, y ese cierre
+ocurría *después* de que el manejador pusiera el contenido nuevo: al hacer clic
+en un segundo polígono la ficha desaparecía en lugar de cambiar. Ahora hay un
+único manejador de clic para todo el mapa, con `closeOnClick: false`, y el
+cierre lo decide el código: si el clic no cae sobre ninguna capa de la ANM,
+cierra; si cae, reemplaza el contenido.
+
 **Limitación, la misma de la Fase 1:** el proxy de la sesión no deja salir a los
 servidores de la ANM, así que todo esto se probó contra un simulacro que imita
 la forma de las respuestas de ArcGIS. **Falta abrir `/gl` en tu máquina, encender

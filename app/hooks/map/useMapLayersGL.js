@@ -237,18 +237,42 @@ export const useMapLayersGL = (
   useEffect(() => {
     if (!mapInstance) return
 
-    const popup = new Popup({ maxWidth: "320px" })
-    const handlers = []
+    // `closeOnClick: false` y un único manejador de clic para todo el mapa, en
+    // vez de uno por capa. No es una preferencia de estilo: con el
+    // comportamiento por defecto, un popup abierto se cierra solo al siguiente
+    // clic en el mapa, y ese cierre ocurría *después* de que nuestro manejador
+    // hubiera puesto el contenido nuevo. Resultado: al hacer clic en un segundo
+    // polígono la ficha desaparecía en lugar de cambiar, y había que volver a
+    // hacer clic. Aquí el cierre lo decidimos nosotros y el orden es
+    // determinista.
+    const popup = new Popup({ maxWidth: "320px", closeOnClick: false })
 
+    const fillLayerIds = () =>
+      ANM_LAYERS.map(({ key }) => anmFillLayerId(key)).filter((id) => mapInstance.getLayer(id))
+
+    const onClick = (event) => {
+      // Solo se consultan las capas de la ANM: sin esta lista, el clic también
+      // encontraría las teselas del mapa base.
+      const hits = mapInstance.queryRenderedFeatures(event.point, { layers: fillLayerIds() })
+
+      if (hits.length === 0) {
+        popup.remove()
+        return
+      }
+
+      // El primero es el de más arriba en el apilamiento, que es el que el
+      // usuario ve y por tanto el que cree estar pulsando.
+      popup.setLngLat(event.lngLat).setHTML(createPopupContent(hits[0].properties)).addTo(mapInstance)
+    }
+
+    mapInstance.on("click", onClick)
+
+    // El cursor sí va por capa: es lo que avisa de que un polígono responde.
+    const cursorHandlers = []
     ANM_LAYERS.forEach(({ key }) => {
       const layerId = anmFillLayerId(key)
       if (!mapInstance.getLayer(layerId)) return
 
-      const onClick = (event) => {
-        const feature = event.features?.[0]
-        if (!feature) return
-        popup.setLngLat(event.lngLat).setHTML(createPopupContent(feature.properties)).addTo(mapInstance)
-      }
       const onEnter = () => {
         mapInstance.getCanvas().style.cursor = "pointer"
       }
@@ -256,15 +280,14 @@ export const useMapLayersGL = (
         mapInstance.getCanvas().style.cursor = ""
       }
 
-      mapInstance.on("click", layerId, onClick)
       mapInstance.on("mouseenter", layerId, onEnter)
       mapInstance.on("mouseleave", layerId, onLeave)
-      handlers.push([layerId, onClick, onEnter, onLeave])
+      cursorHandlers.push([layerId, onEnter, onLeave])
     })
 
     return () => {
-      handlers.forEach(([layerId, onClick, onEnter, onLeave]) => {
-        mapInstance.off("click", layerId, onClick)
+      mapInstance.off("click", onClick)
+      cursorHandlers.forEach(([layerId, onEnter, onLeave]) => {
         mapInstance.off("mouseenter", layerId, onEnter)
         mapInstance.off("mouseleave", layerId, onLeave)
       })

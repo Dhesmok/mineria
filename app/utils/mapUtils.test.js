@@ -227,4 +227,66 @@ describe("createPopupContent", () => {
     expect(() => createPopupContent()).not.toThrow()
     expect(createPopupContent()).toContain("N/A")
   })
+
+  // Los nombres de campo de abajo salieron de respuestas reales de los servicios
+  // de la ANM, no de suposiciones. Cada capa bautiza sus campos a su manera.
+  describe("campos con distinto nombre según la capa", () => {
+    // Muestra real de la capa de Subcontratos.
+    const subcontrato = {
+      CODIGO_EXPEDIENTE: "SF_50",
+      AREA_HA: 2.1055,
+      ESTADO: "Activo",
+      MINERALES: "MINERAL DE COBRE",
+      NOMBRE_DE_TITULAR: "MINA SARCO S.A.S.",
+      GRUPO_DE_TRABAJO: "PAR CARTAGENA",
+      FECHA_DE_INSCRIPCION: 1525350134000,
+    }
+
+    it("muestra el titular aunque la capa lo llame NOMBRE_DE_TITULAR", () => {
+      // Es el dato que uno busca primero al hacer clic, y salía como N/A.
+      expect(createPopupContent(subcontrato)).toContain("MINA SARCO S.A.S.")
+    })
+
+    it("muestra el estado aunque la capa lo llame ESTADO", () => {
+      expect(createPopupContent(subcontrato)).toMatch(/Estado del Título:<\/strong>\s*Activo/)
+    })
+
+    it("muestra el PAR aunque la capa lo llame GRUPO_DE_TRABAJO", () => {
+      expect(createPopupContent(subcontrato)).toMatch(/PAR:<\/strong>\s*PAR CARTAGENA/)
+    })
+
+    it("no disfraza la fecha de inscripción de fecha de solicitud", () => {
+      // Inscribir y solicitar son actos distintos. Usar una como respaldo de la
+      // otra pondría una fecha bajo una etiqueta que no le corresponde.
+      const html = createPopupContent(subcontrato)
+      expect(html).toContain("Fecha de Inscripción")
+      expect(html).toMatch(/Fecha de Solicitud:<\/strong>\s*N\/A/)
+    })
+
+    it("no añade la fila de inscripción a las capas que no la traen", () => {
+      // Si no, las otras tres capas ganarían un "N/A" más.
+      expect(createPopupContent({ TENURE_ID: "RCS-08061" })).not.toContain("Fecha de Inscripción")
+    })
+
+    it("sigue prefiriendo los nombres de las capas de tenencia", () => {
+      // Muestra real de la capa de títulos: aquí no debe entrar ningún respaldo.
+      const html = createPopupContent({
+        TENURE_ID: "RCS-08061",
+        TITULO_ESTADO: "Solicitud en evaluación",
+        SOLICITANTES_O_TITULARES: "(58832) METALS CONSULTING SAS",
+        ESTADO: "no debería aparecer",
+        NOMBRE_DE_TITULAR: "tampoco",
+      })
+
+      expect(html).toContain("Solicitud en evaluación")
+      expect(html).toContain("METALS CONSULTING SAS")
+      expect(html).not.toContain("no debería aparecer")
+      expect(html).not.toContain("tampoco")
+    })
+
+    it("convierte las fechas en milisegundos que entrega el servicio", () => {
+      // FECHA_DE_SOLICITUD llega como 1488788145000, no como texto.
+      expect(createPopupContent({ FECHA_DE_SOLICITUD: 1488788145000 })).toContain("06/03/2017")
+    })
+  })
 })
