@@ -11,6 +11,15 @@
  * aparecen en medio del océano Índico al portar código de uno a otro.
  */
 
+import {
+  ANM_LAYERS,
+  anmFillLayerId,
+  anmLineLayerId,
+  anmSourceId,
+  emptyFeatureCollection,
+  LAYERS_MIN_ZOOM,
+} from "./anmLayers"
+
 /** Centro y zoom iniciales, los mismos del visor Leaflet pero en orden [lon, lat]. */
 export const INITIAL_CENTER = [-72, 4]
 export const INITIAL_ZOOM = 5
@@ -88,6 +97,7 @@ export const createBaseStyle = (initialBaseLayer = "osm") => ({
   sources: {
     osm: OSM_SOURCE,
     satellite: SATELLITE_SOURCE,
+    ...anmSources(),
   },
   layers: [
     {
@@ -102,5 +112,49 @@ export const createBaseStyle = (initialBaseLayer = "osm") => ({
       source: "satellite",
       layout: { visibility: initialBaseLayer === "satellite" ? "visible" : "none" },
     },
+    ...anmLayers(),
   ],
 })
+
+/**
+ * Las cuatro capas de la ANM, declaradas vacías desde el arranque.
+ *
+ * Mismo razonamiento que con las capas base: crear y destruir capas al vuelo
+ * obliga a reconstruirlas en el orden correcto cada vez, y en MapLibre el orden
+ * de la lista es el orden de apilamiento. Declarándolas de una vez, encender una
+ * capa es cambiar su visibilidad y darle datos, y ninguna se cuela por debajo de
+ * otra según el orden en que el usuario pulse los interruptores.
+ *
+ * Cada capa necesita dos entradas: `fill` pinta el relleno y `line` el contorno.
+ * MapLibre no tiene un "polígono con borde" como Leaflet; son dos cosas
+ * distintas, y eso es justamente lo que permite que el slider de opacidad afecte
+ * solo al relleno y deje el contorno nítido, que es como se comportaba el visor
+ * anterior.
+ */
+const anmSources = () =>
+  Object.fromEntries(
+    ANM_LAYERS.map(({ key }) => [
+      anmSourceId(key),
+      { type: "geojson", data: emptyFeatureCollection() },
+    ]),
+  )
+
+const anmLayers = () =>
+  ANM_LAYERS.flatMap(({ key, fillColor, lineColor }) => [
+    {
+      id: anmFillLayerId(key),
+      type: "fill",
+      source: anmSourceId(key),
+      minzoom: LAYERS_MIN_ZOOM,
+      layout: { visibility: "none" },
+      paint: { "fill-color": fillColor, "fill-opacity": 0.6 },
+    },
+    {
+      id: anmLineLayerId(key),
+      type: "line",
+      source: anmSourceId(key),
+      minzoom: LAYERS_MIN_ZOOM,
+      layout: { visibility: "none" },
+      paint: { "line-color": lineColor, "line-width": 2 },
+    },
+  ])

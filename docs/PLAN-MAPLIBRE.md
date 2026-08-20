@@ -3,7 +3,7 @@
 Documento de trabajo. Marca las casillas a medida que avances y actualiza el
 estado al final de cada sesión, para que la siguiente sesión sepa dónde quedó.
 
-**Estado:** Fases 0 y 1 completas. Siguiente: Fase 2 (capas ANM).
+**Estado:** Fases 0, 1 y 2 completas. Siguiente: Fase 3 (dibujo y exportación).
 **Última actualización:** 2026-08-20
 
 ---
@@ -68,14 +68,17 @@ tests de `utils/` son la red de seguridad de todo este trabajo.
 
 ## Fase 2 — Capas ANM
 
-- [ ] Portar `useMapLayers`. Las capas ArcGIS `MapServer` se consumen como
-      `raster` source vía `export?f=image` (rápido, no interactivo) o como
-      `geojson` source vía `/query?f=geojson` (interactivo, más pesado)
-- [ ] Decidir por capa: títulos y solicitudes probablemente GeoJSON con filtro
-      por bbox del viewport, para poder hacer clic e inspeccionar
-- [ ] Etiquetas con `symbol` layers de MapLibre (reemplaza `mapLabels.js` en su
-      parte de render, la lógica de qué texto mostrar se conserva)
-- [ ] Verificar que `findTenureLayerNumbers()` sigue funcionando sin cambios
+- [x] Portar `useMapLayers` → `useMapLayersGL`
+- [x] Decidir por capa: **las cuatro van como GeoJSON** con filtro por bbox del
+      viewport. Raster habría sido más rápido, pero se pierden el clic, las
+      etiquetas y el slider de opacidad; sería un retroceso frente a Leaflet.
+      Se pide `f=json` (formato Esri) y se convierte con `arcgisToGeoJSON`, no
+      `f=geojson` — ver notas de sesión.
+- [x] Etiquetas — con marcadores HTML, **no** con `symbol` layers. Ver notas de
+      sesión: `symbol` exige servir archivos de glifos. La lógica de qué texto
+      mostrar y dónde anclarlo se conserva intacta desde `mapUtils`.
+- [x] Verificar que `findTenureLayerNumbers()` sigue funcionando sin cambios —
+      se usa tal cual, sin tocar una línea.
 
 ## Fase 3 — Dibujo y exportación
 
@@ -225,3 +228,95 @@ dibujo, medición, GPS y brújula. Los métodos que el panel lateral llama sobre
 mapa (`clearDrawings`, `clearSearchResult`, `addVertices`, `removeVertices`)
 existen como funciones vacías para que el botón «Borrar» no reviente; las
 fases 2 y 3 los llenan.
+
+### Fase 2 — 2026-08-20
+
+**Lo gordo de esta fase no fue portar las capas, fue un fallo silencioso de
+MapLibre bajo Next.** Vale la pena leerlo entero porque volverá a aparecer en
+cualquier cosa que use fuentes GeoJSON: el dibujo (Fase 3), los resultados de
+búsqueda y el terreno (Fase 4).
+
+1. **El worker de MapLibre no arrancaba, y sin él las capas nunca se dibujan.**
+   MapLibre le pasa a un *web worker* (un hilo aparte del navegador) el trabajo
+   de convertir el GeoJSON en teselas. Para encontrar el archivo de ese worker
+   usa `import.meta.url`, dando por hecho que el paquete se sirve tal cual está
+   en disco. Webpack —el empaquetador que usa Next— reescribe ese valor, la
+   búsqueda falla y el worker no arranca.
+
+   El síntoma fue de los peores posibles: **ni un error en consola**. El mapa
+   base se veía perfecto (las teselas raster no pasan por el worker), las
+   consultas a la ANM salían y volvían bien, los datos llegaban completos a la
+   fuente, y hasta las etiquetas aparecían en su sitio. Solo faltaban los
+   polígonos. Se localizó comparando qué sí y qué no funcionaba: todo lo que
+   pasa por el worker estaba muerto, todo lo demás vivo.
+
+   **Solución:** `scripts/copy-maplibre-worker.mjs` copia el worker a `public/`
+   antes de cada `npm run dev` y cada `npm run build`, y el visor le indica la
+   dirección con `setWorkerUrl()`. Se copian dos archivos porque el worker
+   importa `maplibre-gl-shared.mjs` por ruta relativa. No se versionan, para que
+   no queden desfasados respecto a la versión instalada.
+
+   **Corolario:** nunca esperes a los eventos `load` ni a `isStyleLoaded()` de
+   MapLibre. Ambos exigen que *todas* las fuentes terminen de cargar; con una
+   sola fuente lenta o caída no llegan nunca. El visor usa `styledata`, que solo
+   depende del estilo. Esto ya se corrigió también en el arranque de la Fase 1.
+
+2. **Se pide `f=json`, no `f=geojson`.** El plan sugería GeoJSON nativo, que
+   existe en ArcGIS Server desde 10.4 y sería más directo. Pero no hay forma de
+   saber qué versión corre la ANM, y desde esta sesión no se alcanza el servicio
+   para probarlo. `f=json` es lo que usa esri-leaflet, es decir lo único que se
+   sabe que funciona hoy contra estos servidores. La conversión la hace
+   `@esri/arcgis-to-geojson-utils`, la utilidad oficial de Esri que esri-leaflet
+   usa por dentro; resuelve la parte espinosa, que es que Esri mete todos los
+   anillos de un multipolígono en una lista plana y distingue contornos de
+   huecos por el sentido de giro. **Si algún día compruebas que el servicio
+   responde a `f=geojson`, esto se puede simplificar.**
+
+3. **Las cuatro capas van como GeoJSON, ninguna como raster.** Raster sería más
+   rápido, pero se pierden el clic para ver la ficha, las etiquetas y el slider
+   de opacidad. Sería un retroceso frente al visor Leaflet.
+
+4. **Etiquetas con marcadores HTML, no con `symbol` layers.** Para dibujar texto
+   MapLibre no usa las fuentes del sistema, sino archivos de glifos precocinados
+   (`.pbf`) que hay que servir desde algún sitio. Las opciones eran depender de
+   un servidor público ajeno o montar un proceso de generación de fuentes, y
+   ninguna merecía frenar la fase. Con marcadores HTML el resultado es idéntico
+   al del visor Leaflet y se reutiliza el CSS que ya existía. Lo que se pierde:
+   `symbol` esconde solo las etiquetas que se pisan entre sí. Leaflet tampoco lo
+   hacía, así que no es un retroceso, pero es la mejora pendiente si algún día
+   las etiquetas se ven amontonadas.
+
+5. **Aviso nuevo que no existía en Leaflet:** cuando ArcGIS recorta la respuesta
+   (devuelve solo las primeras N features y se calla), ahora sale un aviso. Sin
+   él el usuario creería estar viendo todos los títulos del área y podría sacar
+   conclusiones sobre una zona a partir de datos incompletos.
+
+6. **Las capas se declaran vacías en el estilo desde el arranque**, igual que
+   las capas base, y el hook solo les cambia visibilidad, opacidad y datos. Así
+   el orden de apilamiento no depende de en qué orden pulse el usuario los
+   interruptores. Cada capa son dos entradas, `fill` y `line`: MapLibre no tiene
+   un "polígono con borde" como Leaflet, y esa separación es justo lo que
+   permite que el slider afecte solo al relleno.
+
+7. **`__mapa` en la consola del navegador.** En desarrollo el visor deja la
+   instancia del mapa en `window.__mapa`, para poder preguntarle cosas
+   (`__mapa.getZoom()`, `__mapa.getStyle()`) sin instrumentar el código. En la
+   versión publicada no existe: se comprobó contra una compilación de producción.
+
+**Qué se verificó.** 30 comprobaciones automatizadas en Chromium contra un
+simulacro del servicio ArcGIS, más los tests unitarios. Entre ellas: que no se
+consulta nada con las capas apagadas; que por debajo de z10 avisa en vez de
+consultar; que los índices de capa se descubren en runtime (el simulacro los
+publica en 2 y 5, no en 3 y 4, justamente para que algo fijo se caiga); que la
+consulta lleva el recuadro visible como envelope; que los polígonos se teselan y
+se pintan; que el clic abre la ficha con los atributos; que las etiquetas
+aparecen a partir de z15 y desaparecen con su capa; que el slider cambia la
+opacidad sin volver a consultar; que las cuatro capas conviven. Y lo mismo sobre
+una compilación de producción.
+
+**Limitación, la misma de la Fase 1:** el proxy de la sesión no deja salir a los
+servidores de la ANM, así que todo esto se probó contra un simulacro que imita
+la forma de las respuestas de ArcGIS. **Falta abrir `/gl` en tu máquina, encender
+las cuatro capas sobre una zona con títulos y confirmar que se ven igual que
+en `/`.** Es lo único que puede confirmar que el servicio real responde como se
+supone.

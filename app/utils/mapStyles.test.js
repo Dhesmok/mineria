@@ -1,6 +1,14 @@
 import { createBaseStyle, BASE_LAYERS, INITIAL_CENTER, MAX_ZOOM } from "./mapStyles"
+import {
+  ANM_LAYERS,
+  anmFillLayerId,
+  anmLineLayerId,
+  anmSourceId,
+  LAYERS_MIN_ZOOM,
+} from "./anmLayers"
 
 const layerById = (style, id) => style.layers.find((layer) => layer.id === id)
+const indexOfLayer = (style, id) => style.layers.findIndex((layer) => layer.id === id)
 
 describe("createBaseStyle", () => {
   it("declara las dos capas base desde el arranque", () => {
@@ -49,5 +57,65 @@ describe("createBaseStyle", () => {
     expect(lon).toBeLessThan(0)
     expect(lat).toBeGreaterThan(0)
     expect(lat).toBeLessThan(15)
+  })
+})
+
+describe("capas de la ANM en el estilo", () => {
+  it("declara las cuatro capas vacías y apagadas desde el arranque", () => {
+    // Se declaran de una vez para que el orden de apilamiento no dependa de en
+    // qué orden pulse el usuario los interruptores.
+    const style = createBaseStyle()
+
+    ANM_LAYERS.forEach(({ key }) => {
+      expect(style.sources[anmSourceId(key)].data.features).toEqual([])
+      expect(layerById(style, anmFillLayerId(key)).layout.visibility).toBe("none")
+      expect(layerById(style, anmLineLayerId(key)).layout.visibility).toBe("none")
+    })
+  })
+
+  it("separa relleno y contorno", () => {
+    // Es lo que permite que el slider de opacidad afecte solo al relleno y deje
+    // el contorno nítido, como hacía el visor Leaflet.
+    const style = createBaseStyle()
+
+    ANM_LAYERS.forEach(({ key, fillColor, lineColor }) => {
+      expect(layerById(style, anmFillLayerId(key)).paint["fill-color"]).toBe(fillColor)
+      expect(layerById(style, anmLineLayerId(key)).paint["line-color"]).toBe(lineColor)
+    })
+  })
+
+  it("no dibuja las capas por debajo del zoom mínimo", () => {
+    // A zoom bajo estas capas traen decenas de miles de polígonos: ArcGIS corta
+    // la respuesta y el mapa mostraba un subconjunto incompleto sin avisar.
+    const style = createBaseStyle()
+
+    ANM_LAYERS.forEach(({ key }) => {
+      expect(layerById(style, anmFillLayerId(key)).minzoom).toBe(LAYERS_MIN_ZOOM)
+      expect(layerById(style, anmLineLayerId(key)).minzoom).toBe(LAYERS_MIN_ZOOM)
+    })
+  })
+
+  it("deja las capas de la ANM por encima del mapa base", () => {
+    // En MapLibre el orden de la lista es el orden de apilamiento: una capa base
+    // declarada después taparía los títulos por completo.
+    const style = createBaseStyle()
+    const lastBase = Math.max(
+      indexOfLayer(style, BASE_LAYERS.osm),
+      indexOfLayer(style, BASE_LAYERS.satellite),
+    )
+
+    ANM_LAYERS.forEach(({ key }) => {
+      expect(indexOfLayer(style, anmFillLayerId(key))).toBeGreaterThan(lastBase)
+    })
+  })
+
+  it("mantiene el contorno de cada capa por encima de su propio relleno", () => {
+    const style = createBaseStyle()
+
+    ANM_LAYERS.forEach(({ key }) => {
+      expect(indexOfLayer(style, anmLineLayerId(key))).toBeGreaterThan(
+        indexOfLayer(style, anmFillLayerId(key)),
+      )
+    })
   })
 })

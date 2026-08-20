@@ -1,11 +1,10 @@
 import L from "leaflet"
 import { escapeXml, getFeatureLabel, getLabelCoordinates } from "./mapUtils"
 
-// Por debajo de este zoom las etiquetas se apiñan y son ilegibles. No hay límite
-// superior: el satélite llega a z22 y antes desaparecían al pasar de z19.
-export const LABELS_MIN_ZOOM = 15
-
-export const shouldShowLabels = (zoom) => zoom >= LABELS_MIN_ZOOM
+// Se mudaron a mapUtils, que no depende de Leaflet, para que el visor MapLibre
+// pueda usarlas sin arrastrar Leaflet en su descarga. Se reexportan para no
+// tocar a quien ya las importaba desde aquí.
+export { LABELS_MIN_ZOOM, shouldShowLabels } from "./mapUtils"
 
 /**
  * Marcador con el código del expediente, anclado en un punto interior del polígono.

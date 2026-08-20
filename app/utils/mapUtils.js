@@ -41,6 +41,17 @@ export const formatDate = (value) => {
 /** Grados con coma decimal, la convención local. */
 export const formatDegrees = (value) => value.toFixed(5).replace(".", ",")
 
+// Por debajo de este zoom las etiquetas se apiñan y son ilegibles. No hay límite
+// superior: el satélite llega a z22 y antes desaparecían al pasar de z19.
+//
+// Vive aquí, y no en mapLabels.js, porque mapLabels importa Leaflet: dejarlo
+// allá obligaba al visor MapLibre a arrastrar Leaflet entero en su descarga solo
+// para leer un número. mapLabels lo reexporta para no romper a quien ya lo
+// importaba de allá.
+export const LABELS_MIN_ZOOM = 15
+
+export const shouldShowLabels = (zoom) => zoom >= LABELS_MIN_ZOOM
+
 const ringsOfGeometry = (geometry) => {
   if (geometry?.type === "Polygon") {
     // coordinates es [exterior, hueco...]: un solo polígono.
