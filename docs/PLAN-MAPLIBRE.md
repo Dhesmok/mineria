@@ -3,7 +3,7 @@
 Documento de trabajo. Marca las casillas a medida que avances y actualiza el
 estado al final de cada sesión, para que la siguiente sesión sepa dónde quedó.
 
-**Estado:** Fases 0, 1 y 2 completas. Siguiente: Fase 3 (dibujo y exportación).
+**Estado:** Fases 0 a 3 completas. Siguiente: Fase 4 (terreno 3D).
 **Última actualización:** 2026-08-20
 
 ---
@@ -28,8 +28,9 @@ reescriben ~800.
 | `utils/arcgis.js` | Intacto — es `fetch` puro |
 | `utils/tenureLayers.js` | Intacto |
 | `utils/exportUtils.js` | Intacto |
-| `utils/mapUtils.js`, `mapLabels.js` | Casi intacto, revisar helpers que reciban objetos Leaflet |
-| `hooks/useExpedientSearch.js` | Intacto |
+| `utils/mapUtils.js` | Intacto, y creció: se le mudaron `shouldShowLabels` y respaldos de la ficha |
+| `utils/mapLabels.js` | Reescrito para MapLibre en `mapLabelsGL.js`; el original sigue para Leaflet |
+| ~~`hooks/useExpedientSearch.js`~~ | **Reescribir.** La tabla se equivocaba: usa `L.geoJSON` y `fitBounds`. Hecho en la Fase 3 |
 | `components/ui/*` | Intacto |
 | `hooks/useMapLayers.js` | Reescribir |
 | `hooks/useDrawControl.js` | Reescribir (mapbox-gl-draw) |
@@ -82,10 +83,15 @@ tests de `utils/` son la red de seguridad de todo este trabajo.
 
 ## Fase 3 — Dibujo y exportación
 
-- [ ] Portar `useDrawControl` a `mapbox-gl-draw`
-- [ ] Confirmar que `exportUtils.js` recibe el mismo GeoJSON que antes
-      (mapbox-gl-draw ya entrega GeoJSON estándar, debería ser directo)
-- [ ] Correr los tests de exportación sin modificarlos
+- [x] Portar `useDrawControl` a `mapbox-gl-draw`
+- [x] Portar `useExpedientSearch` — **el plan lo daba por intacto y no lo era**:
+      está atado a Leaflet (`L.geoJSON`, `fitBounds`). Y como «Exportar» exporta
+      el resultado de la búsqueda y no lo dibujado, sin portarlo no habría nada
+      que exportar en `/gl`.
+- [x] Confirmar que `exportUtils.js` recibe el mismo GeoJSON que antes — sí, sin
+      tocar una línea. Verificado descargando el KML y el ZIP de verdad.
+- [x] Correr los tests de exportación sin modificarlos — pasan tal cual.
+- [x] Medición de áreas y distancias en CTM-12, con su propio módulo y tests.
 
 ## Fase 4 — Terreno 3D
 
@@ -359,6 +365,67 @@ en un segundo polígono la ficha desaparecía en lugar de cambiar. Ahora hay un
 único manejador de clic para todo el mapa, con `closeOnClick: false`, y el
 cierre lo decide el código: si el clic no cae sobre ninguna capa de la ANM,
 cierra; si cae, reemplaza el contenido.
+
+### Fase 3 — 2026-08-20
+
+**Corrección al propio plan:** la tabla de "qué sobrevive sin tocarse" daba
+`useExpedientSearch` por intacto, y no lo era: usa `L.geoJSON`, `fitBounds` y
+capas de Leaflet. Además había que portarlo sí o sí en esta fase, porque el
+botón «Exportar» exporta el resultado de la búsqueda, no lo dibujado: sin
+búsqueda no hay nada que exportar.
+
+**Dos barras se convirtieron en una.** El visor Leaflet tenía una barra para
+dibujar y, aparte, dos botones de "medir distancia" y "medir área" que en
+realidad también dibujaban. Eran dos juegos de herramientas para lo mismo. Ahora
+toda figura muestra su medida al cerrarla: un polígono su área, una línea su
+longitud, un punto sus coordenadas. Nunca se muestra menos que antes. Y la
+medida se recalcula al mover un vértice, cosa que el visor anterior no hacía:
+allá el globo se quedaba con el valor del momento en que se cerró la figura.
+
+**Las áreas se calculan en CTM-12 (EPSG:9377), no sobre la esfera.** Es lo que
+dice CLAUDE.md y tiene razón de ser: la tabla de coordenadas y la exportación a
+SHP ya usan ese sistema, así que calcular el área de otra forma daría números
+que no cuadran entre sí ni con los de la ANM. El matiz, por si algún día
+importa: una fórmula geodésica sería algo más exacta en términos absolutos, pero
+aquí vale más coincidir con la cifra oficial. Módulo aparte (`utils/measure.js`)
+con 12 tests contra cuadrados de tamaño conocido, incluidos los casos de huecos
+y de anillos con el giro invertido.
+
+**Tres trampas de mapbox-gl-draw, las tres silenciosas:**
+
+1. **No se puede tocar el estado del control dentro de su propio manejador de
+   `draw.create`.** Al volver a modo selección ahí mismo, la librería quedaba a
+   medio camino: seguía creyendo que dibujaba la figura anterior, así que cada
+   figura nueva **reemplazaba** a la de antes en vez de sumarse, y los botones
+   de línea y punto acababan dibujando polígonos. Se arregla aplazándolo un
+   turno con `setTimeout(..., 0)`.
+
+2. **El color se guardaba pero no se veía.** mapbox-gl-draw mantiene dos copias
+   de cada figura: la del usuario y otra interna, que es la que se pinta. Las
+   propiedades propias solo se copian a la segunda si se activa
+   `userProperties: true`. Sin eso, el estilo buscaba `user_color`, no
+   encontraba nada y todo salía del color por defecto. **Este no aparecía en los
+   datos** —ahí el color estaba bien guardado, y una comprobación automática lo
+   daba por bueno—; se descubrió mirando una captura de pantalla. De ahí que
+   ahora haya una comprobación del color *tal como se pinta*, no solo del dato.
+
+3. **Su CSS está escrito para las clases de Mapbox** (`.mapboxgl-map`), que en
+   MapLibre se llaman distinto. Por eso el visor no usa su barra de botones
+   —saldría sin estilo— sino botones propios, y hay unas reglas de CSS para que
+   el cursor cambie en modo dibujo.
+
+**Y una trampa del compilador:** dentro del bloque de CSS del componente no
+pueden ir comillas invertidas, ni siquiera en un comentario. Ese CSS vive en una
+plantilla de texto delimitada por ese mismo carácter, así que una sola la cierra
+antes de tiempo. El compilador falla sin decir dónde ni por qué.
+
+**Qué se verificó:** 24 comprobaciones en navegador. Dibujo de polígono, línea y
+punto con sus medidas; el área contrastada contra la del rectángulo realmente
+dibujado en pantalla (±1 %); el color por figura, guardado y pintado; la
+papelera; la búsqueda por expediente con sus vértices y su etiqueta; la tabla de
+coordenadas; **la descarga real del KML y del ZIP de shapefile**, con el
+contenido del KML inspeccionado; y el botón «Borrar». Más las 30 de la Fase 2 sin
+regresiones y 117 tests unitarios.
 
 **Limitación, la misma de la Fase 1:** el proxy de la sesión no deja salir a los
 servidores de la ANM, así que todo esto se probó contra un simulacro que imita

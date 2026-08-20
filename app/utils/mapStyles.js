@@ -113,8 +113,59 @@ export const createBaseStyle = (initialBaseLayer = "osm") => ({
       layout: { visibility: initialBaseLayer === "satellite" ? "visible" : "none" },
     },
     ...anmLayers(),
+    ...searchLayers(),
   ],
 })
+
+/**
+ * Identificadores del resultado de la búsqueda por expediente.
+ *
+ * Va en capas propias, separadas de las cuatro de la ANM, por dos razones: se
+ * dibuja siempre encima (es lo que el usuario acaba de pedir), y no obedece al
+ * zoom mínimo ni a los interruptores del panel. En el visor Leaflet era también
+ * una capa aparte, por lo mismo.
+ */
+export const SEARCH_SOURCES = {
+  result: "search-result",
+  vertices: "search-vertices",
+}
+
+export const SEARCH_LAYERS = {
+  fill: "search-fill",
+  line: "search-line",
+  vertices: "search-vertices-circle",
+}
+
+const searchLayers = () => [
+  {
+    id: SEARCH_LAYERS.fill,
+    type: "fill",
+    source: SEARCH_SOURCES.result,
+    // El color se ajusta al de la capa donde apareció el expediente, cuando se
+    // sabe cuál fue. Este es solo el valor de partida.
+    paint: { "fill-color": "#894444", "fill-opacity": 0.6 },
+  },
+  {
+    id: SEARCH_LAYERS.line,
+    type: "line",
+    source: SEARCH_SOURCES.result,
+    // Más grueso que las capas de la ANM: es el resultado que se está buscando y
+    // tiene que distinguirse de los títulos vecinos.
+    paint: { "line-color": "#894444", "line-width": 3 },
+  },
+  {
+    id: SEARCH_LAYERS.vertices,
+    type: "circle",
+    source: SEARCH_SOURCES.vertices,
+    paint: {
+      "circle-radius": 7,
+      "circle-color": "#ff0000",
+      "circle-opacity": 0.5,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1,
+    },
+  },
+]
 
 /**
  * Las cuatro capas de la ANM, declaradas vacías desde el arranque.
@@ -131,13 +182,16 @@ export const createBaseStyle = (initialBaseLayer = "osm") => ({
  * solo al relleno y deje el contorno nítido, que es como se comportaba el visor
  * anterior.
  */
-const anmSources = () =>
-  Object.fromEntries(
+const anmSources = () => ({
+  ...Object.fromEntries(
     ANM_LAYERS.map(({ key }) => [
       anmSourceId(key),
       { type: "geojson", data: emptyFeatureCollection() },
     ]),
-  )
+  ),
+  [SEARCH_SOURCES.result]: { type: "geojson", data: emptyFeatureCollection() },
+  [SEARCH_SOURCES.vertices]: { type: "geojson", data: emptyFeatureCollection() },
+})
 
 const anmLayers = () =>
   ANM_LAYERS.flatMap(({ key, fillColor, lineColor }) => [

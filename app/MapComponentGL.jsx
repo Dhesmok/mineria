@@ -6,19 +6,22 @@ import "maplibre-gl/dist/maplibre-gl.css"
 
 import { useMapInitializationGL } from "./hooks/map/useMapInitializationGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
+import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
+import { useExpedientSearchGL } from "./hooks/map/useExpedientSearchGL"
 import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } from "./utils/mapStyles"
 import { formatDegrees } from "./utils/mapUtils"
+import { ColorPicker } from "./components/ColorPicker"
 import { Button } from "@/components/ui/button"
-import { MapIcon, Satellite } from "lucide-react"
+import { MapIcon, MapPin, Pentagon, Satellite, Spline, Trash2 } from "lucide-react"
 
 /**
  * Visor sobre MapLibre. Convive con MapComponent.jsx (Leaflet) a propósito: se
  * llega a él por la ruta /gl y se compara lado a lado con el visor de siempre
  * hasta que alcance a hacer lo mismo. Entonces el de Leaflet se borra.
  *
- * Estado: Fase 2 del plan (docs/PLAN-MAPLIBRE.md). Mapa base y las cuatro capas
- * de la ANM, con fichas al hacer clic y etiquetas. Faltan el dibujo, la
- * exportación, la búsqueda por expediente y el GPS.
+ * Estado: Fase 3 del plan (docs/PLAN-MAPLIBRE.md). Mapa base, las cuatro capas
+ * de la ANM, búsqueda por expediente, dibujo con medición y exportación. Faltan
+ * el GPS y la brújula, y el terreno 3D de la Fase 4.
  *
  * Nota sobre la importación: maplibre-gl 6 dejó de tener exportación por
  * defecto. `import maplibregl from "maplibre-gl"` compila sin quejarse y
@@ -76,8 +79,57 @@ const CursorCoordinates = ({ map }) => {
   )
 }
 
+/**
+ * Barra de dibujo.
+ *
+ * Sustituye a las dos barras del visor Leaflet —la de dibujo y la de medición—,
+ * que hacían lo mismo: ambas dibujaban. Aquí toda figura muestra su medida al
+ * cerrarla, así que una sola barra basta.
+ */
+const DrawToolbar = ({ mode, startMode, deleteSelected }) => {
+  const tools = [
+    { id: "draw_polygon", label: "Dibujar polígono y medir su área", Icon: Pentagon },
+    { id: "draw_line_string", label: "Dibujar línea y medir su longitud", Icon: Spline },
+    { id: "draw_point", label: "Marcar un punto y ver sus coordenadas", Icon: MapPin },
+  ]
+
+  return (
+    <div className="absolute top-32 right-4 z-10 flex flex-col gap-1 rounded-md bg-white p-1 shadow-md">
+      {tools.map(({ id, label, Icon }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => startMode(id)}
+          title={label}
+          aria-label={label}
+          // El modo activo se resalta: sin eso no hay forma de saber que el
+          // siguiente clic en el mapa va a empezar una figura.
+          aria-pressed={mode === id}
+          className={`flex h-8 w-8 items-center justify-center rounded ${
+            mode === id ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={deleteSelected}
+        title="Borrar la figura seleccionada, o todo el dibujo si no hay ninguna"
+        aria-label="Borrar figura"
+        className="flex h-8 w-8 items-center justify-center rounded text-gray-700 hover:bg-red-50 hover:text-red-600"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 export default function MapComponentGL({
   onMapInitialized,
+  expedientCode,
+  searchTrigger,
+  onCoordinatesUpdate,
   showTitleLayer,
   showRequestLayer,
   showAnmServiceLayer,
@@ -130,6 +182,40 @@ export default function MapComponentGL({
     setShowErrorBanner,
   )
 
+  const {
+    drawingColor,
+    handleColorChange,
+    showColorPicker,
+    setShowColorPicker,
+    mode,
+    startMode,
+    deleteSelected,
+    clearDrawings,
+  } = useDrawControlGL(mapRef, mapInstance)
+
+  const { addVertices, removeVertices, clearSearchResult } = useExpedientSearchGL(
+    mapRef,
+    mapInstance,
+    expedientCode,
+    searchTrigger,
+    onCoordinatesUpdate,
+    setError,
+    setShowErrorBanner,
+  )
+
+  // El panel lateral no habla con estos hooks: llama a métodos sobre el objeto
+  // del mapa (`mapRef.current.clearDrawings()`, etc.), que es el contrato que ya
+  // existía con el visor Leaflet. Se colocan aquí, en un efecto, y no dentro de
+  // la creación del mapa, porque las funciones vienen de hooks que se ejecutan
+  // después y hay que reemplazarlas cuando cambian.
+  useEffect(() => {
+    if (!mapInstance) return
+    mapInstance.addVertices = addVertices
+    mapInstance.removeVertices = removeVertices
+    mapInstance.clearDrawings = clearDrawings
+    mapInstance.clearSearchResult = clearSearchResult
+  }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult])
+
   useEffect(() => {
     if (mapRef.current) return
 
@@ -151,16 +237,6 @@ export default function MapComponentGL({
     map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
 
     mapRef.current = map
-
-    // El panel lateral llama a estos métodos sobre el mapa (botón Borrar). En
-    // Leaflet los define MapComponent.jsx; aquí lo que hay que limpiar llega en
-    // la Fase 3, pero tienen que existir o el botón revienta.
-    map.addVertices = () => {}
-    map.removeVertices = () => {}
-    map.clearDrawings = () => {}
-    map.clearSearchResult = () => {
-      map.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM })
-    }
 
     // El mapa no se anuncia hasta que el estilo esté parseado. Es asíncrono:
     // justo después de `new Map()` el estilo todavía está vacío y getLayer()
@@ -230,8 +306,17 @@ export default function MapComponentGL({
         </Button>
       </div>
 
-      <div className="absolute top-4 right-16 z-10 rounded bg-amber-100/95 px-3 py-1 text-xs text-amber-900 shadow-md">
-        MapLibre · Fase 2: mapa base y capas ANM
+      <ColorPicker
+        drawingColor={drawingColor}
+        handleColorChange={handleColorChange}
+        showColorPicker={showColorPicker}
+        setShowColorPicker={setShowColorPicker}
+      />
+
+      <DrawToolbar mode={mode} startMode={startMode} deleteSelected={deleteSelected} />
+
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 rounded bg-amber-100/95 px-3 py-1 text-xs text-amber-900 shadow-md">
+        MapLibre · Fase 3: capas ANM, búsqueda, dibujo y exportación
       </div>
 
       <CursorCoordinates map={mapInstance} />
@@ -303,6 +388,39 @@ export default function MapComponentGL({
         }
         .maplibregl-popup-content p {
           margin-bottom: 5px;
+        }
+        /* La ficha de un vértice trae saltos de línea; sin esto sale todo
+           seguido en un renglón. */
+        .maplibregl-popup-content {
+          white-space: pre-line;
+        }
+        /* La medida de una figura dibujada se distingue de las etiquetas de
+           expediente: fondo oscuro en vez de texto con contorno, porque es un
+           dato calculado y no un rótulo del mapa. */
+        .map-label.draw-measure div {
+          background: rgba(17, 24, 39, 0.85);
+          color: #ffffff;
+          border-radius: 4px;
+          padding: 2px 6px;
+          font-size: 12px;
+          text-shadow: none;
+        }
+        /* mapbox-gl-draw le pone estas clases al contenedor del mapa para
+           cambiar el cursor, pero su CSS las escribe contra .mapboxgl-map, que
+           en MapLibre se llama .maplibregl-map. Sin estas reglas el cursor no
+           cambia nunca y no hay señal de que el mapa está en modo dibujo.
+           (Ojo: nada de comillas invertidas dentro de este bloque; el CSS vive
+           en una plantilla de texto delimitada por ese mismo carácter, así que
+           una sola la cierra antes de tiempo. El compilador falla sin decir
+           dónde.) */
+        .maplibregl-map.mouse-add .maplibregl-canvas-container {
+          cursor: crosshair;
+        }
+        .maplibregl-map.mouse-pointer .maplibregl-canvas-container {
+          cursor: pointer;
+        }
+        .maplibregl-map.mouse-move .maplibregl-canvas-container {
+          cursor: move;
         }
       `}</style>
     </>

@@ -1,6 +1,9 @@
 import L from "leaflet"
 
-export const DEFAULT_DRAWING_COLOR = "#f357a1"
+// Se mudó a drawStyles.js, que no depende de Leaflet, para que el visor
+// MapLibre pueda leerla sin arrastrar Leaflet. Se reexporta para no tocar a
+// quien ya la importaba desde aquí.
+export { DEFAULT_DRAWING_COLOR } from "./drawStyles"
 
 const MARKER_ICON_BASE = "https://unpkg.com/leaflet@1.7.1/dist/images"
 
