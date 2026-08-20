@@ -90,13 +90,17 @@ export const clampBounds = ({ west, south, east, north }) => ({
 /**
  * URL de consulta de features dentro de un bbox.
  *
- * Se pide `f=json` (el formato propio de Esri) y no `f=geojson`, aunque este
- * último exista desde ArcGIS Server 10.4 y sería más directo. Motivo: es lo que
- * usa esri-leaflet, o sea lo que hoy funciona de verdad contra estos servidores
- * de la ANM, y no hay forma de comprobar qué versión corren. La conversión la
- * hace `arcgisToGeoJSON`, la utilidad oficial de Esri que esri-leaflet usa por
- * dentro. Si algún día se confirma que el servicio entrega GeoJSON nativo, esto
- * se puede simplificar.
+ * Se pide `f=json` (el formato propio de Esri) y no `f=geojson`, y es a
+ * propósito. Es el formato que pedía esri-leaflet, o sea el que lleva años
+ * funcionando de verdad contra estos servidores; la conversión la hace
+ * `arcgisToGeoJSON`, la misma utilidad oficial de Esri que esri-leaflet usaba
+ * por dentro. La migración no cambió nada de esto.
+ *
+ * Se comprobó (`scripts/probar-geojson.mjs`) que los tres servicios de la ANM
+ * sí saben responder `f=geojson`, así que el cambio es posible. No se hizo:
+ * ahorra una conversión que ya está probada, a cambio de estrenar un camino sin
+ * probar justo en lo más delicado, que es el anidamiento de los anillos y los
+ * huecos de los polígonos (trampa 4 de CLAUDE.md). No compensa.
  *
  * `outSR=4326` porque MapLibre espera GeoJSON en WGS84. La ANM publica en
  * MAGNA-SIRGAS (4686), que en Colombia difiere de WGS84 en menos de un metro:

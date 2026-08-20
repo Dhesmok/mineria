@@ -31,31 +31,43 @@ proyecto es "dibuja un cuadro y sal con los archivos", no ser otro visor.
 
 - Next.js 14 (App Router) + React 18
 - Tailwind + shadcn/ui (Radix)
-- **React-Leaflet** + `leaflet-draw` + `esri-leaflet`  ← se va a migrar
+- **MapLibre GL JS** + `@mapbox/mapbox-gl-draw`
 - `proj4` + `epsg-to-proj` para reproyección
 - `@turf/turf` para geometría
 - `jszip`, `file-saver`, `@mapbox/shp-write`, `geojson2shp`, `tokml` para exportar
 - Jest + Testing Library
 
+**Leaflet ya no está.** La migración terminó (ver `docs/PLAN-MAPLIBRE.md`). Si
+encuentras un comentario que menciona Leaflet es historia, no una dependencia:
+explica por qué algo quedó como quedó.
+
 ## Estructura
 
 ```
 app/
-  MapComponent.jsx        Mapa principal (Leaflet)
+  MapComponentGL.jsx      Mapa principal (MapLibre). Es el único visor
   components.jsx          UI: panel lateral, búsqueda, controles
   ExportComponent.tsx     Exportación a KML/SHP/ZIP
   hooks/map/
-    useMapInitialization.js
-    useMapLayers.js       Gestión de capas ANM
-    useDrawControl.js     leaflet-draw
-    useExpedientSearch.js Búsqueda por expediente + autocompletado
-    useGeolocation.js
+    useMapInitializationGL.js
+    useMapLayersGL.js     Gestión de capas ANM
+    useDrawControlGL.js   mapbox-gl-draw + medidas
+    useExpedientSearchGL.js Búsqueda por expediente + autocompletado
+    useTerrainGL.js       Relieve, 3D y consulta de altura
+    useAreaDownloadGL.js  Descarga por área (ZIP)
+    useGeolocationGL.js   GPS y brújula
   utils/
     arcgis.js             fetch normalizado contra ArcGIS REST
     tenureLayers.js       Descubrimiento de índices de capa ANM
     exportUtils.js        KML, empaquetado
-    mapUtils.js, mapLabels.js, drawOptions.js
+    mapStyles.js          Estilo declarativo: fuentes y capas del mapa
+    anmLayers.js          Consulta de capas ANM por bbox
+    bboxDownload.js       Armado del ZIP y su README
+    measure.js            Áreas y distancias en CTM-12
+    mapUtils.js, mapLabelsGL.js, drawStyles.js
 components/ui/            shadcn
+scripts/
+  copy-maplibre-worker.mjs  Copia el worker de MapLibre a public/ (pre-dev y pre-build)
 lib/utils.ts              cn(), debounce()
 ```
 
@@ -96,14 +108,42 @@ montar un proxy en una API route de Next.
 
 5. **Nunca versiones `.next/`.** Ya se coló una vez y el repo pesaba 125 MB.
 
+6. **Un solo archivo de dependencias: `package-lock.json`.** Convivía con un
+   `pnpm-lock.yaml` viejo que no tenía MapLibre, y tanto Vercel como Netlify
+   prefieren pnpm cuando ven ese archivo: los despliegues fallaron con cinco
+   comprobaciones en rojo. Si aparece otro archivo de bloqueo, bórralo.
+
+7. **El worker de MapLibre hay que copiarlo a `public/`.** MapLibre reparte
+   trabajo a un hilo aparte y lo localiza con una ruta que el empaquetador de
+   Next reescribe mal. Falla **en silencio**: el mapa base se ve, los datos
+   llegan, las etiquetas se dibujan, y los polígonos simplemente no aparecen —
+   sin un solo error en la consola. Por eso existe
+   `scripts/copy-maplibre-worker.mjs`, enganchado a `predev` y `prebuild`. Si
+   alguna vez desaparecen los polígonos, mira eso primero.
+
+8. **`queryTerrainElevation()` devuelve la altura multiplicada por la
+   exageración**, no la real. Con exageración 1,5 un cerro de 1.880 m reporta
+   2.820. Usa siempre el helper `elevationAt()` de `useTerrainGL`, que divide.
+
+9. **Dentro del bloque de CSS de `MapComponentGL` no pueden ir comillas
+   invertidas**, ni siquiera en un comentario: ese CSS vive en una plantilla de
+   texto delimitada por ese mismo carácter y una sola la cierra antes de
+   tiempo. El compilador falla sin decir dónde ni por qué.
+
+10. **Verificar con datos no basta; hay que mirar la pantalla.** Dos bugs de
+    esta migración (el color de las figuras y el worker de arriba) pasaban todas
+    las comprobaciones sobre los datos y solo se vieron en una captura de
+    pantalla. Cuando algo es visual, compruébalo visualmente.
+
 ## Convenciones
 
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
   actual documenta el bug que motivó cada decisión — mantenlo, es lo que hace
   el código legible para alguien sin background en programación.
 - Antes de refactorizar un módulo con tests, corre `npm test` y déjalo verde.
-- Los módulos de `utils/` son lógica pura, sin dependencias de Leaflet. Mantén
-  esa separación: es lo que hace posible cambiar de motor de mapa.
+- Los módulos de `utils/` son lógica pura, sin dependencias del motor de mapa.
+  Mantén esa separación: es lo que hizo posible cambiar de Leaflet a MapLibre
+  sin reescribir la parte difícil.
 
 ## CRS
 

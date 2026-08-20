@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import Component from "./components"
 
-jest.mock("./MapComponent", () => ({
+jest.mock("./MapComponentGL", () => ({
   __esModule: true,
   default: () => <div data-testid="map" />,
 }))

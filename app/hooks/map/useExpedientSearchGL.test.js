@@ -1,34 +1,63 @@
 import { renderHook, waitFor } from "@testing-library/react"
-import { useExpedientSearch } from "./useExpedientSearch"
+import { useExpedientSearchGL } from "./useExpedientSearchGL"
 
 jest.mock("../../utils/tenureLayers", () => ({
   ...jest.requireActual("../../utils/tenureLayers"),
   findTenureLayerNumbers: async () => ({ "Título Vigente": 3, "Solicitud Vigente": 4 }),
 }))
 
-// Leaflet no funciona en jsdom, así que sustituimos las fábricas que usa el hook por
-// dobles que registran qué se añadió al mapa.
-jest.mock("leaflet", () => {
-  const layer = (kind) => ({
-    kind,
-    addTo(map) {
-      map.addLayer(this)
+// MapLibre no arranca en jsdom (necesita WebGL), así que se sustituyen las tres
+// piezas que el hook construye por dobles que registran lo que se les pide.
+// Es el mismo enfoque que tenía la versión Leaflet de estos tests.
+//
+// `virtual: true` es obligatorio: maplibre-gl 6 se publica solo como módulo ESM
+// y el resolvedor de Jest, que es CommonJS, ni siquiera consigue encontrarlo
+// —falla con "Cannot find module" antes de llegar a sustituirlo—. Con esta
+// opción Jest registra el doble directamente y no intenta resolver el original.
+jest.mock("maplibre-gl", () => ({
+  __esModule: true,
+  LngLatBounds: class {
+    constructor() {
+      this.points = []
+    }
+    extend(point) {
+      this.points.push(point)
       return this
-    },
-    addLayer: jest.fn(),
-    getBounds: () => "bounds",
-  })
-
-  return {
-    __esModule: true,
-    default: {
-      geoJSON: jest.fn(() => layer("geojson")),
-      layerGroup: jest.fn(() => layer("labels")),
-      marker: jest.fn(() => ({ kind: "marker" })),
-      divIcon: jest.fn(() => ({ kind: "icon" })),
-    },
-  }
-})
+    }
+  },
+  Marker: class {
+    constructor(options) {
+      this.options = options
+    }
+    setLngLat() {
+      return this
+    }
+    addTo(map) {
+      map.__markers.push(this)
+      return this
+    }
+    remove() {
+      return this
+    }
+  },
+  Popup: class {
+    setLngLat() {
+      return this
+    }
+    setHTML() {
+      return this
+    }
+    setText() {
+      return this
+    }
+    addTo() {
+      return this
+    }
+    remove() {
+      return this
+    }
+  },
+}), { virtual: true })
 
 const SQUARE = [
   [
@@ -42,24 +71,42 @@ const SQUARE = [
 
 const featureCollection = () => ({
   type: "FeatureCollection",
-  features: [{ type: "Feature", properties: { TENURE_ID: "ABC-123" }, geometry: { type: "Polygon", coordinates: SQUARE } }],
+  features: [
+    {
+      type: "Feature",
+      properties: { TENURE_ID: "ABC-123" },
+      geometry: { type: "Polygon", coordinates: SQUARE },
+    },
+  ],
 })
 
+/**
+ * Mapa de mentira que registra qué datos recibe cada fuente. Es el equivalente
+ * del `createMap` de la versión Leaflet: allá se miraba qué capas se añadían,
+ * aquí se mira qué se le pasa a cada `setData`.
+ */
 const createMap = () => {
-  const added = []
-  const map = {
-    added,
-    addLayer: (l) => added.push(l),
-    removeLayer: (l) => {
-      const at = added.indexOf(l)
-      if (at !== -1) added.splice(at, 1)
-    },
-    hasLayer: (l) => added.includes(l),
+  const data = {}
+  const setDataCalls = []
+
+  return {
+    __markers: [],
+    data,
+    setDataCalls,
+    getSource: (id) => ({
+      setData: (value) => {
+        data[id] = value
+        setDataCalls.push({ id, count: value?.features?.length ?? 0 })
+      },
+    }),
     getZoom: () => 10,
+    setPaintProperty: jest.fn(),
     fitBounds: jest.fn(),
-    addVertices: jest.fn(),
+    flyTo: jest.fn(),
+    getCanvas: () => ({ style: {} }),
+    on: jest.fn(),
+    off: jest.fn(),
   }
-  return map
 }
 
 const renderSearch = (map, overrides = {}) => {
@@ -70,11 +117,10 @@ const renderSearch = (map, overrides = {}) => {
     ...overrides,
   }
   const mapRef = { current: map }
-  const refs = { geoJson: { current: null }, labels: { current: null }, vertices: { current: null } }
 
   const view = renderHook(
     ({ searchTrigger }) =>
-      useExpedientSearch(
+      useExpedientSearchGL(
         mapRef,
         map,
         "ABC-123",
@@ -82,17 +128,14 @@ const renderSearch = (map, overrides = {}) => {
         props.onCoordinatesUpdate,
         props.setError,
         props.setShowErrorBanner,
-        refs.geoJson,
-        refs.labels,
-        refs.vertices,
       ),
     { initialProps: { searchTrigger: 0 } },
   )
 
-  return { ...view, ...props, refs }
+  return { ...view, ...props }
 }
 
-describe("useExpedientSearch", () => {
+describe("useExpedientSearchGL", () => {
   beforeEach(() => {
     jest.clearAllMocks()
     jest.spyOn(console, "error").mockImplementation(() => {})
@@ -102,11 +145,10 @@ describe("useExpedientSearch", () => {
     jest.restoreAllMocks()
   })
 
-  it("no deja copias huérfanas cuando se busca varias veces seguidas", async () => {
-    // Regresión: pulsar "Aplicar" repetidamente lanzaba búsquedas concurrentes. Cada
-    // una sobrescribía geoJsonLayerRef al terminar, así que las anteriores quedaban
-    // dibujadas en el mapa sin referencia y ya no se podían quitar: el polígono se
-    // veía "redibujado" y con el relleno acumulado.
+  it("no deja dibujado el resultado de una búsqueda que llegó tarde", async () => {
+    // Regresión heredada del visor Leaflet: pulsar "Aplicar" repetidamente lanzaba
+    // búsquedas concurrentes y la que terminara de última pisaba a las demás. Aquí
+    // el guardia es el mismo (searchId), solo cambia cómo se dibuja.
     let resolvers = []
     global.fetch = jest.fn(
       () =>
@@ -116,7 +158,7 @@ describe("useExpedientSearch", () => {
     )
 
     const map = createMap()
-    const { rerender, refs } = renderSearch(map)
+    const { rerender } = renderSearch(map)
 
     rerender({ searchTrigger: 1 })
     rerender({ searchTrigger: 2 })
@@ -125,13 +167,10 @@ describe("useExpedientSearch", () => {
     await waitFor(() => expect(resolvers.length).toBeGreaterThan(0))
     resolvers.forEach((resolve) => resolve())
 
-    await waitFor(() => expect(refs.geoJson.current).not.toBeNull())
-    // Dar margen a que cualquier búsqueda rezagada intente dibujar.
     await waitFor(() => expect(map.fitBounds).toHaveBeenCalled())
 
-    const drawnPolygons = map.added.filter((l) => l.kind === "geojson")
-    expect(drawnPolygons).toHaveLength(1)
-    expect(drawnPolygons[0]).toBe(refs.geoJson.current)
+    // Solo una búsqueda pudo encuadrar el mapa: las obsoletas se descartaron.
+    expect(map.fitBounds).toHaveBeenCalledTimes(1)
   })
 
   it("aborta la búsqueda anterior al arrancar una nueva", async () => {
@@ -155,17 +194,14 @@ describe("useExpedientSearch", () => {
     global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ features: [] }) }))
 
     const map = createMap()
-    const { rerender, refs, onCoordinatesUpdate } = renderSearch(map)
-
-    const staleVertices = { kind: "vertices" }
-    map.addLayer(staleVertices)
-    refs.vertices.current = staleVertices
+    const { rerender, onCoordinatesUpdate } = renderSearch(map)
 
     rerender({ searchTrigger: 1 })
 
     await waitFor(() => expect(onCoordinatesUpdate).toHaveBeenCalledWith([], null))
-    expect(refs.vertices.current).toBeNull()
-    expect(map.hasLayer(staleVertices)).toBe(false)
+    // La fuente de vértices quedó vacía, no con los del expediente anterior.
+    expect(map.data["search-vertices"].features).toEqual([])
+    expect(map.data["search-result"].features).toEqual([])
   })
 
   it("distingue un servicio caído de un expediente inexistente", async () => {
@@ -182,7 +218,9 @@ describe("useExpedientSearch", () => {
 
     rerender({ searchTrigger: 1 })
 
-    await waitFor(() => expect(setError).toHaveBeenCalledWith(expect.stringContaining("No se pudo consultar")))
+    await waitFor(() =>
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining("No se pudo consultar")),
+    )
     expect(setError).not.toHaveBeenCalledWith(expect.stringContaining("No se encontró un polígono"))
   })
 
@@ -202,7 +240,9 @@ describe("useExpedientSearch", () => {
 
     rerender({ searchTrigger: 1 })
 
-    await waitFor(() => expect(setError).toHaveBeenCalledWith(expect.stringContaining("No se encontró un polígono")))
+    await waitFor(() =>
+      expect(setError).toHaveBeenCalledWith(expect.stringContaining("No se encontró un polígono")),
+    )
   })
 
   it("entrega los anillos sin el vértice de cierre duplicado", async () => {
@@ -218,6 +258,19 @@ describe("useExpedientSearch", () => {
     const [coordinates, , rings] = onCoordinatesUpdate.mock.calls.at(-1)
     expect(coordinates).toHaveLength(4)
     expect(rings).toHaveLength(1)
-    expect(map.addVertices).toHaveBeenCalledWith(rings)
+    // Y los cuatro vértices se dibujaron, sin repetir el de cierre.
+    expect(map.data["search-vertices"].features).toHaveLength(4)
+  })
+
+  it("pinta el resultado con el color de la capa donde apareció", async () => {
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => featureCollection() }))
+
+    const map = createMap()
+    const { rerender } = renderSearch(map)
+
+    rerender({ searchTrigger: 1 })
+
+    await waitFor(() => expect(map.setPaintProperty).toHaveBeenCalled())
+    expect(map.setPaintProperty).toHaveBeenCalledWith("search-fill", "fill-color", expect.any(String))
   })
 })

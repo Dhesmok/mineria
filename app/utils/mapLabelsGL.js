@@ -8,9 +8,9 @@ import { getFeatureLabel, getLabelCoordinates } from "./mapUtils"
  * sistema, sino unos archivos de glifos precocinados (`.pbf`) que hay que
  * servir desde algún sitio. Las opciones eran depender de un servidor público
  * ajeno o montar un proceso de generación de fuentes, y ninguna de las dos
- * merece frenar esta fase. Con marcadores HTML el resultado es idéntico al del
- * visor Leaflet actual, se reutiliza el CSS `.map-label` que ya existe, y no se
- * depende de nadie.
+ * merece frenar esta fase. Con marcadores HTML el resultado es idéntico al que
+ * daba el visor Leaflet, se reutiliza el CSS `.map-label` (definido en
+ * `MapComponentGL`), y no se depende de nadie.
  *
  * Lo que se pierde frente a `symbol`: MapLibre esconde solo las etiquetas que se
  * pisan entre sí, y esto no. Pero el visor Leaflet tampoco lo hacía, así que no
