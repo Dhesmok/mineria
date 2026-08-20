@@ -1,0 +1,128 @@
+# CLAUDE.md — Proyecto `mineria` (visor)
+
+Contexto permanente del proyecto. Léelo completo al inicio de cada sesión.
+
+---
+
+## Qué es esto
+
+Visor web de información geoespacial minera y territorial de Colombia.
+Desplegado en Vercel (`mineria-phi.vercel.app`, dominio `visor.com` vía CNAME).
+
+**Autor:** Fabio Espinosa — geólogo, sector minero, Medellín.
+**Importante:** no tiene formación en programación. Explica las decisiones
+técnicas en términos del problema, no del framework. No asumas que sabe qué es
+un `useEffect`, un bundler o una race condition sin explicarlo.
+
+## Visión (hacia dónde va)
+
+Pasar de "visor de títulos mineros ANM" a una herramienta que:
+
+1. Permita dibujar un área y **descargar todas las capas relevantes en un ZIP**
+   (GeoJSON/SHP/KML + DEM recortado + README con fuentes, fechas y CRS).
+2. Tenga un **toggle 2D → 3D** con terreno real, sin fricción.
+3. Integre servicios de **múltiples entidades del Estado**, no solo la ANM.
+
+El objetivo es velocidad. Colombia en Mapas (IGAC) ya agrega 12.000 datasets,
+pero descargar de ahí es lento y doloroso. La ventaja competitiva de este
+proyecto es "dibuja un cuadro y sal con los archivos", no ser otro visor.
+
+## Stack actual
+
+- Next.js 14 (App Router) + React 18
+- Tailwind + shadcn/ui (Radix)
+- **React-Leaflet** + `leaflet-draw` + `esri-leaflet`  ← se va a migrar
+- `proj4` + `epsg-to-proj` para reproyección
+- `@turf/turf` para geometría
+- `jszip`, `file-saver`, `@mapbox/shp-write`, `geojson2shp`, `tokml` para exportar
+- Jest + Testing Library
+
+## Estructura
+
+```
+app/
+  MapComponent.jsx        Mapa principal (Leaflet)
+  components.jsx          UI: panel lateral, búsqueda, controles
+  ExportComponent.tsx     Exportación a KML/SHP/ZIP
+  hooks/map/
+    useMapInitialization.js
+    useMapLayers.js       Gestión de capas ANM
+    useDrawControl.js     leaflet-draw
+    useExpedientSearch.js Búsqueda por expediente + autocompletado
+    useGeolocation.js
+  utils/
+    arcgis.js             fetch normalizado contra ArcGIS REST
+    tenureLayers.js       Descubrimiento de índices de capa ANM
+    exportUtils.js        KML, empaquetado
+    mapUtils.js, mapLabels.js, drawOptions.js
+components/ui/            shadcn
+lib/utils.ts              cn(), debounce()
+```
+
+## Servicios externos en uso
+
+```
+https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer
+  → "Título Vigente", "Solicitud Vigente"
+https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87
+https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3
+```
+
+**La ANM sí permite CORS desde el navegador.** No asumas lo mismo de otras
+entidades (IGAC, SGC, IDEAM, ANLA): hay que probar cada una, y si bloquean,
+montar un proxy en una API route de Next.
+
+## Trampas conocidas (no las vuelvas a pisar)
+
+1. **Los índices de capa de la ANM cambian entre despliegues.** Nunca los
+   escribas fijos en el código. `findTenureLayerNumbers()` los descubre en
+   runtime y cachea el resultado a nivel de módulo. Hubo un bug donde el
+   autocompletado los tenía fijos en 3 y 4 mientras el resto de la app los
+   descubría, y las dos vías discrepaban.
+
+2. **ArcGIS responde HTTP 200 con cuerpo `{"error": {...}}`** cuando el `where`
+   referencia un campo inexistente o el servicio está degradado. Como
+   `response.ok` es `true` y `data.features` queda `undefined`, esos fallos se
+   confundían con "no se encontró el expediente". Usa siempre
+   `fetchArcgisJson()`, nunca `fetch` pelado contra ArcGIS.
+
+3. **No caches resultados incompletos.** Si las peticiones de descubrimiento
+   fallan todas, guardar `{}` deja las capas rotas hasta recargar la página.
+
+4. **Al exportar KML, las geometrías no siempre son `Polygon`.** Un
+   `MultiPolygon` tiene un nivel más de anidamiento y hay que respetar los
+   huecos (`innerBoundaryIs`). Ya hubo un bug por asumir
+   `features[0].geometry.coordinates[0]`.
+
+5. **Nunca versiones `.next/`.** Ya se coló una vez y el repo pesaba 125 MB.
+
+## Convenciones
+
+- **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
+  actual documenta el bug que motivó cada decisión — mantenlo, es lo que hace
+  el código legible para alguien sin background en programación.
+- Antes de refactorizar un módulo con tests, corre `npm test` y déjalo verde.
+- Los módulos de `utils/` son lógica pura, sin dependencias de Leaflet. Mantén
+  esa separación: es lo que hace posible cambiar de motor de mapa.
+
+## CRS
+
+- **MAGNA-SIRGAS geográficas** (EPSG:4686) para vértices y coordenadas de
+  referencia.
+- **CTM-12** (EPSG:9377) para cálculos de área y distancia.
+- Los servicios ANM entregan en Web Mercator (EPSG:3857) o geográficas;
+  verifica siempre antes de calcular áreas.
+- Alturas de DEMs globales son **elipsoidales**. Para cotas ortométricas hay que
+  aplicar geoide (EGM2008 o GEOCOL). Anótalo en el README de las descargas.
+
+## Comandos
+
+```bash
+npm run dev     # servidor de desarrollo
+npm run build
+npm test        # Jest
+```
+
+## Trabajo pendiente inmediato
+
+Ver `docs/PLAN-MAPLIBRE.md`.

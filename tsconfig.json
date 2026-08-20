@@ -21,9 +21,9 @@
         "name": "next"
       }
     ],
-    "baseUrl": ".",  // Añadido: Define el directorio base
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]  // Añadido: Configura el alias @ para rutas
+      "@/*": ["./*"]
     }
   },
   "include": [

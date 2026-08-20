@@ -1,3 +1,9 @@
 .next
 node_modules
 tsconfig.tsbuildinfo
+
+# Artefactos de sesiones de desarrollo. Estos archivos ya se habían colado al
+# repo una vez; se ignoran para que no vuelvan a entrar por descuido.
+dev_server.log
+dev_server.pid
+screenshot_result.png
