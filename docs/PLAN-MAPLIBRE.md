@@ -3,7 +3,7 @@
 Documento de trabajo. Marca las casillas a medida que avances y actualiza el
 estado al final de cada sesión, para que la siguiente sesión sepa dónde quedó.
 
-**Estado:** Fases 0 a 3 completas. Siguiente: Fase 4 (terreno 3D).
+**Estado:** Fases 0 a 4 completas. Siguiente: Fase 5 (descarga por bbox).
 **Última actualización:** 2026-08-20
 
 ---
@@ -95,12 +95,13 @@ tests de `utils/` son la red de seguridad de todo este trabajo.
 
 ## Fase 4 — Terreno 3D
 
-- [ ] Source de elevación con los terrain tiles públicos de AWS Open Data
+- [x] Source de elevación con los terrain tiles públicos de AWS Open Data
       (codificación `terrarium`, sin API key ni autenticación)
-- [ ] `map.setTerrain({ source: 'terrain', exaggeration: 1.5 })`
-- [ ] Botón toggle 2D/3D + slider de exageración vertical (0.5 – 3)
-- [ ] Capa `hillshade` para que el relieve se lea también en vista cenital
-- [ ] `sky` layer para que el horizonte no se vea cortado en pitch alto
+- [x] `map.setTerrain({ source: 'terrain', exaggeration: 1.5 })`
+- [x] Botón toggle 2D/3D + slider de exageración vertical (0.5 – 3)
+- [x] Capa `hillshade` para que el relieve se lea también en vista cenital.
+      Botón «Relieve» aparte, porque leer la topografía en plano es lo más común.
+- [x] `sky` layer para que el horizonte no se vea cortado en pitch alto
 
 ## Fase 5 — Descarga por bbox (la función diferenciadora)
 
@@ -365,6 +366,66 @@ en un segundo polígono la ficha desaparecía en lugar de cambiar. Ahora hay un
 único manejador de clic para todo el mapa, con `closeOnClick: false`, y el
 cierre lo decide el código: si el clic no cae sobre ninguna capa de la ANM,
 cierra; si cae, reemplaza el contenido.
+
+### Fase 4 — 2026-08-20
+
+**Dos funciones que comparten el mismo dato de elevación pero responden a
+necesidades distintas:**
+
+- **Relieve** (botón propio): sombrea las laderas sobre el mapa plano. Es lo que
+  más se usa: leer la topografía sin inclinar nada. Se apoya en una capa
+  `hillshade`.
+- **3D** (botón propio): inclina la cámara a 60°, levanta el terreno con
+  `setTerrain` y pone un `sky` para que el horizonte no quede cortado en seco.
+  Encender el 3D enciende también el relieve —inclinado y sin sombras, un cerro y
+  un valle se confunden—; volver a 2D deja el relieve puesto, porque sigue siendo
+  útil y apagarlo de golpe se siente como perder información.
+
+**La elevación sale de las Terrain Tiles de AWS Open Data**: públicas, sin clave
+ni cuenta ni cuota. Por eso frente a Mapbox o Maptiler, que exigen registro.
+`encoding: "terrarium"` es obligatorio y no da error si se equivoca: con la
+fórmula de decodificación de otro proveedor sale un relieve inventado, montañas
+donde no las hay. La fuente y la capa se declaran en el estilo desde el arranque,
+apagadas; mientras el relieve esté oculto no se descarga ni una tesela.
+
+**La trampa gorda de esta fase, y la que más importa para la Fase 5:**
+`queryTerrainElevation` de MapLibre **no devuelve la altura del dato, sino la
+altura ya multiplicada por la exageración vertical.** Con el slider en 3×, un
+cerro de 1.880 m se reporta como 5.639 m. Nada avisa. Por eso el hook expone
+`elevationAt`, que divide por la exageración y devuelve metros de verdad.
+**Cualquier lectura de altura —el recorte de DEM de la Fase 5, un rótulo de cota,
+un perfil— tiene que pasar por ahí, nunca por queryTerrainElevation directo.** Y
+recordar, ya está en CLAUDE.md: estas alturas son elipsoidales; para cotas
+ortométricas hay que aplicar geoide (se anotará en el README de las descargas).
+
+El slider de exageración lleva un aviso al pie —"solo afecta a cómo se ve, no
+cambia ninguna altura ni ningún área"— porque en un visor minero un número mal
+entendido tiene consecuencias.
+
+**Un fallo latente que la Fase 4 destapó en el dibujo:** `measurementOf` para un
+punto destructuraba `[lon, lat]` de sus coordenadas y se las pasaba a
+`formatDegrees`. El evento `draw.render` se dispara también mientras el punto
+sigue al cursor antes del clic, con las coordenadas todavía incompletas, y ahí
+`formatDegrees(undefined)` reventaba. Aparecía o no según cuándo cayera el
+render, por eso pasó la Fase 3. Corregido con una guarda; el punto simplemente no
+muestra medida hasta que existe de verdad.
+
+**Verificación:** 21 comprobaciones en Chromium con teselas de elevación
+sintéticas (el proxy no alcanza AWS). Entre ellas: que arranca en 2D sin
+descargar elevación; que el relieve la descarga solo al encenderse y no inclina
+la cámara; que el 3D levanta el terreno, inclina y pone cielo; **que la
+codificación terrarium decodifica bien** (una loma sintética de altura conocida
+se lee correcta a través de `elevationAt`); **que queryTerrainElevation sí viene
+escalada** (2.820 = 1.880 × 1,5) mientras el helper devuelve la real; que el
+slider cambia la exageración sin tocar la altura del dato; y que volver a 2D
+endereza la cámara y deja el relieve puesto. Las 30 de la Fase 2 y las 24 de la
+Fase 3 siguen verdes, 121 tests unitarios.
+
+**Limitación:** como en las fases anteriores, no se pudo ver el terreno con datos
+reales de AWS. **Falta abrir `/gl` en tu máquina sobre una zona montañosa
+—Medellín, la cordillera— encender Relieve y luego 3D, y confirmar que el
+relieve se ve.** Con el gradiente sintético de las pruebas se ve suave; sobre las
+montañas de verdad debería leerse con claridad.
 
 ### Fase 3 — 2026-08-20
 

@@ -59,7 +59,13 @@ const measurementOf = (feature) => {
   }
 
   if (geometry?.type === "Point") {
-    const [lon, lat] = geometry.coordinates
+    // El evento draw.render se dispara también mientras se coloca el punto, con
+    // el punto siguiendo al cursor antes del clic. En ese instante las
+    // coordenadas pueden no estar completas todavía, y formatDegrees(undefined)
+    // reventaba con "Cannot read properties of undefined". Es un fallo por
+    // tiempos: aparecía o no según cuándo cayera el render.
+    const [lon, lat] = geometry.coordinates ?? []
+    if (typeof lon !== "number" || typeof lat !== "number") return null
     return { text: `${formatDegrees(lat)}, ${formatDegrees(lon)}`, point: geometry.coordinates }
   }
 

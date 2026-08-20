@@ -5,6 +5,7 @@ import { Map as MapLibreMap, NavigationControl, ScaleControl, setWorkerUrl } fro
 import "maplibre-gl/dist/maplibre-gl.css"
 
 import { useMapInitializationGL } from "./hooks/map/useMapInitializationGL"
+import { useTerrainGL, EXAGGERATION_MAX, EXAGGERATION_MIN } from "./hooks/map/useTerrainGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
 import { useExpedientSearchGL } from "./hooks/map/useExpedientSearchGL"
@@ -12,16 +13,16 @@ import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } 
 import { formatDegrees } from "./utils/mapUtils"
 import { ColorPicker } from "./components/ColorPicker"
 import { Button } from "@/components/ui/button"
-import { MapIcon, MapPin, Pentagon, Satellite, Spline, Trash2 } from "lucide-react"
+import { Box, MapIcon, MapPin, Mountain, Pentagon, Satellite, Spline, Trash2 } from "lucide-react"
 
 /**
  * Visor sobre MapLibre. Convive con MapComponent.jsx (Leaflet) a propósito: se
  * llega a él por la ruta /gl y se compara lado a lado con el visor de siempre
  * hasta que alcance a hacer lo mismo. Entonces el de Leaflet se borra.
  *
- * Estado: Fase 3 del plan (docs/PLAN-MAPLIBRE.md). Mapa base, las cuatro capas
- * de la ANM, búsqueda por expediente, dibujo con medición y exportación. Faltan
- * el GPS y la brújula, y el terreno 3D de la Fase 4.
+ * Estado: Fase 4 del plan (docs/PLAN-MAPLIBRE.md). Mapa base, las cuatro capas
+ * de la ANM, búsqueda por expediente, dibujo con medición, exportación y
+ * terreno 3D. Falta el GPS y la brújula.
  *
  * Nota sobre la importación: maplibre-gl 6 dejó de tener exportación por
  * defecto. `import maplibregl from "maplibre-gl"` compila sin quejarse y
@@ -193,6 +194,25 @@ export default function MapComponentGL({
     clearDrawings,
   } = useDrawControlGL(mapRef, mapInstance)
 
+  const {
+    is3D,
+    toggle3D,
+    showHillshade,
+    toggleHillshade,
+    exaggeration,
+    changeExaggeration,
+    elevationAt,
+  } = useTerrainGL(mapRef, mapInstance)
+
+  // Solo en desarrollo, junto a `window.__mapa`: permite preguntar la altura
+  // real de un punto desde la consola (`__mapa.__alturaReal(__mapa.getCenter())`)
+  // sin caer en la trampa de queryTerrainElevation, que devuelve la altura
+  // multiplicada por la exageración.
+  useEffect(() => {
+    if (!mapInstance || process.env.NODE_ENV !== "development") return
+    mapInstance.__alturaReal = elevationAt
+  }, [mapInstance, elevationAt])
+
   const { addVertices, removeVertices, clearSearchResult } = useExpedientSearchGL(
     mapRef,
     mapInstance,
@@ -225,6 +245,10 @@ export default function MapComponentGL({
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       maxZoom: MAX_ZOOM,
+      // Por defecto MapLibre no deja pasar de 60° de inclinación. Con terreno
+      // real conviene poder acercarse más al horizonte para leer un valle a
+      // contraluz, que es justo lo que uno quiere mirar en 3D.
+      maxPitch: 85,
       // La atribución propia de MapLibre se queda, en versión compacta: las
       // condiciones de uso de OSM la exigen. `false` la quitaría del todo.
       attributionControl: { compact: true },
@@ -304,6 +328,60 @@ export default function MapComponentGL({
           )}
           {baseLayer === "osm" ? "Satélite" : "Mapa"}
         </Button>
+
+        <Button
+          onClick={toggleHillshade}
+          aria-pressed={showHillshade}
+          title="Sombrear el relieve sobre el mapa plano"
+          className={
+            showHillshade
+              ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
+              : "bg-white text-black hover:bg-gray-200"
+          }
+        >
+          <Mountain className="mr-2 h-4 w-4" />
+          Relieve
+        </Button>
+
+        <Button
+          onClick={toggle3D}
+          aria-pressed={is3D}
+          title="Levantar el terreno e inclinar la cámara"
+          className={
+            is3D ? "bg-blue-50 text-blue-700 hover:bg-blue-100" : "bg-white text-black hover:bg-gray-200"
+          }
+        >
+          <Box className="mr-2 h-4 w-4" />
+          {is3D ? "Volver a 2D" : "Ver en 3D"}
+        </Button>
+
+        {/* El slider solo aparece en 3D: en plano no tiene nada que exagerar, y
+            un control que no hace nada visible confunde más de lo que ayuda. */}
+        {is3D && (
+          <div className="rounded-md bg-white px-3 py-2 shadow-md">
+            <label
+              htmlFor="exageracion"
+              className="mb-1 block text-xs font-medium text-gray-700"
+            >
+              Exageración vertical: {exaggeration.toFixed(1)}×
+            </label>
+            <input
+              id="exageracion"
+              type="range"
+              min={EXAGGERATION_MIN}
+              max={EXAGGERATION_MAX}
+              step="0.1"
+              value={exaggeration}
+              onChange={(event) => changeExaggeration(parseFloat(event.target.value))}
+              className="w-40"
+              aria-label="Exageración vertical del terreno"
+            />
+            {/* Decirlo evita que alguien lea el relieve como una medida. */}
+            <p className="mt-1 text-[10px] leading-tight text-gray-500">
+              Solo afecta a cómo se ve. No cambia ninguna altura ni ningún área.
+            </p>
+          </div>
+        )}
       </div>
 
       <ColorPicker
@@ -316,7 +394,7 @@ export default function MapComponentGL({
       <DrawToolbar mode={mode} startMode={startMode} deleteSelected={deleteSelected} />
 
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 rounded bg-amber-100/95 px-3 py-1 text-xs text-amber-900 shadow-md">
-        MapLibre · Fase 3: capas ANM, búsqueda, dibujo y exportación
+        MapLibre · Fase 4: capas ANM, búsqueda, dibujo y terreno 3D
       </div>
 
       <CursorCoordinates map={mapInstance} />

@@ -1,4 +1,11 @@
-import { createBaseStyle, BASE_LAYERS, INITIAL_CENTER, MAX_ZOOM } from "./mapStyles"
+import {
+  createBaseStyle,
+  BASE_LAYERS,
+  HILLSHADE_LAYER_ID,
+  INITIAL_CENTER,
+  MAX_ZOOM,
+  TERRAIN_SOURCE_ID,
+} from "./mapStyles"
 import {
   ANM_LAYERS,
   anmFillLayerId,
@@ -116,6 +123,42 @@ describe("capas de la ANM en el estilo", () => {
       expect(indexOfLayer(style, anmLineLayerId(key))).toBeGreaterThan(
         indexOfLayer(style, anmFillLayerId(key)),
       )
+    })
+  })
+})
+
+describe("terreno y relieve en el estilo", () => {
+  it("declara la fuente de elevación con la codificación terrarium", () => {
+    // La fórmula de decodificación depende de esto. Con la codificación
+    // equivocada el mapa no falla: sale un relieve inventado.
+    const source = createBaseStyle().sources[TERRAIN_SOURCE_ID]
+    expect(source.type).toBe("raster-dem")
+    expect(source.encoding).toBe("terrarium")
+  })
+
+  it("usa las teselas públicas de AWS, sin clave ni cuenta", () => {
+    const source = createBaseStyle().sources[TERRAIN_SOURCE_ID]
+    expect(source.tiles[0]).toContain("elevation-tiles-prod")
+    expect(source.tiles[0]).not.toContain("access_token")
+    expect(source.tiles[0]).not.toContain("key=")
+  })
+
+  it("declara el relieve apagado desde el arranque", () => {
+    // Mientras esté oculto no descarga ni una tesela de elevación: por eso puede
+    // estar declarado sin costo.
+    expect(layerById(createBaseStyle(), HILLSHADE_LAYER_ID).layout.visibility).toBe("none")
+  })
+
+  it("pone el relieve encima del mapa base y debajo de las capas de la ANM", () => {
+    // Es contexto del terreno: no debe tapar los títulos, pero sí ir sobre el
+    // mapa de fondo.
+    const style = createBaseStyle()
+    const hillshade = indexOfLayer(style, HILLSHADE_LAYER_ID)
+
+    expect(hillshade).toBeGreaterThan(indexOfLayer(style, BASE_LAYERS.osm))
+    expect(hillshade).toBeGreaterThan(indexOfLayer(style, BASE_LAYERS.satellite))
+    ANM_LAYERS.forEach(({ key }) => {
+      expect(indexOfLayer(style, anmFillLayerId(key))).toBeGreaterThan(hillshade)
     })
   })
 })

@@ -78,6 +78,60 @@ const SATELLITE_SOURCE = {
 }
 
 /**
+ * Modelo de elevación para el terreno 3D y el sombreado del relieve.
+ *
+ * Son las Terrain Tiles del programa de datos abiertos de AWS: públicas, sin
+ * clave ni registro. Es la razón por la que se eligieron frente a las de Mapbox
+ * o Maptiler, que exigen cuenta y tienen cuota.
+ *
+ * `encoding: "terrarium"` no es opcional: la altura viene empaquetada en los
+ * canales de color del PNG, y cada proveedor usa su propia fórmula. Con la
+ * fórmula equivocada el mapa no falla —sigue habiendo píxeles que decodificar—,
+ * simplemente sale un relieve inventado, con montañas donde no las hay.
+ *
+ * `maxzoom: 15` es hasta donde existen teselas de elevación. Más allá, MapLibre
+ * reutiliza la de z15 estirándola: el terreno se ve más suave, no desaparece.
+ */
+export const TERRAIN_SOURCE_ID = "terrain"
+
+const TERRAIN_SOURCE = {
+  type: "raster-dem",
+  tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+  encoding: "terrarium",
+  tileSize: 256,
+  maxzoom: 15,
+  attribution:
+    '<a href="https://registry.opendata.aws/terrain-tiles/">Terrain Tiles</a> (AWS Open Data)',
+}
+
+/** Identificador de la capa de sombreado. */
+export const HILLSHADE_LAYER_ID = "hillshade"
+
+/**
+ * Sombreado del relieve, apagado de entrada.
+ *
+ * Va justo encima del mapa base y por debajo de todo lo demás: es contexto del
+ * terreno, no un dato que deba taparle los títulos a nadie.
+ *
+ * Mientras esté oculta no se descarga ni una tesela de elevación, que es lo que
+ * permite declararla desde el arranque sin costo. Las teselas empiezan a caer
+ * cuando el usuario enciende el relieve o el 3D.
+ */
+const hillshadeLayer = () => ({
+  id: HILLSHADE_LAYER_ID,
+  type: "hillshade",
+  source: TERRAIN_SOURCE_ID,
+  layout: { visibility: "none" },
+  paint: {
+    "hillshade-shadow-color": "#3a3a48",
+    "hillshade-highlight-color": "#ffffff",
+    // Suave a propósito: por encima el mapa lleva polígonos de títulos y
+    // etiquetas, y un sombreado fuerte los vuelve ilegibles.
+    "hillshade-exaggeration": 0.45,
+  },
+})
+
+/**
  * Construye el estilo con las dos capas base cargadas desde el principio y una
  * de ellas oculta.
  *
@@ -97,6 +151,7 @@ export const createBaseStyle = (initialBaseLayer = "osm") => ({
   sources: {
     osm: OSM_SOURCE,
     satellite: SATELLITE_SOURCE,
+    [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
     ...anmSources(),
   },
   layers: [
@@ -112,6 +167,7 @@ export const createBaseStyle = (initialBaseLayer = "osm") => ({
       source: "satellite",
       layout: { visibility: initialBaseLayer === "satellite" ? "visible" : "none" },
     },
+    hillshadeLayer(),
     ...anmLayers(),
     ...searchLayers(),
   ],
