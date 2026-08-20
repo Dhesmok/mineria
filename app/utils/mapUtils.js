@@ -41,6 +41,17 @@ export const formatDate = (value) => {
 /** Grados con coma decimal, la convención local. */
 export const formatDegrees = (value) => value.toFixed(5).replace(".", ",")
 
+// Por debajo de este zoom las etiquetas se apiñan y son ilegibles. No hay límite
+// superior: el satélite llega a z22 y antes desaparecían al pasar de z19.
+//
+// Vive aquí, y no en mapLabels.js, porque mapLabels importa Leaflet: dejarlo
+// allá obligaba al visor MapLibre a arrastrar Leaflet entero en su descarga solo
+// para leer un número. mapLabels lo reexporta para no romper a quien ya lo
+// importaba de allá.
+export const LABELS_MIN_ZOOM = 15
+
+export const shouldShowLabels = (zoom) => zoom >= LABELS_MIN_ZOOM
+
 const ringsOfGeometry = (geometry) => {
   if (geometry?.type === "Polygon") {
     // coordinates es [exterior, hueco...]: un solo polígono.
@@ -241,26 +252,54 @@ export const escapeXml = (value) => String(value ?? "").replace(/[&<>"']/g, (cha
 
 const field = (value) => escapeXml(value || "N/A")
 
+const row = (label, value) => `<p><strong>${label}:</strong> ${value}</p>`
+
+/** Fila que solo aparece si hay dato: sirve para campos propios de una sola capa. */
+const optionalRow = (label, value) => (value ? row(label, field(value)) : "")
+
 export const createPopupContent = (properties = {}) => {
   const area =
     typeof properties.AREA_HA === "number" ? properties.AREA_HA.toFixed(4) : properties.AREA_HA || "N/A"
 
+  // Los respaldos no son adorno: cada capa de la ANM bautiza sus campos a su
+  // manera. La de Subcontratos, por ejemplo, no trae TITULO_ESTADO ni
+  // SOLICITANTES_O_TITULARES sino ESTADO y NOMBRE_DE_TITULAR, así que la ficha
+  // mostraba "N/A" en ocho de trece filas teniendo el dato al lado —incluido el
+  // nombre del titular, que suele ser lo primero que uno quiere ver—. Los
+  // nombres se comprobaron contra respuestas reales de los cuatro servicios.
+  const estado = properties.TITULO_ESTADO || properties.STATUS || properties.ESTADO
+  const titulares = properties.SOLICITANTES_O_TITULARES || properties.NOMBRE_DE_TITULAR
+  // GRUPO_DE_TRABAJO de Subcontratos trae valores como "PAR CARTAGENA": es el
+  // mismo dato con otro nombre.
+  const par = properties.PAR || properties.GRUPO_DE_TRABAJO
+
   return `
     <div class="popup-content">
       <h3>Información del Expediente</h3>
-      <p><strong>Código Expediente:</strong> ${field(properties.CODIGO_EXPEDIENTE || properties.TENURE_ID)}</p>
-      <p><strong>Modalidad:</strong> ${field(properties.MODALIDAD)}</p>
-      <p><strong>Estado del Título:</strong> ${field(properties.TITULO_ESTADO || properties.STATUS)}</p>
-      <p><strong>Área (ha):</strong> ${escapeXml(area)}</p>
-      <p><strong>Clasificación Minería:</strong> ${field(properties.CLASIFICACION_MINERIA)}</p>
-      <p><strong>Etapa:</strong> ${field(properties.ETAPA)}</p>
-      <p><strong>Solicitantes o Titulares:</strong> ${field(properties.SOLICITANTES_O_TITULARES)}</p>
-      <p><strong>Minerales:</strong> ${field(properties.MINERALES)}</p>
-      <p><strong>Fecha de Solicitud:</strong> ${escapeXml(formatDate(properties.FECHA_DE_SOLICITUD))}</p>
-      <p><strong>Fecha de Expedición:</strong> ${escapeXml(formatDate(properties.FECHA_DE_EXPEDICION))}</p>
-      <p><strong>Fecha de Aniversario:</strong> ${escapeXml(formatDate(properties.FECHA_DE_ANIVERSARIO))}</p>
-      <p><strong>Fecha de Expiración:</strong> ${escapeXml(formatDate(properties.FECHA_DE_EXPIRACION))}</p>
-      <p><strong>PAR:</strong> ${field(properties.PAR)}</p>
+      ${row("Código Expediente", field(properties.CODIGO_EXPEDIENTE || properties.TENURE_ID))}
+      ${row("Modalidad", field(properties.MODALIDAD))}
+      ${row("Estado del Título", field(estado))}
+      ${row("Área (ha)", escapeXml(area))}
+      ${row("Clasificación Minería", field(properties.CLASIFICACION_MINERIA))}
+      ${row("Etapa", field(properties.ETAPA))}
+      ${row("Solicitantes o Titulares", field(titulares))}
+      ${row("Minerales", field(properties.MINERALES))}
+      ${row("Fecha de Solicitud", escapeXml(formatDate(properties.FECHA_DE_SOLICITUD)))}
+      ${row("Fecha de Expedición", escapeXml(formatDate(properties.FECHA_DE_EXPEDICION)))}
+      ${row("Fecha de Aniversario", escapeXml(formatDate(properties.FECHA_DE_ANIVERSARIO)))}
+      ${row("Fecha de Expiración", escapeXml(formatDate(properties.FECHA_DE_EXPIRACION)))}
+      ${row("PAR", field(par))}
+      ${
+        // La fecha de inscripción NO se usa como respaldo de la fecha de
+        // solicitud aunque solo la traiga Subcontratos: inscribir y solicitar
+        // son actos distintos, y ponerle la etiqueta equivocada a una fecha en
+        // un expediente minero es peor que no mostrarla. Va en su propia fila, y
+        // solo cuando existe, para no añadir un "N/A" más a las otras capas.
+        properties.FECHA_DE_INSCRIPCION
+          ? row("Fecha de Inscripción", escapeXml(formatDate(properties.FECHA_DE_INSCRIPCION)))
+          : ""
+      }
+      ${optionalRow("Terminación", properties.TIPO_TERMINACION)}
     </div>
   `
 }
