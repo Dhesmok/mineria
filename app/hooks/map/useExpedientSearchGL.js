@@ -286,7 +286,14 @@ export const useExpedientSearchGL = (
     if (!mapInstance) return
 
     const popup = new Popup({ maxWidth: "320px", closeOnClick: false })
-    const vertexPopup = new Popup({ closeButton: false, closeOnClick: false, offset: 12 })
+    // La clase no es decorativa: es la que le dice a la hoja de estilos que
+    // este globo, y solo este, debe respetar los saltos de línea de su texto.
+    const vertexPopup = new Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 12,
+      className: "popup-vertice",
+    })
 
     const onResultClick = (event) => {
       const feature = event.features?.[0]
@@ -300,8 +307,8 @@ export const useExpedientSearchGL = (
       mapInstance.getCanvas().style.cursor = "pointer"
       vertexPopup
         .setLngLat(feature.geometry.coordinates)
-        // El texto lleva saltos de línea, y setText los respeta con el
-        // white-space que aplica la hoja de estilos del componente.
+        // El texto lleva saltos de línea, y setText los respeta gracias al
+        // white-space que la hoja de estilos aplica a la clase popup-vertice.
         .setText(feature.properties.etiqueta)
         .addTo(mapInstance)
     }

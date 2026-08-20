@@ -3,7 +3,9 @@
 Documento de trabajo. Marca las casillas a medida que avances y actualiza el
 estado al final de cada sesión, para que la siguiente sesión sepa dónde quedó.
 
-**Estado:** /gl iguala a Leaflet (fases 1–5 + GPS). Pendiente: DEM (Fase 5) y Fase 6.
+**Estado:** migración terminada (fases 0–7) y en `main`; Leaflet ya no existe.
+Ajustes de uso de la Fase 8, hechos salvo los filtros. Pendiente: recorte de DEM
+(Fase 5, fuente ya decidida), entidades nuevas (Fase 6) y filtros (Fase 8).
 **Última actualización:** 2026-08-20
 
 ---
@@ -114,11 +116,15 @@ tests de `utils/` son la red de seguridad de todo este trabajo.
 - [x] Dado el polígono dibujado, consultar cada capa activa por su envolvente
       (`geometryType=esriGeometryEnvelope`). Se reusa `fetchLayerFeatures` de la
       Fase 2, así que la salida es GeoJSON aunque el cable vaya en `f=json`.
-- [~] Recortar DEM al bbox — **NO hecho, y a propósito.** Es la única casilla de
-      esta fase que queda abierta. Ver nota de sesión: la fuente del DEM es una
-      decisión por evaluar (que Fabio debe tomar) y no se puede probar desde el
-      entorno. El README ya reserva su sección y advierte de las alturas
-      elipsoidales; añadir el archivo es enchufar una función más al pipeline.
+- [~] Recortar DEM al bbox — pendiente de implementar, **pero la fuente ya está
+      decidida: Copernicus GLO-30.** Fabio puso la condición de que fuera
+      gratuita para mucha gente, y eso descarta OpenTopography, que es gratis
+      pero exige una clave por usuario y tiene cuota diaria: en cuanto el visor
+      lo use más de un puñado de personas, la cuota se agota y las descargas
+      empiezan a fallar sin que el usuario entienda por qué. GLO-30 son COGs
+      públicos en S3 (registro de datos abiertos de AWS), sin clave, sin cuota y
+      con licencia que permite redistribuir; 30 m de resolución en todo el país.
+      El README ya reserva su sección y advierte de las alturas elipsoidales.
 - [x] Empaquetar todo con `jszip`: README.txt + el polígono dibujado
       (`area.geojson`) + un `.geojson` y un `.kml` por capa. El README lleva
       fuente, URL del servicio, fecha de consulta, número de registros, aviso de
@@ -149,7 +155,41 @@ Orden sugerido por utilidad:
 - [x] Borrar los seis hooks y los dos módulos de utilidades que dependían de Leaflet
 - [x] Borrar la ruta `/gl`: el visor MapLibre pasa a servirse en `/`
 - [x] Portar los tests de regresión que vivían en los módulos borrados
-- [ ] Merge a `main`
+- [x] Merge a `main`
+
+## Fase 8 — Ajustes de uso
+
+Once observaciones de Fabio tras usar el visor con datos reales. No son fases del
+plan original: son lo que se ve cuando alguien de verdad trabaja con la
+herramienta.
+
+- [x] La herramienta de dibujo no se podía apagar. Ahora se apaga pulsándola otra
+      vez o con Escape.
+- [x] El botón de color estaba siempre a la vista y no se entendía sobre qué
+      actuaba. Ahora la paleta sale dentro de la barra de dibujo, solo cuando hay
+      algo que colorear, y dice si va a pintar lo que se dibuje o lo
+      seleccionado.
+- [x] Un punto marcado no se veía: la etiqueta con sus coordenadas iba centrada
+      justo encima del círculo y lo tapaba entero.
+- [x] Solo se podía marcar un punto por pulsación. La herramienta de punto ahora
+      se queda encendida.
+- [x] No se podía escribir una coordenada. Hay un campo en el panel que entiende
+      decimales con punto o con coma, grados-minutos-segundos y metros en
+      cualquiera de los diez sistemas.
+- [x] Cambiar el sistema de coordenadas: de dos a diez, incluidos los orígenes
+      antiguos donde están inscritos los títulos viejos.
+- [x] La brújula del zoom es pequeña e incómoda para el 3D. Los botones de
+      MapLibre pasan de 29 a 36 px y, sobre todo, hay deslizadores grandes de
+      giro e inclinación con un botón de "norte arriba".
+- [x] Aviso en el navegador de que se gira manteniendo Ctrl, solo la primera vez
+      y solo con ratón.
+- [x] La brújula 360° aparece solo con el GPS activo, y se puede agrandar o
+      achicar.
+- [x] La ficha de un polígono salía con un renglón en blanco entre cada dato.
+- [x] Recuperar el botón de LinkedIn, que se perdió al reescribir el visor.
+- [ ] **Filtros** (por departamento, municipio, área, clasificación, etapa). Ver
+      la nota de sesión: hace falta antes inventariar qué campos traen de verdad
+      los servicios, y eso no se puede comprobar sin salida a internet.
 
 ---
 
@@ -637,3 +677,95 @@ presente, porque ya no existe.
 **Lo que queda pendiente no es deuda de la migración**, es trabajo nuevo: el DEM
 recortado de la Fase 5 (falta que Fabio elija la fuente) y las entidades de la
 Fase 6 (falta que diga cuáles). La paridad con el visor viejo está completa.
+
+### Fase 8, ajustes de uso — 2026-08-20
+
+Once observaciones de Fabio después de usar el visor con datos reales. Diez
+resueltas; la undécima —los filtros— necesita información que desde aquí no se
+puede conseguir. Aparte, quedó decidida la fuente del DEM.
+
+**El DEM: Copernicus GLO-30.** La condición era que fuera gratuito "para que lo
+usen muchas personas", y esa frase decide la comparación. OpenTopography también
+es gratis, pero por usuario: hay que sacar una clave y hay cuota diaria. Un visor
+público con clave compartida agota la cuota el día que lo usen veinte personas, y
+lo hace de la peor manera —descargas que fallan sin explicación—. GLO-30 se
+sirve como COGs públicos en S3, sin clave y sin cuota, con licencia que permite
+redistribuir. Son 30 m, la mitad de detalle que el LiDAR del IGAC, pero cubre el
+país entero y no se rompe al crecer. El LiDAR del IGAC puede añadirse después
+como opción donde exista, sin sustituir a este.
+
+**Dos cosas que las comprobaciones daban por buenas y estaban mal.** Ambas se
+vieron mirando capturas, no leyendo datos; es la tercera vez que pasa en este
+proyecto y ya conviene tomárselo como norma.
+
+La primera: el punto marcado no se veía. El símbolo estaba bien —círculo de
+color con halo blanco, y los datos lo confirmaban—, pero la etiqueta con las
+coordenadas se ancla por defecto *centrada* en el punto, y su recuadro oscuro es
+mucho mayor que el círculo. El visor decía las coordenadas del sitio sin señalar
+el sitio. Se arregla anclando la etiqueta por abajo y subiéndola 14 px.
+
+La segunda: al encender el 3D, la columna de botones creció tanto que se montó
+encima del panel lateral. Y al añadir el campo de coordenadas, el panel creció
+hacia abajo hasta meterse debajo de esa columna, que al estar por encima se comía
+los clics de sus botones "Borrar" y "Exportar" —eso lo detectó la batería de la
+Fase 3, que se quedó esperando un botón que estaba visible pero era imposible de
+pulsar—. La causa de fondo era que panel y controles compartían el lado
+izquierdo. Ahora el panel se queda con la izquierda entera y tiene un alto máximo
+con desplazamiento propio; los controles del mapa se van todos a la derecha.
+Ajustar alturas habría durado hasta el siguiente añadido.
+
+**El interlineado de la ficha tenía una causa concreta.** No era una cuestión de
+gusto: había una regla `white-space: pre-line` aplicada a *todos* los globos. El
+HTML de la ficha se arma con una plantilla de texto, que trae un salto de línea y
+su sangría entre etiqueta y etiqueta, y con esa regla esos saltos se dibujaban
+como líneas de verdad. Cada renglón medía 48 px en vez de 17. La regla la
+necesitaba solo el globo de un vértice, cuyo texto sí lleva saltos deliberados,
+así que ahora va contra su clase.
+
+**Los sistemas de coordenadas pasaron de dos a diez**, y eso destapó una trampa.
+La exportación tenía su propia lista con solo dos, y un respaldo silencioso a
+Origen Nacional. Añadir sistemas a la tabla sin tocar la exportación habría
+producido shapefiles en un sistema distinto del elegido, con un `.prj` coherente
+consigo mismo y equivocado: un archivo que se abre sin errores y coloca los
+polígonos donde no van. Ahora las dos leen `utils/crs.js`, que entrega definición
+y `.prj` juntos precisamente para que no se puedan separar.
+
+Se incluyeron los cinco orígenes antiguos de MAGNA-SIRGAS además del CTM-12
+porque los títulos inscritos antes de 2020 están en ellos, sobre todo en Origen
+Bogotá. Las coordenadas de referencia de las pruebas no salen de ejecutar el
+código y copiar el resultado —eso no probaría nada—: se calcularon aparte con la
+serie del arco meridiano y coinciden con proj4 dentro de 3 m.
+
+**El campo de coordenadas y la coma.** En español la coma separa decimales; en
+casi todo sitio de donde se copia una coordenada, separa los dos números. No se
+puede decidir mirando una coma suelta, así que se decide mirando la cadena
+entera: primero se parte por espacios, que nunca son ambiguos, y solo si no hay
+espacios se recurre a las comas (dos trozos = separador, cuatro = decimales).
+Entiende también grados-minutos-segundos, con N/S/E/W y con la O de Oeste. Si el
+punto cae fuera de Colombia avisa sin impedirlo: casi siempre significa haber
+intercambiado los dos números, pero puede ser a propósito.
+
+**Un fallo que introdujo el modo de punto continuo.** Al dejar la herramienta
+encendida entre punto y punto, casi siempre hay una figura a medio hacer:
+mapbox-gl-draw mete en su almacén el punto que se *va* a dibujar, todavía sin
+coordenadas, y `getAll()` lo devuelve como uno más. Eso se colaba en la descarga
+por área, y un punto sin coordenadas dentro de un GeoJSON no es GeoJSON válido.
+`getDrawnFeatures` ahora filtra las figuras incompletas.
+
+**Los filtros quedan pendientes, y no por falta de tiempo.** Filtrar por área,
+clasificación, etapa o modalidad es sencillo: esos campos vienen en la respuesta
+y ya se muestran en la ficha, así que se puede filtrar en el navegador sobre lo
+que ya está cargado, sin consultar nada más. Departamento y municipio son otra
+cosa: no aparecen en las respuestas que se han visto, y hay dos caminos —pedirle
+al servicio que los devuelva, si es que los tiene, o cruzar con el MGN del DANE—
+que se eligen según lo que resulte que traen los servicios. Averiguarlo requiere
+preguntarles, y desde este entorno no hay salida a internet. Es exactamente el
+mismo caso de `scripts/probar-geojson.mjs`: lo sensato es sondear primero y
+diseñar después, no construir a ciegas un panel de filtros sobre campos que
+a lo mejor no existen.
+
+**Comprobado**: 156 pruebas unitarias (34 nuevas, entre los sistemas de
+coordenadas y el lector de coordenadas escritas) y 137 comprobaciones en
+navegador —las 105 de regresión de las fases anteriores, todas en verde, más 32
+nuevas para estos ajustes—, con capturas de la ficha, del punto marcado, de la
+paleta, del panel de 3D y de la brújula en sus dos tamaños.

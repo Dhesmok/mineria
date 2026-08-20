@@ -1,5 +1,5 @@
 import React from "react"
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import Component from "./components"
 
@@ -53,8 +53,11 @@ describe("buscador de expedientes", () => {
 
     await typeInSearch(user, "ABC")
 
-    expect(await screen.findByRole("listbox")).toBeInTheDocument()
-    expect(screen.getAllByRole("option")).toHaveLength(2)
+    // Dentro del desplegable y no en toda la página: un <select> normal —el del
+    // sistema de coordenadas— también tiene opciones con rol "option", y
+    // buscarlas sueltas contaba las suyas como sugerencias de expediente.
+    const listbox = await screen.findByRole("listbox")
+    expect(within(listbox).getAllByRole("option")).toHaveLength(2)
   })
 
   it("no reabre el desplegable después de elegir una sugerencia", async () => {

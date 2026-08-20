@@ -1,11 +1,16 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Map as MapLibreMap, NavigationControl, ScaleControl, setWorkerUrl } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 
 import { useMapInitializationGL } from "./hooks/map/useMapInitializationGL"
-import { useTerrainGL, EXAGGERATION_MAX, EXAGGERATION_MIN } from "./hooks/map/useTerrainGL"
+import {
+  useTerrainGL,
+  EXAGGERATION_MAX,
+  EXAGGERATION_MIN,
+  PITCH_MAX,
+} from "./hooks/map/useTerrainGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
 import { useAreaDownloadGL } from "./hooks/map/useAreaDownloadGL"
@@ -13,7 +18,7 @@ import { useGeolocationGL } from "./hooks/map/useGeolocationGL"
 import { useExpedientSearchGL } from "./hooks/map/useExpedientSearchGL"
 import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } from "./utils/mapStyles"
 import { formatDegrees } from "./utils/mapUtils"
-import { ColorPicker } from "./components/ColorPicker"
+import { COMPASS_SIZE_MAX, COMPASS_SIZE_MIN } from "./hooks/map/useGeolocationGL"
 import { Button } from "@/components/ui/button"
 import {
   Box,
@@ -28,6 +33,8 @@ import {
   Satellite,
   Spline,
   Trash2,
+  User,
+  X,
 } from "lucide-react"
 
 /**
@@ -90,11 +97,27 @@ const CursorCoordinates = ({ map }) => {
   if (!position) return null
 
   return (
-    <div className="absolute bottom-4 right-4 z-10 rounded bg-white/90 px-3 py-1 font-mono text-xs text-gray-700 shadow-md">
+    // Abajo a la izquierda, justo encima de la barra de escala: las dos son
+    // información sobre dónde estás mirando, y así la esquina derecha queda
+    // libre para los botones. Antes estaba a la derecha y ahí ahora hay
+    // controles que la taparían.
+    <div className="absolute bottom-10 left-4 z-10 rounded bg-white/90 px-3 py-1 font-mono text-xs text-gray-700 shadow-md">
       Lat {formatDegrees(position.lat)} · Lon {formatDegrees(position.lng)}
     </div>
   )
 }
+
+/** Los colores con que se puede dibujar. El primero es el de partida. */
+const DRAW_COLORS = [
+  "#f357a1",
+  "#ef4444",
+  "#f59e0b",
+  "#10b981",
+  "#3b82f6",
+  "#8b5cf6",
+  "#111827",
+  "#ffffff",
+]
 
 /**
  * Barra de dibujo.
@@ -102,41 +125,145 @@ const CursorCoordinates = ({ map }) => {
  * Sustituye a las dos barras del visor Leaflet —la de dibujo y la de medición—,
  * que hacían lo mismo: ambas dibujaban. Aquí toda figura muestra su medida al
  * cerrarla, así que una sola barra basta.
+ *
+ * La paleta va aquí dentro y no en un botón aparte. Antes era un botón "Color"
+ * suelto arriba del mapa que abría un desplegable: estaba siempre a la vista,
+ * incluso cuando no había nada que colorear, y no se entendía sobre qué actuaba.
+ * Ahora aparece solo cuando hay algo que colorear —mientras se dibuja, o con una
+ * figura seleccionada— y dice a qué se va a aplicar.
  */
-const DrawToolbar = ({ mode, startMode, deleteSelected }) => {
+const DrawToolbar = ({
+  mode,
+  startMode,
+  deleteSelected,
+  drawingColor,
+  onColorChange,
+  hasSelection,
+}) => {
   const tools = [
     { id: "draw_polygon", label: "Dibujar polígono y medir su área", Icon: Pentagon },
     { id: "draw_line_string", label: "Dibujar línea y medir su longitud", Icon: Spline },
-    { id: "draw_point", label: "Marcar un punto y ver sus coordenadas", Icon: MapPin },
+    { id: "draw_point", label: "Marcar puntos y ver sus coordenadas", Icon: MapPin },
   ]
 
+  const drawing = mode.startsWith("draw_")
+  const showPalette = drawing || hasSelection
+
   return (
-    <div className="absolute top-32 right-4 z-10 flex flex-col gap-1 rounded-md bg-white p-1 shadow-md">
-      {tools.map(({ id, label, Icon }) => (
+    <>
+      <div className="absolute top-32 right-4 z-10 flex flex-col gap-1 rounded-md bg-white p-1 shadow-md">
+        {tools.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => startMode(id)}
+            title={`${label}. Pulsa otra vez (o Escape) para salir.`}
+            aria-label={label}
+            // El modo activo se resalta: sin eso no hay forma de saber que el
+            // siguiente clic en el mapa va a empezar una figura.
+            aria-pressed={mode === id}
+            className={`flex h-8 w-8 items-center justify-center rounded ${
+              mode === id ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+          </button>
+        ))}
         <button
-          key={id}
           type="button"
-          onClick={() => startMode(id)}
-          title={label}
-          aria-label={label}
-          // El modo activo se resalta: sin eso no hay forma de saber que el
-          // siguiente clic en el mapa va a empezar una figura.
-          aria-pressed={mode === id}
-          className={`flex h-8 w-8 items-center justify-center rounded ${
-            mode === id ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
-          }`}
+          onClick={deleteSelected}
+          title="Borrar la figura seleccionada, o todo el dibujo si no hay ninguna"
+          aria-label="Borrar figura"
+          className="flex h-8 w-8 items-center justify-center rounded text-gray-700 hover:bg-red-50 hover:text-red-600"
         >
-          <Icon className="h-4 w-4" />
+          <Trash2 className="h-4 w-4" />
         </button>
-      ))}
+      </div>
+
+      {showPalette && (
+        <div className="absolute top-32 right-16 z-10 rounded-md bg-white px-2 py-1.5 shadow-md">
+          <p className="mb-1 text-[10px] leading-tight text-gray-500">
+            {hasSelection ? "Color de lo seleccionado" : "Color del dibujo"}
+          </p>
+          <div className="flex gap-1.5">
+            {DRAW_COLORS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => onColorChange(color)}
+                aria-label={`Usar el color ${color}`}
+                aria-pressed={drawingColor === color}
+                className={`h-6 w-6 rounded-full transition-transform hover:scale-110 ${
+                  drawingColor === color
+                    ? "ring-2 ring-gray-800 ring-offset-1"
+                    : "ring-1 ring-gray-300"
+                }`}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * Una fila de ajuste: nombre, barra y valor, todo en un renglón.
+ *
+ * Va en horizontal y no con la etiqueta encima porque estos ajustes viven en un
+ * panel flotante sobre el mapa, y en vertical ocupaban tanto que la columna de
+ * botones acababa montándose sobre el panel lateral. Se vio en una captura: las
+ * comprobaciones sobre el estado del mapa daban todas por buenas.
+ */
+const SliderRow = ({ id, label, value, display, min, max, step, onChange }) => (
+  <div className="flex items-center gap-2">
+    <label htmlFor={id} className="w-20 shrink-0 text-[11px] leading-tight text-gray-700">
+      {label}
+    </label>
+    <input
+      id={id}
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={(event) => onChange(parseFloat(event.target.value))}
+      className="min-w-0 flex-1"
+    />
+    <span className="w-11 shrink-0 text-right text-[11px] tabular-nums text-gray-600">
+      {display}
+    </span>
+  </div>
+)
+
+/**
+ * Aviso de cómo se gira el mapa con el ratón.
+ *
+ * En el celular el 3D se maneja solo: dos dedos y ya. En el navegador hay que
+ * saber que se arrastra con Ctrl, y eso no está escrito en ninguna parte, así
+ * que la primera vez que alguien entra en 3D se queda con un mapa inclinado que
+ * no sabe girar. El aviso sale una vez por visita y se va solo.
+ */
+const RotateHint = ({ onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 9000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  return (
+    <div className="absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full bg-gray-900/90 px-4 py-2 text-sm text-white shadow-lg">
+      <span>
+        Mantén <kbd className="rounded bg-white/20 px-1.5 py-0.5 font-mono text-xs">Ctrl</kbd> y
+        arrastra para girar e inclinar el mapa
+      </span>
       <button
         type="button"
-        onClick={deleteSelected}
-        title="Borrar la figura seleccionada, o todo el dibujo si no hay ninguna"
-        aria-label="Borrar figura"
-        className="flex h-8 w-8 items-center justify-center rounded text-gray-700 hover:bg-red-50 hover:text-red-600"
+        onClick={onClose}
+        aria-label="Cerrar el aviso"
+        className="rounded-full p-0.5 hover:bg-white/20"
       >
-        <Trash2 className="h-4 w-4" />
+        <X className="h-4 w-4" />
       </button>
     </div>
   )
@@ -203,10 +330,10 @@ export default function MapComponentGL({
   const {
     drawingColor,
     handleColorChange,
-    showColorPicker,
-    setShowColorPicker,
     mode,
     startMode,
+    addPointAt,
+    selectedIds,
     deleteSelected,
     clearDrawings,
     getDrawnFeatures,
@@ -220,8 +347,15 @@ export default function MapComponentGL({
     setShowErrorBanner,
   )
 
-  const { isLocating, hasLocated, isCompassActive, handleLocateUser, handleToggleCompass360 } =
-    useGeolocationGL(mapRef, setError, setShowErrorBanner)
+  const {
+    isLocating,
+    hasLocated,
+    isCompassActive,
+    compassSize,
+    changeCompassSize,
+    handleLocateUser,
+    handleToggleCompass360,
+  } = useGeolocationGL(mapRef, setError, setShowErrorBanner)
 
   const {
     is3D,
@@ -230,8 +364,28 @@ export default function MapComponentGL({
     toggleHillshade,
     exaggeration,
     changeExaggeration,
+    bearing,
+    changeBearing,
+    resetNorth,
+    pitch,
+    changePitch,
     elevationAt,
   } = useTerrainGL(mapRef, mapInstance)
+
+  // El aviso de "arrastra con Ctrl" solo tiene sentido con ratón: en una
+  // pantalla táctil se gira con dos dedos y ese gesto ya lo conoce todo el
+  // mundo. `pointer: fine` es la pregunta correcta —¿hay un puntero preciso?—;
+  // mirar el ancho de la pantalla habría dejado sin aviso a un portátil pequeño.
+  const [rotateHintShown, setRotateHintShown] = useState(false)
+  const [showRotateHint, setShowRotateHint] = useState(false)
+  const hideRotateHint = useCallback(() => setShowRotateHint(false), [])
+
+  useEffect(() => {
+    if (!is3D || rotateHintShown) return
+    if (typeof window === "undefined" || !window.matchMedia("(pointer: fine)").matches) return
+    setRotateHintShown(true)
+    setShowRotateHint(true)
+  }, [is3D, rotateHintShown])
 
   // Solo en desarrollo, junto a `window.__mapa`: permite preguntar la altura
   // real de un punto desde la consola (`__mapa.__alturaReal(__mapa.getCenter())`)
@@ -263,7 +417,11 @@ export default function MapComponentGL({
     mapInstance.removeVertices = removeVertices
     mapInstance.clearDrawings = clearDrawings
     mapInstance.clearSearchResult = clearSearchResult
-  }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult])
+    // Lo usa el campo de "ir a una coordenada" del panel: marca el punto por la
+    // misma vía que el ratón, así que sale con el mismo símbolo y se borra con
+    // la misma papelera.
+    mapInstance.addPointAt = addPointAt
+  }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult, addPointAt])
 
   useEffect(() => {
     if (mapRef.current) return
@@ -348,7 +506,87 @@ export default function MapComponentGL({
           contenedor. */}
       <div ref={containerRef} className="absolute inset-0 h-full w-full z-0" />
 
-      <div className="absolute bottom-4 left-4 z-10 flex flex-col space-y-2">
+      {/* Los controles del mapa van todos a la derecha y el panel de consulta se
+          queda con la izquierda entera. Estaban los dos a la izquierda y se
+          estorbaban: al crecer el panel, su fila de botones acababa por debajo
+          de esta columna, que al estar encima se comía los clics. Separarlos por
+          lados quita el problema de raíz en vez de ir ajustando alturas. */}
+      {/* bottom-10 y no bottom-4: en esa esquina va la atribución de
+          OpenStreetMap, que las condiciones de uso obligan a mostrar, y el
+          último botón se le montaba encima. */}
+      <div className="absolute bottom-10 right-4 z-10 flex flex-col items-end space-y-2">
+        {/* Ajustes de cómo se ve el mapa. Van encima de los botones de acción,
+            en la misma columna, y cada uno solo aparece cuando hay algo que
+            ajustar: un control que no hace nada visible confunde más que ayuda. */}
+        {(is3D || isCompassActive) && (
+          <div className="w-64 space-y-2">
+            {is3D && (
+              <div className="space-y-1.5 rounded-md bg-white px-3 py-2 shadow-md">
+                <SliderRow
+                  id="exageracion"
+                  label="Exageración"
+                  min={EXAGGERATION_MIN}
+                  max={EXAGGERATION_MAX}
+                  step="0.1"
+                  value={exaggeration}
+                  display={`${exaggeration.toFixed(1)}×`}
+                  onChange={changeExaggeration}
+                />
+                {/* Girar e inclinar sin pelearse con la brújula de 29 px que trae
+                    MapLibre, y sin tener que saber el atajo de Ctrl. */}
+                <SliderRow
+                  id="inclinacion"
+                  label="Inclinación"
+                  min={0}
+                  max={PITCH_MAX}
+                  step="1"
+                  value={Math.round(pitch)}
+                  display={`${Math.round(pitch)}°`}
+                  onChange={changePitch}
+                />
+                <SliderRow
+                  id="giro"
+                  label="Giro"
+                  min={0}
+                  max={360}
+                  step="1"
+                  value={Math.round((bearing + 360) % 360)}
+                  display={`${Math.round((bearing + 360) % 360)}°`}
+                  onChange={changeBearing}
+                />
+                <button
+                  type="button"
+                  onClick={resetNorth}
+                  className="flex items-center gap-1 whitespace-nowrap pt-0.5 text-[11px] font-medium text-blue-600 hover:text-blue-800"
+                >
+                  <Compass className="h-3 w-3" />
+                  Volver a poner el norte arriba
+                </button>
+                {/* Decirlo evita que alguien lea el relieve como una medida. */}
+                <p className="text-[10px] leading-tight text-gray-500">
+                  La exageración solo afecta a cómo se ve: no cambia alturas ni áreas.
+                </p>
+              </div>
+            )}
+
+            {/* 250 px es mucho en un celular y poco en un monitor grande. */}
+            {isCompassActive && (
+              <div className="rounded-md bg-white px-3 py-2 shadow-md">
+                <SliderRow
+                  id="tamano-brujula"
+                  label="Brújula"
+                  min={COMPASS_SIZE_MIN}
+                  max={COMPASS_SIZE_MAX}
+                  step="10"
+                  value={compassSize}
+                  display={`${compassSize} px`}
+                  onChange={(value) => changeCompassSize(Math.round(value))}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {/* La función diferenciadora: dibujar un polígono y salir con los
             archivos de las capas encendidas dentro de esa área. Va en esta
             columna de acciones del mapa, no junto a la barra de dibujo, para no
@@ -404,34 +642,6 @@ export default function MapComponentGL({
           {is3D ? "Volver a 2D" : "Ver en 3D"}
         </Button>
 
-        {/* El slider solo aparece en 3D: en plano no tiene nada que exagerar, y
-            un control que no hace nada visible confunde más de lo que ayuda. */}
-        {is3D && (
-          <div className="rounded-md bg-white px-3 py-2 shadow-md">
-            <label
-              htmlFor="exageracion"
-              className="mb-1 block text-xs font-medium text-gray-700"
-            >
-              Exageración vertical: {exaggeration.toFixed(1)}×
-            </label>
-            <input
-              id="exageracion"
-              type="range"
-              min={EXAGGERATION_MIN}
-              max={EXAGGERATION_MAX}
-              step="0.1"
-              value={exaggeration}
-              onChange={(event) => changeExaggeration(parseFloat(event.target.value))}
-              className="w-40"
-              aria-label="Exageración vertical del terreno"
-            />
-            {/* Decirlo evita que alguien lea el relieve como una medida. */}
-            <p className="mt-1 text-[10px] leading-tight text-gray-500">
-              Solo afecta a cómo se ve. No cambia ninguna altura ni ningún área.
-            </p>
-          </div>
-        )}
-
         <Button
           onClick={handleLocateUser}
           className={`transition-colors ${
@@ -447,31 +657,49 @@ export default function MapComponentGL({
           {isLocating ? "Ubicando..." : hasLocated ? "Ubicación activa" : "Activar GPS"}
         </Button>
 
+        {/* La brújula 360° se dibuja encima del marcador del GPS: sin ubicación
+            no hay dónde ponerla. Estaba siempre visible y pulsarla sin el GPS
+            encendido no hacía nada, que es la peor respuesta posible. */}
+        {hasLocated && (
+          <Button
+            onClick={handleToggleCompass360}
+            aria-pressed={isCompassActive}
+            title="Girar una rosa de los vientos con la orientación del celular"
+            className={`transition-colors ${
+              isCompassActive
+                ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                : "bg-white text-black hover:bg-gray-200"
+            }`}
+          >
+            <Compass className={`mr-2 h-4 w-4 ${isCompassActive ? "text-blue-600" : ""}`} />
+            {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
+          </Button>
+        )}
+
         <Button
-          onClick={handleToggleCompass360}
-          aria-pressed={isCompassActive}
-          title="Girar una rosa de los vientos con la orientación del celular"
-          className={`transition-colors ${
-            isCompassActive
-              ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
-              : "bg-white text-black hover:bg-gray-200"
-          }`}
+          onClick={() =>
+            window.open("https://www.linkedin.com/in/fabio-espinosa/", "_blank", "noopener,noreferrer")
+          }
+          title="Perfil del autor en LinkedIn"
+          className="bg-white text-black hover:bg-gray-200"
         >
-          <Compass className={`mr-2 h-4 w-4 ${isCompassActive ? "text-blue-600" : ""}`} />
-          {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
+          <User className="mr-2 h-4 w-4" />
+          Fabio A. Espinosa
         </Button>
       </div>
 
-      <ColorPicker
+      <DrawToolbar
+        mode={mode}
+        startMode={startMode}
+        deleteSelected={deleteSelected}
         drawingColor={drawingColor}
-        handleColorChange={handleColorChange}
-        showColorPicker={showColorPicker}
-        setShowColorPicker={setShowColorPicker}
+        onColorChange={handleColorChange}
+        hasSelection={selectedIds.length > 0}
       />
 
-      <DrawToolbar mode={mode} startMode={startMode} deleteSelected={deleteSelected} />
-
       <CursorCoordinates map={mapInstance} />
+
+      {showRotateHint && <RotateHint onClose={hideRotateHint} />}
 
       {showZoomInHint && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/95 text-gray-700 text-sm px-4 py-2 rounded-full shadow-md">
@@ -525,25 +753,33 @@ export default function MapComponentGL({
         .maplibregl-popup-content {
           background: rgba(255, 255, 255, 0.95);
           color: #333;
-          font-size: 14px;
-          line-height: 24px;
+          font-size: 13px;
+          line-height: 1.35;
           border-radius: 4px;
           max-height: 400px;
           overflow-y: auto;
+          padding: 10px 12px;
         }
         .maplibregl-popup-content h3 {
-          font-size: 16px;
+          font-size: 15px;
           font-weight: bold;
-          margin-bottom: 10px;
+          margin-bottom: 6px;
           border-bottom: 1px solid #ccc;
-          padding-bottom: 5px;
+          padding-bottom: 4px;
         }
         .maplibregl-popup-content p {
-          margin-bottom: 5px;
+          margin: 0 0 2px;
         }
-        /* La ficha de un vértice trae saltos de línea; sin esto sale todo
-           seguido en un renglón. */
-        .maplibregl-popup-content {
+        /* Esta regla estaba puesta sobre todos los globos y era la causa de que
+           la ficha de un expediente saliera con un renglón en blanco entre cada
+           dato: el HTML de la ficha se arma con una plantilla de texto, que trae
+           un salto de línea y su sangría entre etiqueta y etiqueta, y con
+           pre-line esos saltos se dibujan como líneas de verdad. La ficha medía
+           casi el doble de lo que decía.
+
+           La necesita solo el globo de un vértice, cuyo texto sí lleva saltos
+           deliberados, así que ahora va contra su clase y no contra todos. */
+        .maplibregl-popup.popup-vertice .maplibregl-popup-content {
           white-space: pre-line;
         }
         /* La medida de una figura dibujada se distingue de las etiquetas de
@@ -556,6 +792,17 @@ export default function MapComponentGL({
           padding: 2px 6px;
           font-size: 12px;
           text-shadow: none;
+        }
+        /* Los botones de zoom y la brújula vienen de fábrica a 29 px, que con
+           un trackpad es incómodo de acertar —sobre todo la brújula, que además
+           hay que arrastrar—. A 36 px se pulsan sin apuntar. Los controles
+           grandes de giro e inclinación viven aparte, en el panel del 3D. */
+        .maplibregl-ctrl-group button {
+          width: 36px;
+          height: 36px;
+        }
+        .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+          background-size: 22px 22px;
         }
         /* mapbox-gl-draw le pone estas clases al contenedor del mapa para
            cambiar el cursor, pero su CSS las escribe contra .mapboxgl-map, que

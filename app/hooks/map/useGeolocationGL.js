@@ -20,25 +20,45 @@ import { Marker, Popup } from "maplibre-gl"
  */
 
 /**
+ * Tamaño de la rosa de los vientos, en píxeles de pantalla.
+ *
+ * Es ajustable porque 250 px es mucho en un celular —tapaba media pantalla— y
+ * poco en un monitor grande. El punto azul, en cambio, mide siempre lo mismo:
+ * es una posición, no un dibujo que haya que leer.
+ */
+export const COMPASS_SIZE_DEFAULT = 250
+export const COMPASS_SIZE_MIN = 120
+export const COMPASS_SIZE_MAX = 420
+const DOT_SIZE = 44
+
+/**
  * HTML del marcador. Punto azul siempre; con la brújula activa, además la rosa
  * de los vientos grande y la aguja. Es una cadena pura, sin dependencias.
  */
-export const buildCompassMarkup = (compassActive) => {
-  const size = compassActive ? 250 : 44
+export const buildCompassMarkup = (compassActive, compassSize = COMPASS_SIZE_DEFAULT) => {
+  const size = compassActive ? compassSize : DOT_SIZE
   const center = size / 2
+  // Las letras y los números de la rosa se escalan con ella. Con tamaños fijos,
+  // una brújula pequeña quedaba con una "N" que se salía del círculo.
+  const scale = size / COMPASS_SIZE_DEFAULT
 
   let dialHtml = ""
   let needleHtml = ""
 
   if (compassActive) {
+    // Todas las medidas de dentro se dan en las unidades del diseño original
+    // (una rosa de 250 px) y esta función las lleva al tamaño elegido.
+    const s = (value) => Number((value * scale).toFixed(2))
+
     let ticks = ""
     for (let i = 0; i < 360; i += 2) {
       const isTen = i % 10 === 0
       const length = isTen ? 12 : i % 5 === 0 ? 8 : 4
-      ticks += `<line x1="${center}" y1="${isTen ? 0 : 12 - length}" x2="${center}" y2="12" transform="rotate(${i} ${center} ${center})" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"/>`
-      ticks += `<line x1="${center}" y1="${isTen ? 0 : 12 - length}" x2="${center}" y2="12" transform="rotate(${i} ${center} ${center})" stroke="rgba(0,0,0,0.5)" stroke-width="0.5"/>`
+      const start = isTen ? 0 : s(12 - length)
+      ticks += `<line x1="${center}" y1="${start}" x2="${center}" y2="${s(12)}" transform="rotate(${i} ${center} ${center})" stroke="rgba(255,255,255,0.8)" stroke-width="${s(1.5)}"/>`
+      ticks += `<line x1="${center}" y1="${start}" x2="${center}" y2="${s(12)}" transform="rotate(${i} ${center} ${center})" stroke="rgba(0,0,0,0.5)" stroke-width="${s(0.5)}"/>`
       if (isTen) {
-        ticks += `<text x="${center}" y="24" transform="rotate(${i} ${center} ${center})" fill="white" font-size="10" text-anchor="middle" font-family="sans-serif" font-weight="bold" style="text-shadow: 1px 1px 2px black;">${i}</text>`
+        ticks += `<text x="${center}" y="${s(24)}" transform="rotate(${i} ${center} ${center})" fill="white" font-size="${s(10)}" text-anchor="middle" font-family="sans-serif" font-weight="bold" style="text-shadow: 1px 1px 2px black;">${i}</text>`
       }
     }
 
@@ -46,23 +66,23 @@ export const buildCompassMarkup = (compassActive) => {
       <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="position: absolute; left: 0; top: 0; pointer-events: none;">
         <circle cx="${center}" cy="${center}" r="${center - 2}" fill="rgba(0, 50, 100, 0.1)" stroke="rgba(255,255,255,0.4)" stroke-width="1"/>
         ${ticks}
-        <g font-size="28" font-weight="bold" font-family="serif" style="text-shadow: 1px 1px 3px black;">
-          <text x="${center}" y="55" fill="#ff4444" text-anchor="middle">N</text>
-          <text x="${center}" y="${size - 35}" fill="white" text-anchor="middle">S</text>
-          <text x="${size - 35}" y="${center + 10}" fill="white" text-anchor="middle">E</text>
-          <text x="35" y="${center + 10}" fill="white" text-anchor="middle">W</text>
+        <g font-size="${s(28)}" font-weight="bold" font-family="serif" style="text-shadow: 1px 1px 3px black;">
+          <text x="${center}" y="${s(55)}" fill="#ff4444" text-anchor="middle">N</text>
+          <text x="${center}" y="${size - s(35)}" fill="white" text-anchor="middle">S</text>
+          <text x="${size - s(35)}" y="${center + s(10)}" fill="white" text-anchor="middle">E</text>
+          <text x="${s(35)}" y="${center + s(10)}" fill="white" text-anchor="middle">W</text>
         </g>
-        <line x1="${center - 15}" y1="${center}" x2="${center + 15}" y2="${center}" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
-        <line x1="${center}" y1="${center - 15}" x2="${center}" y2="${center + 15}" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
+        <line x1="${center - s(15)}" y1="${center}" x2="${center + s(15)}" y2="${center}" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
+        <line x1="${center}" y1="${center - s(15)}" x2="${center}" y2="${center + s(15)}" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
       </svg>
     `
 
     needleHtml = `
       <div class="gps-compass__needle" style="width:${size}px; height:${size}px; left:0; top:0; transform-origin: center; transform: rotate(0deg); background:transparent; border:none; filter:none; position:absolute;">
         <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-          <line x1="${center}" y1="${center}" x2="${center}" y2="20" stroke="#ff4444" stroke-width="2"/>
-          <polygon points="${center - 4},35 ${center + 4},35 ${center},20" fill="#ff4444" />
-          <circle cx="${center}" cy="${center}" r="3" fill="#ff4444"/>
+          <line x1="${center}" y1="${center}" x2="${center}" y2="${s(20)}" stroke="#ff4444" stroke-width="${s(2)}"/>
+          <polygon points="${center - s(4)},${s(35)} ${center + s(4)},${s(35)} ${center},${s(20)}" fill="#ff4444" />
+          <circle cx="${center}" cy="${center}" r="${s(3)}" fill="#ff4444"/>
         </svg>
       </div>
     `
@@ -98,6 +118,7 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
   const [isLocating, setIsLocating] = useState(false)
   const [hasLocated, setHasLocated] = useState(false)
   const [isCompassActive, setIsCompassActive] = useState(false)
+  const [compassSize, setCompassSize] = useState(COMPASS_SIZE_DEFAULT)
 
   const markerRef = useRef(null)
   const markerElRef = useRef(null)
@@ -106,6 +127,10 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
   const orientationCleanupRef = useRef(null)
   const headingRef = useRef(null)
   const hasCenteredRef = useRef(false)
+  // El tamaño se lee dentro de manejadores creados una sola vez; con el valor
+  // del estado se quedarían viendo el del primer render.
+  const compassSizeRef = useRef(compassSize)
+  compassSizeRef.current = compassSize
 
   /** Elemento del marcador, creándolo la primera vez. */
   const ensureMarkerElement = useCallback((compassActive) => {
@@ -114,7 +139,7 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
       el.className = "gps-compass-marker"
       markerElRef.current = el
     }
-    markerElRef.current.innerHTML = buildCompassMarkup(compassActive)
+    markerElRef.current.innerHTML = buildCompassMarkup(compassActive, compassSizeRef.current)
     return markerElRef.current
   }, [])
 
@@ -200,6 +225,24 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
     setShowErrorBanner,
   ])
 
+  /**
+   * Cambia el tamaño de la rosa mientras se mira.
+   *
+   * Redibujar el marcador borra la aguja, así que hay que volver a ponerle el
+   * rumbo que tenía: si no, la brújula salta al norte cada vez que se mueve la
+   * barra del tamaño.
+   */
+  const changeCompassSize = useCallback(
+    (value) => {
+      compassSizeRef.current = value
+      setCompassSize(value)
+      if (!isCompassActive || !markerElRef.current) return
+      ensureMarkerElement(true)
+      if (headingRef.current !== null) updateNeedle(headingRef.current)
+    },
+    [ensureMarkerElement, isCompassActive, updateNeedle],
+  )
+
   const removeMarker = useCallback(() => {
     markerRef.current?.remove()
     markerRef.current = null
@@ -217,6 +260,10 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
         watchIdRef.current = null
       }
       removeMarker()
+      // La brújula se apaga con el GPS. Vive sobre el marcador de la ubicación,
+      // así que sin ubicación no hay dónde dibujarla: dejarla "activa" solo
+      // conseguía que el botón dijera "Ocultar 360°" sin haber nada que ocultar.
+      stopOrientationTracking()
       setIsLocating(false)
       setHasLocated(false)
       hasCenteredRef.current = false
@@ -274,6 +321,7 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
     isCompassActive,
     mapRef,
     removeMarker,
+    stopOrientationTracking,
     setError,
     setShowErrorBanner,
   ])
@@ -292,6 +340,8 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
     isLocating,
     hasLocated,
     isCompassActive,
+    compassSize,
+    changeCompassSize,
     handleLocateUser,
     handleToggleCompass360,
   }

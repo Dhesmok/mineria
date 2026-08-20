@@ -34,10 +34,18 @@ const SKY = {
   "fog-ground-blend": 0.1,
 }
 
+/** Hasta dónde deja inclinarse la cámara. Es el maxPitch con que se crea el mapa. */
+export const PITCH_MAX = 85
+
 export const useTerrainGL = (mapRef, mapInstance) => {
   const [is3D, setIs3D] = useState(false)
   const [showHillshade, setShowHillshade] = useState(false)
   const [exaggeration, setExaggeration] = useState(EXAGGERATION_DEFAULT)
+  // Giro e inclinación actuales de la cámara. Están aquí para que los controles
+  // grandes de la interfaz muestren dónde está el mapa ahora mismo, se haya
+  // llegado ahí con ellos o arrastrando con Ctrl.
+  const [bearing, setBearing] = useState(0)
+  const [pitch, setPitch] = useState(0)
 
   // La exageración se lee dentro de callbacks creados una sola vez.
   const exaggerationRef = useRef(exaggeration)
@@ -105,6 +113,62 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   )
 
   /**
+   * Girar e inclinar con un control grande, en vez de con la brújula del zoom.
+   *
+   * La brújula que trae MapLibre mide 29 px y hay que arrastrarla con precisión;
+   * en un portátil con trackpad es incómoda, y en el mapa hay que saber que
+   * existe el atajo de Ctrl. Estos dos deslizadores hacen lo mismo con el dedo
+   * o el ratón, sin atajos que descubrir.
+   *
+   * `jumpTo` y no `easeTo`: mientras se arrastra la barra, una animación por
+   * cada paso hace que la cámara persiga al control con retraso.
+   */
+  const changeBearing = useCallback(
+    (value) => {
+      setBearing(value)
+      mapRef.current?.jumpTo({ bearing: value })
+    },
+    [mapRef],
+  )
+
+  const changePitch = useCallback(
+    (value) => {
+      setPitch(value)
+      mapRef.current?.jumpTo({ pitch: value })
+    },
+    [mapRef],
+  )
+
+  /** Vuelve a poner el norte arriba sin tocar la inclinación. */
+  const resetNorth = useCallback(() => {
+    setBearing(0)
+    mapRef.current?.easeTo({ bearing: 0, duration: 500 })
+  }, [mapRef])
+
+  // El mapa también se gira e inclina arrastrando con Ctrl, o con dos dedos en
+  // el celular. Sin escuchar esos eventos, los deslizadores se quedarían
+  // marcando el último valor que se les puso y mentirían sobre dónde está la
+  // cámara.
+  useEffect(() => {
+    if (!mapInstance) return
+
+    const syncCamera = () => {
+      setBearing(mapInstance.getBearing())
+      setPitch(mapInstance.getPitch())
+    }
+
+    mapInstance.on("rotateend", syncCamera)
+    mapInstance.on("pitchend", syncCamera)
+    mapInstance.on("moveend", syncCamera)
+
+    return () => {
+      mapInstance.off("rotateend", syncCamera)
+      mapInstance.off("pitchend", syncCamera)
+      mapInstance.off("moveend", syncCamera)
+    }
+  }, [mapInstance])
+
+  /**
    * Altura del terreno en un punto, **en metros de verdad**.
    *
    * Existe por una trampa que costaría cara: `queryTerrainElevation` de MapLibre
@@ -159,5 +223,10 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     toggleHillshade,
     exaggeration,
     changeExaggeration,
+    bearing,
+    changeBearing,
+    resetNorth,
+    pitch,
+    changePitch,
   }
 }
