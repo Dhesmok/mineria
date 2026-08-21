@@ -3,23 +3,19 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react"
 import dynamic from "next/dynamic"
 import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
-import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronDown, Download, RefreshCw, ChevronRight, Globe2 } from "lucide-react"
 import ExportComponent from "./ExportComponent"
-import { fetchArcgisJson } from "./utils/arcgis"
 import { CRS_LIST, axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
-import { DEFAULT_ORDER, initialLayerState } from "./utils/themeAreas"
+import { areaById, DEFAULT_ORDER, initialLayerState } from "./utils/themeAreas"
 import { LayerPanel } from "./components/LayerPanel"
-import {
-  findTenureLayerNumbers,
-  REQUEST_LAYER_NAME,
-  TITLE_LAYER_NAME,
-  tenureLayerUrl,
-} from "./utils/tenureLayers"
-import { debounce } from "@/lib/utils"
+import { AreaFilters } from "./components/AreaFilters"
+import { AttributeTable } from "./components/AttributeTable"
+import { CrsPicker } from "./components/CrsPicker"
+import { ExpedientSearch } from "./components/ExpedientSearch"
+import { matchesFilters } from "./utils/layerFilters"
 
 // `ssr: false` es obligatorio: MapLibre necesita el objeto `window` y una
 // tarjeta gráfica, y ninguno de los dos existe cuando Next genera la página en
@@ -32,9 +28,6 @@ const MapComponent = dynamic(() => import("./MapComponentGL"), {
 // Los sistemas de coordenadas viven en utils/crs.js, no aquí: la tabla, la
 // exportación y el campo de "ir a una coordenada" tienen que usar exactamente
 // las mismas definiciones o mostrarían números distintos para el mismo punto.
-
-const MIN_SUGGESTION_LENGTH = 3
-const MAX_SUGGESTIONS = 10
 
 export default function Component() {
   const [showSidebar, setShowSidebar] = useState(true)
@@ -51,14 +44,6 @@ export default function Component() {
   const [geoJsonData, setGeoJsonData] = useState(null)
   const mapRef = useRef(null)
   const [mapInitialized, setMapInitialized] = useState(false)
-  const [expedientSuggestions, setExpedientSuggestions] = useState([])
-  const [activeSuggestion, setActiveSuggestion] = useState(-1)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const inputRef = useRef(null)
-  const searchBoxRef = useRef(null)
-  const suggestionAbortRef = useRef(null)
-  const skipNextSuggestionFetchRef = useRef(false)
   // Estado de las capas: encendida, opacidad y colores, todo por clave. Antes
   // eran ocho estados sueltos —uno por interruptor y otro por deslizador—, que
   // con trece capas y su color serían treinta y nueve.
@@ -68,14 +53,79 @@ export default function Component() {
   const [layerOrder, setLayerOrder] = useState(DEFAULT_ORDER)
   // Filtros sobre lo cargado, y los atributos con que el panel arma sus
   // opciones. Viven aquí y no en el mapa porque el panel es quien los enseña.
-  const [filterSelections, setFilterSelections] = useState({})
-  const [filterArea, setFilterArea] = useState(null)
-  const [loadedProperties, setLoadedProperties] = useState([])
+  // Un juego de filtros por área: con cuatro áreas y trece capas, un filtro
+  // común se llenaba de opciones de cosas que ni siquiera estaban encendidas.
+  const [areaFilters, setAreaFilters] = useState({})
+  // El alcance sí es común: "en pantalla" o "toda la capa" describe cómo se
+  // consulta, no qué se busca.
+  const [filterScope, setFilterScope] = useState("viewport")
+  // Lo que el mapa tiene cargado: atributos para armar el filtro, figuras con su
+  // recuadro para la tabla, y qué capas recortó el servicio.
+  const [layerData, setLayerData] = useState({ properties: [], features: [], truncated: [] })
+
+  // Qué ventana flotante está abierta y a qué botón se ancla.
+  const [filterPopover, setFilterPopover] = useState(null)
+  const [searchPopover, setSearchPopover] = useState(null)
+  const [crsPopover, setCrsPopover] = useState(null)
+  const [showAttributeTable, setShowAttributeTable] = useState(false)
+
+  const filtroDe = useCallback(
+    (areaId) => areaFilters[areaId] ?? { selections: {}, areaRange: null },
+    [areaFilters],
+  )
 
   const filters = useMemo(
-    () => ({ selections: filterSelections, areaRange: filterArea }),
-    [filterSelections, filterArea],
+    () => ({ ...filtroDe("mineria"), scope: filterScope, byArea: areaFilters }),
+    [areaFilters, filterScope, filtroDe],
   )
+
+  const areaHasFilter = useCallback(
+    (areaId) => {
+      const { selections, areaRange } = filtroDe(areaId)
+      return Object.values(selections).some((v) => v?.length > 0) || Boolean(areaRange)
+    },
+    [filtroDe],
+  )
+
+  const setAreaFilter = useCallback((areaId, cambios) => {
+    setAreaFilters((current) => ({
+      ...current,
+      [areaId]: { ...(current[areaId] ?? { selections: {}, areaRange: null }), ...cambios },
+    }))
+  }, [])
+
+  /**
+   * Los registros que pasan el filtro, que es lo que enseña la tabla.
+   *
+   * Se calcula aquí y no se le pregunta al mapa qué está pintando: en modo
+   * "toda la capa" hay resultados que ni siquiera están en pantalla, y llegar a
+   * ellos por la tabla es justamente la gracia.
+   */
+  const registrosVisibles = useMemo(() => {
+    const { selections, areaRange } = filtroDe("mineria")
+    return layerData.features.filter((f) => matchesFilters(f.properties, selections, areaRange))
+  }, [layerData.features, filtroDe])
+
+  /** Llevar el mapa hasta un registro elegido en la tabla. */
+  const enfocarRegistro = useCallback((registro) => {
+    setShowAttributeTable(false)
+    const map = mapRef.current
+    if (!map || !registro?.bbox) return
+
+    // `bboxOfGeometry` devuelve un objeto con nombres, no la tupla
+    // [oeste, sur, este, norte] de GeoJSON. Leerlo como si fuera un arreglo
+    // dejaba los cuatro valores en `undefined` y `fitBounds` no se quejaba: la
+    // tabla se cerraba y el mapa se quedaba exactamente donde estaba. Solo se
+    // vio comparando el centro antes y después en un navegador de verdad.
+    const { west, south, east, north } = registro.bbox
+    map.fitBounds(
+      [
+        [west, south],
+        [east, north],
+      ],
+      { padding: 120, duration: 1200, maxZoom: 16 },
+    )
+  }, [])
 
   const actualizarCapa = useCallback((key, cambios) => {
     setLayers((current) => ({ ...current, [key]: { ...current[key], ...cambios } }))
@@ -96,72 +146,12 @@ export default function Component() {
     [actualizarCapa],
   )
 
-  const handleApply = useCallback(() => {
-    if (!expedientCode) {
-      alert("Por favor, introduce un código de expediente.")
-      return
-    }
-    setExpedientSuggestions([])
+  /** Lanza la búsqueda del expediente que entregue el buscador flotante. */
+  const buscarExpediente = useCallback((codigo) => {
+    setExpedientCode(codigo)
     setSearchTrigger((prev) => prev + 1)
     setShowToggle(true)
-  }, [expedientCode])
-
-  const closeSuggestions = useCallback(() => {
-    setExpedientSuggestions([])
-    setActiveSuggestion(-1)
   }, [])
-
-  const selectSuggestion = useCallback(
-    (suggestion) => {
-      skipNextSuggestionFetchRef.current = true
-      setExpedientCode(suggestion)
-      closeSuggestions()
-      inputRef.current?.focus()
-    },
-    [closeSuggestions],
-  )
-
-  const handleSearchKeyDown = useCallback(
-    (event) => {
-      if (event.key === "Escape") {
-        closeSuggestions()
-        return
-      }
-
-      if (expedientSuggestions.length === 0) {
-        if (event.key === "Enter") handleApply()
-        return
-      }
-
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault()
-        const step = event.key === "ArrowDown" ? 1 : -1
-        setActiveSuggestion((current) => {
-          const next = current + step
-          if (next < 0) return expedientSuggestions.length - 1
-          if (next >= expedientSuggestions.length) return 0
-          return next
-        })
-        return
-      }
-
-      if (event.key === "Enter") {
-        event.preventDefault()
-        if (activeSuggestion >= 0) {
-          selectSuggestion(expedientSuggestions[activeSuggestion])
-        } else {
-          closeSuggestions()
-          handleApply()
-        }
-      }
-    },
-    [activeSuggestion, closeSuggestions, expedientSuggestions, handleApply, selectSuggestion],
-  )
-
-  // Reiniciar el resaltado cada vez que cambia la lista.
-  useEffect(() => {
-    setActiveSuggestion(-1)
-  }, [expedientSuggestions])
 
   const handleShowCoordinates = () => {
     if (coordinatesAvailable) {
@@ -237,111 +227,6 @@ export default function Component() {
     setMapInitialized(true)
   }, [])
 
-  const fetchExpedients = useCallback(async (query) => {
-    // Cancelar la consulta anterior: sin esto una respuesta lenta podía llegar después
-    // de una más reciente y pisar sus sugerencias.
-    suggestionAbortRef.current?.abort()
-    const controller = new AbortController()
-    suggestionAbortRef.current = controller
-
-    setIsLoading(true)
-    setError(null)
-    try {
-      const sanitizedQuery = query.trim().toUpperCase().replace(/'/g, "''")
-      const whereClause = `(UPPER(TENURE_ID) LIKE '${sanitizedQuery}%' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${sanitizedQuery}%')`
-      const queryString = `query?where=${encodeURIComponent(whereClause)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`
-
-      // Los números de las capas de tenencia se descubren, igual que en el mapa y en
-      // la búsqueda. Aquí estaban fijos en 3 y 4, y podían discrepar del resto.
-      const layerNumbers = await findTenureLayerNumbers()
-      if (controller.signal.aborted) return
-
-      const urls = [
-        ...[TITLE_LAYER_NAME, REQUEST_LAYER_NAME]
-          .map((name) => layerNumbers[name])
-          .filter((layerNumber) => layerNumber !== undefined)
-          .map((layerNumber) => `${tenureLayerUrl(layerNumber)}/${queryString}`),
-        `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/${queryString}`,
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/${queryString}`,
-      ]
-
-      // fetchArcgisJson reconoce los errores que ArcGIS devuelve con HTTP 200; antes
-      // una capa que respondía {"error": ...} se contaba como consulta exitosa sin
-      // resultados, y las sugerencias salían incompletas en silencio.
-      const settled = await Promise.allSettled(
-        urls.map((url) => fetchArcgisJson(url, { signal: controller.signal })),
-      )
-      if (controller.signal.aborted) return
-
-      const data = settled.filter((result) => result.status === "fulfilled").map((result) => result.value)
-
-      const expedients = data.flatMap((d) =>
-        (d.features || [])
-          .map((f) => f.attributes?.CODIGO_EXPEDIENTE || f.attributes?.TENURE_ID)
-          .filter(Boolean),
-      )
-      const uniqueExpedients = [...new Set(expedients)]
-      setExpedientSuggestions(uniqueExpedients.slice(0, MAX_SUGGESTIONS))
-
-      if (data.length === 0) {
-        throw new Error("No fue posible consultar las capas de sugerencias.")
-      }
-    } catch (error) {
-      if (error?.name === "AbortError" || controller.signal.aborted) return
-      console.error("Error fetching expedients:", error)
-      setError("Error al cargar los expedientes. Por favor, intente de nuevo.")
-    } finally {
-      if (!controller.signal.aborted) {
-        setIsLoading(false)
-      }
-    }
-  }, [])
-
-  const debouncedFetchExpedients = useCallback(
-    debounce((query) => fetchExpedients(query), 300),
-    [fetchExpedients],
-  )
-
-  useEffect(() => {
-    // Elegir una sugerencia cambia expedientCode, lo que volvía a disparar la consulta
-    // y reabría el desplegable 300 ms después de haberlo cerrado.
-    if (skipNextSuggestionFetchRef.current) {
-      skipNextSuggestionFetchRef.current = false
-      return
-    }
-
-    // Con una sola letra, `LIKE 'A%'` barre el dataset nacional entero sin dar nada útil.
-    if (expedientCode.trim().length < MIN_SUGGESTION_LENGTH) {
-      suggestionAbortRef.current?.abort()
-      setExpedientSuggestions([])
-      setIsLoading(false)
-      return
-    }
-
-    debouncedFetchExpedients(expedientCode)
-  }, [expedientCode, debouncedFetchExpedients])
-
-  useEffect(() => {
-    // Contra el contenedor, no contra el input: el desplegable vive dentro y un clic
-    // en una sugerencia se contaba como clic fuera.
-    const handleClickOutside = (event) => {
-      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target)) {
-        closeSuggestions()
-      }
-    }
-
-    document.addEventListener("click", handleClickOutside)
-    return () => {
-      document.removeEventListener("click", handleClickOutside)
-    }
-  }, [closeSuggestions])
-
-  useEffect(() => {
-    return () => {
-      suggestionAbortRef.current?.abort()
-    }
-  }, [])
-
   return (
     <div className="relative flex w-full h-screen bg-gray-100">
       <div
@@ -370,103 +255,35 @@ export default function Component() {
               <ChevronLeft className="h-6 w-6" />
             </Button>
           </div>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="search" className="text-sm font-medium mb-1 block">
-                Buscar Expediente
-              </Label>
-              {/* El desplegable vive dentro de este contenedor posicionado. Antes era
-                  hermano suyo, así que su ancho se medía contra la barra lateral
-                  completa y se desbordaba por el padding. */}
-              <div className="relative" ref={searchBoxRef}>
-                <Input
-                  ref={inputRef}
-                  id="search"
-                  placeholder="Ingrese el expediente"
-                  value={expedientCode}
-                  onChange={(e) => setExpedientCode(e.target.value.toUpperCase())}
-                  onKeyDown={handleSearchKeyDown}
-                  className="pl-10 pr-4 py-2 w-full border rounded-md"
-                  role="combobox"
-                  autoComplete="off"
-                  aria-autocomplete="list"
-                  aria-controls="expedient-suggestions"
-                  aria-expanded={expedientSuggestions.length > 0}
-                  aria-activedescendant={
-                    activeSuggestion >= 0 ? `expedient-suggestion-${activeSuggestion}` : undefined
-                  }
-                />
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                {isLoading && (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-                  </div>
-                )}
-                {expedientSuggestions.length > 0 && (
-                  <ul
-                    id="expedient-suggestions"
-                    role="listbox"
-                    aria-label="Expedientes sugeridos"
-                    className="absolute left-0 right-0 top-full z-20 mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto"
-                  >
-                    {expedientSuggestions.map((suggestion, index) => (
-                      <li
-                        key={suggestion}
-                        id={`expedient-suggestion-${index}`}
-                        role="option"
-                        aria-selected={index === activeSuggestion}
-                        className={`px-4 py-2 cursor-pointer ${
-                          index === activeSuggestion ? "bg-blue-50" : "hover:bg-gray-100"
-                        }`}
-                        // onMouseDown, no onClick: el clic fuera cierra la lista antes
-                        // de que llegue el onClick del elemento.
-                        onMouseDown={(event) => {
-                          event.preventDefault()
-                          selectSuggestion(suggestion)
-                        }}
-                        onMouseEnter={() => setActiveSuggestion(index)}
-                      >
-                        {suggestion}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-            </div>
-          </div>
-          <Button onClick={handleApply} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
-            Aplicar
-          </Button>
+          {/* El buscador de expedientes se mudó a la lupa del área de Minería.
+              Estaba aquí arriba, fijo, aunque solo sirva para esa área: pregunta
+              por TENURE_ID y CODIGO_EXPEDIENTE, que son campos de la ANM. */}
 
-          {/* El sistema de coordenadas gobierna todo lo que enseña una
-              posición: esta tabla, la exportación, la lectura del cursor sobre
-              el mapa, las etiquetas de los puntos dibujados y la caja de
-              escribir una coordenada. Antes solo mandaba en la tabla, así que
-              alguien trabajando en Origen Nacional veía grados por todas
-              partes y tenía que convertir de cabeza.
+          {/* El sistema de coordenadas gobierna todo lo que enseña una posición:
+              la tabla, la exportación, la lectura del cursor sobre el mapa, las
+              etiquetas de los puntos dibujados y la caja de escribir una
+              coordenada.
 
-              Escribir la coordenada ya no vive aquí: se hace en el mapa, con la
-              herramienta de punto, que es la misma tarea hecha de otra forma. */}
+              Era una lista desplegable con su explicación debajo, tres renglones
+              para un ajuste que se toca una vez. Ahora es un botón que dice cuál
+              está puesto; la explicación de cada sistema vive dentro, que es
+              donde hace falta. */}
           <div className="space-y-1.5 border-t pt-3">
-            <Label htmlFor="sistema" className="text-sm font-medium">
-              Sistema de coordenadas
-            </Label>
-            <select
-              id="sistema"
-              value={selectedCoordinateSystem}
-              onChange={(event) => setSelectedCoordinateSystem(event.target.value)}
-              className="w-full rounded-md border px-2 py-1.5 text-xs"
+            <Label className="text-sm font-medium">Sistema de coordenadas</Label>
+            <button
+              type="button"
+              onClick={(event) => setCrsPopover(event.currentTarget.getBoundingClientRect())}
+              className="flex h-9 w-full items-center gap-2 rounded-md border border-slate-200 px-3 text-left transition-colors hover:bg-slate-50"
             >
-              {CRS_LIST.map((crs) => (
-                <option key={crs.id} value={crs.id}>
-                  {crs.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] leading-tight text-gray-500">
-              {crsById(selectedCoordinateSystem).hint}
-            </p>
+              <Globe2 className="h-4 w-4 shrink-0 text-slate-400" />
+              <span className="min-w-0 flex-1 truncate text-[13px] text-slate-900">
+                {crsById(selectedCoordinateSystem).label}
+              </span>
+              <span className="shrink-0 font-mono text-[10px] text-slate-400">
+                EPSG:{selectedCoordinateSystem}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+            </button>
           </div>
 
           <LayerPanel
@@ -476,11 +293,9 @@ export default function Component() {
             onOpacity={cambiarOpacidad}
             onColor={cambiarColor}
             onReorder={setLayerOrder}
-            loadedProperties={loadedProperties}
-            filterSelections={filterSelections}
-            filterArea={filterArea}
-            onFilterChange={setFilterSelections}
-            onFilterArea={setFilterArea}
+            areaHasFilter={areaHasFilter}
+            onOpenFilters={(areaId, rect) => setFilterPopover({ areaId, rect })}
+            onOpenSearch={(areaId, rect) => setSearchPopover({ areaId, rect })}
           />
 
           {showToggle && (
@@ -522,7 +337,7 @@ export default function Component() {
           layerOrder={layerOrder}
           coordinateSystem={selectedCoordinateSystem}
           filters={filters}
-          onLoadedProperties={setLoadedProperties}
+          onLayerData={setLayerData}
         />
         {!showSidebar && (
           <Button
@@ -611,6 +426,53 @@ export default function Component() {
           </div>
         </div>
       )}
+      {filterPopover && (
+        <AreaFilters
+          area={areaById(filterPopover.areaId)}
+          anchorRect={filterPopover.rect}
+          properties={filterPopover.areaId === "mineria" ? layerData.properties : []}
+          selections={filtroDe(filterPopover.areaId).selections}
+          areaRange={filtroDe(filterPopover.areaId).areaRange}
+          scope={filterScope}
+          truncated={layerData.truncated.length > 0}
+          onChange={(selections) => setAreaFilter(filterPopover.areaId, { selections })}
+          onArea={(areaRange) => setAreaFilter(filterPopover.areaId, { areaRange })}
+          onScope={setFilterScope}
+          onOpenTable={() => {
+            setFilterPopover(null)
+            setShowAttributeTable(true)
+          }}
+          onClose={() => setFilterPopover(null)}
+        />
+      )}
+
+      {searchPopover && (
+        <ExpedientSearch
+          anchorRect={searchPopover.rect}
+          areaColor={areaById(searchPopover.areaId).color}
+          initialCode={expedientCode}
+          onSearch={buscarExpediente}
+          onClose={() => setSearchPopover(null)}
+        />
+      )}
+
+      {crsPopover && (
+        <CrsPicker
+          current={selectedCoordinateSystem}
+          anchorRect={crsPopover}
+          onChoose={setSelectedCoordinateSystem}
+          onClose={() => setCrsPopover(null)}
+        />
+      )}
+
+      {showAttributeTable && (
+        <AttributeTable
+          features={registrosVisibles}
+          onPick={enfocarRegistro}
+          onClose={() => setShowAttributeTable(false)}
+        />
+      )}
+
       {showExportModal && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md m-4">

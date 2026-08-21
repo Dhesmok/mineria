@@ -20,19 +20,20 @@ import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } 
 import { axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
 import { parseCoordinateInput } from "./utils/coordinateInput"
 import { COMPASS_SIZE_MAX, COMPASS_SIZE_MIN } from "./hooks/map/useGeolocationGL"
-import { Button } from "@/components/ui/button"
+import { basemapById, DEFAULT_BASEMAP } from "./utils/basemaps"
+import { BasemapPicker } from "./components/BasemapPicker"
+import { FloatingPanel } from "./components/FloatingPanel"
 import {
   Box,
   Compass,
   Crosshair,
   Download,
   Loader2,
-  MapIcon,
+  Layers,
   MapPin,
   Mountain,
   Pentagon,
   Play,
-  Satellite,
   Square,
   Spline,
   Trash2,
@@ -348,9 +349,16 @@ const MapButton = ({ active, className = "", children, ...props }) => (
  * botones acababa montándose sobre el panel lateral. Se vio en una captura: las
  * comprobaciones sobre el estado del mapa daban todas por buenas.
  */
-const SliderRow = ({ id, label, value, display, min, max, step, onChange }) => (
+const SliderRow = ({ id, label, title, value, display, min, max, step, onChange }) => (
   <div className="flex items-center gap-2">
-    <label htmlFor={id} className="w-20 shrink-0 text-[11px] leading-tight text-gray-700">
+    {/* El aviso de que la exageración no cambia ningún dato vivía en un párrafo
+        bajo la barra y era el renglón más alto del panel. Se lee una vez y
+        estorba siempre, así que ahora va en el título de la etiqueta. */}
+    <label
+      htmlFor={id}
+      title={title}
+      className="w-20 shrink-0 text-[11px] leading-tight text-gray-700"
+    >
       {label}
     </label>
     <input
@@ -410,7 +418,7 @@ export default function MapComponentGL({
   layerOrder,
   coordinateSystem,
   filters,
-  onLoadedProperties,
+  onLayerData,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
@@ -422,12 +430,13 @@ export default function MapComponentGL({
   const [error, setError] = useState(null)
   const [showErrorBanner, setShowErrorBanner] = useState(false)
 
-  const { baseLayer, toggleBaseLayer } = useMapInitializationGL(mapRef)
+  const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
+  const [basemapPicker, setBasemapPicker] = useState(null)
 
   // El panel entrega el estado de las capas ya agrupado por clave: encendida,
   // opacidad y colores. Antes llegaban ocho props sueltas que había que volver a
   // juntar aquí con dos useMemo.
-  const { showZoomInHint, truncatedLayers, loadedProperties } = useMapLayersGL(
+  const { showZoomInHint, truncatedLayers, loadedProperties, loadedFeatures } = useMapLayersGL(
     mapRef,
     mapInstance,
     layerState,
@@ -437,11 +446,17 @@ export default function MapComponentGL({
     setShowErrorBanner,
   )
 
-  // Los atributos de lo cargado suben al panel, que es donde vive el filtro: sus
-  // opciones se arman con lo que hay en pantalla.
+  // Lo cargado sube al panel, que es donde viven el filtro y la tabla: las
+  // opciones del filtro se arman con lo que hay, y la tabla necesita además el
+  // recuadro de cada figura para poder llevar el mapa hasta ella. Va en una sola
+  // llamada porque las tres cosas cambian a la vez.
   useEffect(() => {
-    onLoadedProperties?.(loadedProperties)
-  }, [loadedProperties, onLoadedProperties])
+    onLayerData?.({
+      properties: loadedProperties,
+      features: loadedFeatures,
+      truncated: truncatedLayers,
+    })
+  }, [loadedProperties, loadedFeatures, truncatedLayers, onLayerData])
 
   const {
     drawingColor,
@@ -558,7 +573,11 @@ export default function MapComponentGL({
 
     const map = new MapLibreMap({
       container: containerRef.current,
-      style: createBaseStyle("osm"),
+      // El fondo de partida tiene que ser el mismo que dice el botón. Estaba
+      // fijo en "osm" desde cuando solo había dos fondos: el visor arrancaba con
+      // el callejero mientras el botón anunciaba «Satélite», y no se notaba
+      // hasta comparar la atribución de la esquina con lo que decía el botón.
+      style: createBaseStyle(DEFAULT_BASEMAP),
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       maxZoom: MAX_ZOOM,
@@ -649,12 +668,14 @@ export default function MapComponentGL({
             en la misma columna, y cada uno solo aparece cuando hay algo que
             ajustar: un control que no hace nada visible confunde más que ayuda. */}
         {(is3D || isCompassActive) && (
-          <div className="w-64 space-y-2">
+          <div className="space-y-2">
             {is3D && (
-              <div className="space-y-1.5 rounded-md bg-white px-3 py-2 shadow-md">
+              <FloatingPanel title="Vista 3D" icon={Box}>
+                <div className="space-y-1.5">
                 <SliderRow
                   id="exageracion"
                   label="Exageración"
+                  title="Solo afecta a cómo se ve: no cambia alturas ni áreas"
                   min={EXAGGERATION_MIN}
                   max={EXAGGERATION_MAX}
                   step="0.1"
@@ -710,12 +731,9 @@ export default function MapComponentGL({
                     <Compass className="h-3 w-3" />
                     Norte arriba
                   </button>
+                  </div>
                 </div>
-                {/* Decirlo evita que alguien lea el relieve como una medida. */}
-                <p className="text-[10px] leading-tight text-gray-500">
-                  La exageración solo afecta a cómo se ve: no cambia alturas ni áreas.
-                </p>
-              </div>
+              </FloatingPanel>
             )}
 
             {/* 250 px es mucho en un celular y poco en un monitor grande. */}
@@ -756,9 +774,23 @@ export default function MapComponentGL({
           </MapButton>
         )}
 
-        <MapButton onClick={toggleBaseLayer} title="Cambiar entre mapa y satélite">
-          {baseLayer === "osm" ? <Satellite className="h-4 w-4" /> : <MapIcon className="h-4 w-4" />}
-          {baseLayer === "osm" ? "Satélite" : "Mapa"}
+        {/* Se llamaba «Satélite» y alternaba entre dos fondos. Con cinco, un
+            botón que va rotando obliga a pasar por todos para llegar al que se
+            quiere, así que ahora abre una lista. */}
+        <MapButton
+          onClick={(event) => setBasemapPicker(event.currentTarget.getBoundingClientRect())}
+          active={Boolean(basemapPicker)}
+          title="Elegir el mapa de fondo"
+        >
+          <Layers className="h-4 w-4" />
+          Mapa base
+          <span
+            className={`ml-0.5 rounded px-1 py-px text-[9px] font-semibold ${
+              basemapPicker ? "bg-white/20" : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            {basemapById(basemap).name}
+          </span>
         </MapButton>
 
         <MapButton
@@ -841,6 +873,16 @@ export default function MapComponentGL({
       <CursorCoordinates map={mapInstance} crsId={coordinateSystem} />
 
       {showRotateHint && <RotateHint onClose={hideRotateHint} />}
+
+      {basemapPicker && (
+        <BasemapPicker
+          current={basemap}
+          showLabels={showLabels}
+          anchorRect={basemapPicker}
+          onChoose={chooseBasemap}
+          onClose={() => setBasemapPicker(null)}
+        />
+      )}
 
       {showZoomInHint && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/95 text-gray-700 text-sm px-4 py-2 rounded-full shadow-md">

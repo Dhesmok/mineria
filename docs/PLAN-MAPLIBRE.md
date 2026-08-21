@@ -209,6 +209,29 @@ herramienta.
       se lean sobre el mapa claro, y la lectura del rumbo dentro de la rosa.
 - [x] Los botones del mapa comparten tipografía, color y forma con el panel.
 
+## Fase 11 — Tabla de resultados, mapas base y espacio en el panel
+
+- [x] Tabla de atributos de los resultados del filtro, como la de un SIG de
+      escritorio: se ordena por cualquier columna y **al pulsar una fila se
+      cierra y el mapa vuela hasta ese polígono**.
+- [x] Filtrar solo lo que hay en pantalla o toda la capa. Lo segundo le pregunta
+      al servicio con una cláusula SQL, porque los que cumplen pueden estar a
+      mil kilómetros de donde se está mirando.
+- [x] El panel de ajustes del 3D se puede guardar en un botón, y tanto el panel
+      como el botón se arrastran a donde estorben menos. El aviso de que la
+      exageración no cambia ningún dato se fue al título de la etiqueta.
+- [x] Las áreas del panel se pliegan y despliegan, una a la vez.
+- [x] Cinco mapas base —Google, Esri World Imagery, OpenTopoMap, CARTO Positron
+      y OpenStreetMap—. **Pulsar el que ya está puesto quita o pone sus
+      nombres**, con un distintivo «Aa» que lo anuncia. El botón se llama ahora
+      «Mapa base».
+- [x] El sistema de coordenadas pasa de lista desplegable con su párrafo de
+      ayuda a un botón de un renglón; la explicación de cada sistema vive dentro
+      del selector, que es donde hace falta.
+- [x] Dos botones en el encabezado de cada área, del color del área: filtrar y
+      buscar. El buscador de expedientes sale del panel y vive detrás de la lupa
+      de Minería, la única área donde tiene sentido.
+
 ## Fase 9 — Panel de capas por áreas
 
 - [x] Agrupar las capas por área temática: Minería, Geología, Hidrocarburos,
@@ -941,3 +964,66 @@ comprobaciones en navegador —las 159 anteriores en verde más 28 nuevas—, co
 capturas de la ficha, de la caja de coordenadas, de los filtros y un primer plano
 de la brújula. El simulacro de la ANM ahora varía los atributos entre figuras: sin
 eso no habría nada por lo que filtrar y la comprobación no probaría nada.
+
+### Fase 11, tabla y mapas base — 2026-08-21
+
+Siete peticiones de Fabio, y cuatro fallos que solo se vieron en el navegador.
+
+**La tabla de resultados es el puente que faltaba.** Un mapa sirve para mirar;
+una tabla sirve para leer de corrido, ordenar por área y encontrar un expediente
+entre doscientos. Al pulsar una fila la tabla se cierra y el mapa vuela hasta ese
+polígono, que es el gesto que une las dos vistas. Enseña exactamente lo que el
+filtro dejó pasar, y se calcula en JavaScript en vez de preguntarle al mapa qué
+está pintando: en modo "toda la capa" hay resultados que ni siquiera están en
+pantalla, y llegar a ellos por la tabla es justamente la gracia.
+
+**Filtrar en pantalla y filtrar toda la capa son dos cosas distintas de verdad,
+no dos formas de decir lo mismo.** En pantalla se esconde lo que ya está
+cargado y es inmediato. En toda la capa hay que armar la misma condición en SQL
+y preguntársela al servicio, sin recuadro. El respaldo entre nombres de campo
+—TITULO_ESTADO en unas capas, ESTADO en otras— se traduce a un `OR`: preguntar
+solo por el primero devolvería cero en la mitad de las capas sin decir por qué.
+
+**Cinco mapas base, y el segundo satélite no es un capricho.** Esri publica
+imágenes de otras fechas de toma que Google: comparar las dos delata actividad
+reciente en un título, que es exactamente lo que se mira en este oficio. Pulsar
+el fondo que ya está puesto quita o pone sus nombres, con un distintivo «Aa» que
+lo anuncia para que no haya que descubrirlo. Cada fondo resuelve los nombres a su
+manera y por eso no hay un único mecanismo: Google y CARTO publican dos
+direcciones distintas, Esri superpone una capa aparte, y OSM y OpenTopoMap los
+traen pintados dentro de la tesela y no se pueden quitar — ahí el visor lo dice
+en vez de ofrecer un interruptor que no haría nada.
+
+**Cuatro fallos que pasaron la compilación y las 233 pruebas, y que solo se
+vieron abriendo el visor.** Van juntos porque la lección es una sola.
+
+1. `loadedFeatures` se usaba sin haberla sacado del hook. La página no se
+   pintaba: un `ReferenceError` en cada render y la pantalla en blanco. Ni
+   `next build` ni Jest lo vieron, porque el proyecto no tiene ESLint y la
+   pantalla en blanco no la mira nadie más que un navegador.
+2. Al pulsar una fila de la tabla, el mapa no se movía. `bboxOfGeometry`
+   devuelve un objeto con nombres, no la tupla `[oeste, sur, este, norte]` de
+   GeoJSON, y leerlo como arreglo dejaba los cuatro valores en `undefined`;
+   `fitBounds` no se quejó. La tabla se cerraba y el mapa se quedaba donde
+   estaba, que es indistinguible de "no pasó nada".
+3. La X del panel flotante no lo guardaba y el botón guardado no lo reabría. El
+   arrastre llamaba a `preventDefault()` en `pointerdown`, y eso cancela los
+   eventos de ratón que vienen detrás, **incluido el clic**. Arrastrar
+   funcionaba; pulsar, no. Ahora el arrastre no cancela nada —el texto se
+   protege con `select-none`— y un umbral de cuatro píxeles distingue un clic de
+   un arrastre.
+4. El visor arrancaba con el callejero de OSM mientras el botón anunciaba
+   «Satélite»: el estilo se creaba con `"osm"` fijo desde cuando solo había dos
+   fondos. Se notaba comparando la atribución de la esquina con lo que decía el
+   botón, y no antes.
+
+**La medición del color de fondo también se equivocó la primera vez**, y merece
+quedar escrito: se muestreaba un recuadro del mapa con los títulos encendidos, y
+el marrón de los polígonos cubría más de la mitad. El color medio salía mezclado
+y dos fondos "fallaban" estando bien. Se apagan las capas antes de medir.
+
+**Comprobado**: 233 pruebas unitarias y 33 comprobaciones en navegador para esta
+tanda —acordeón, botones del encabezado, filtro por área, tabla y su vuelo,
+alcance por servicio, sistema de coordenadas, los cinco fondos medidos por el
+color que pintan, el distintivo de nombres, y el panel del 3D guardado, arrastrado
+y reabierto—, con capturas de cada una.

@@ -13,49 +13,66 @@ import {
   anmSourceId,
   LAYERS_MIN_ZOOM,
 } from "./anmLayers"
+import { ALL_BASEMAP_LAYERS, BASEMAP_LAYERS, visibleBasemapLayers } from "./basemaps"
 
 const layerById = (style, id) => style.layers.find((layer) => layer.id === id)
 const indexOfLayer = (style, id) => style.layers.findIndex((layer) => layer.id === id)
 
 describe("createBaseStyle", () => {
-  it("declara las dos capas base desde el arranque", () => {
+  it("declara todos los fondos desde el arranque", () => {
     // Es lo que permite alternar mapa/satélite sin llamar a setStyle(), que se
     // llevaría por delante las capas de la ANM y lo dibujado por el usuario.
     const style = createBaseStyle()
 
-    expect(layerById(style, BASE_LAYERS.osm)).toBeDefined()
-    expect(layerById(style, BASE_LAYERS.satellite)).toBeDefined()
+    ALL_BASEMAP_LAYERS.forEach((id) => {
+      expect(layerById(style, id)).toBeDefined()
+      expect(style.sources[`${id}-src`]).toBeDefined()
+    })
   })
 
-  it("deja visible solo la capa pedida", () => {
-    const osm = createBaseStyle("osm")
-    expect(layerById(osm, BASE_LAYERS.osm).layout.visibility).toBe("visible")
-    expect(layerById(osm, BASE_LAYERS.satellite).layout.visibility).toBe("none")
-
-    const satellite = createBaseStyle("satellite")
-    expect(layerById(satellite, BASE_LAYERS.osm).layout.visibility).toBe("none")
-    expect(layerById(satellite, BASE_LAYERS.satellite).layout.visibility).toBe("visible")
+  it("deja visible solo el fondo pedido", () => {
+    // Cambiar de fondo es encender unas capas y apagar otras, no reconstruir el
+    // estilo: eso se llevaría por delante las capas de la ANM y lo dibujado.
+    const esri = createBaseStyle("esri")
+    const visibles = ALL_BASEMAP_LAYERS.filter(
+      (id) => layerById(esri, id).layout.visibility === "visible",
+    )
+    expect(visibles).toEqual(visibleBasemapLayers("esri", true))
   })
 
-  it("arranca en mapa cuando no se pide nada", () => {
+  it("arranca en satélite cuando no se pide nada", () => {
     const style = createBaseStyle()
-    expect(layerById(style, BASE_LAYERS.osm).layout.visibility).toBe("visible")
+    expect(layerById(style, BASEMAP_LAYERS.googleHybrid).layout.visibility).toBe("visible")
+    expect(layerById(style, BASEMAP_LAYERS.osm).layout.visibility).toBe("none")
+  })
+
+  it("los fondos van antes que todo lo demás", () => {
+    // En MapLibre el orden de la lista es el orden de pintado: un fondo por
+    // encima taparía los títulos.
+    const style = createBaseStyle()
+    const ids = style.layers.map((l) => l.id)
+    const ultimoFondo = Math.max(...ALL_BASEMAP_LAYERS.map((id) => ids.indexOf(id)))
+    expect(ultimoFondo).toBeLessThan(ids.indexOf(anmFillLayerId(ANM_LAYERS[0].key)))
   })
 
   it("marca hasta qué zoom existen teselas reales de cada fuente", () => {
     // Sin `maxzoom` MapLibre pide teselas que el servidor no tiene y el mapa se
     // queda en blanco al acercarse. Con él, estira la última que sí existe.
     const style = createBaseStyle()
-    expect(style.sources.osm.maxzoom).toBe(19)
-    expect(style.sources.satellite.maxzoom).toBeGreaterThan(19)
-    expect(style.sources.osm.maxzoom).toBeLessThan(MAX_ZOOM)
+    ALL_BASEMAP_LAYERS.forEach((id) => {
+      const source = style.sources[`${id}-src`]
+      expect(source.maxzoom).toBeGreaterThan(0)
+      expect(source.maxzoom).toBeLessThanOrEqual(MAX_ZOOM)
+    })
   })
 
   it("atribuye cada fuente", () => {
-    // OSM exige el crédito en pantalla; sin `attribution` el control no lo muestra.
+    // Las licencias exigen el crédito en pantalla; sin `attribution` el control
+    // no lo muestra.
     const style = createBaseStyle()
-    expect(style.sources.osm.attribution).toMatch(/OpenStreetMap/)
-    expect(style.sources.satellite.attribution).toMatch(/Google/)
+    ALL_BASEMAP_LAYERS.forEach((id) => {
+      expect(style.sources[`${id}-src`].attribution).toBeTruthy()
+    })
   })
 
   it("centra el mapa en Colombia con las coordenadas en el orden de MapLibre", () => {

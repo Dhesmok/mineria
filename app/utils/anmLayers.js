@@ -88,7 +88,8 @@ export const clampBounds = ({ west, south, east, north }) => ({
 })
 
 /**
- * URL de consulta de features dentro de un bbox.
+ * URL de consulta de features: dentro de un bbox, o de la capa entera si no se
+ * pasa ninguno.
  *
  * Se pide `f=json` (el formato propio de Esri) y no `f=geojson`, y es a
  * propósito. Es el formato que pedía esri-leaflet, o sea el que lleva años
@@ -107,21 +108,28 @@ export const clampBounds = ({ west, south, east, north }) => ({
  * irrelevante para dibujar. Ojo: NO es irrelevante para la tabla de coordenadas,
  * pero esa va por la ruta de búsqueda por expediente, que no se toca aquí.
  */
-export const buildFeatureQueryUrl = (layerUrl, bounds) => {
-  const { west, south, east, north } = clampBounds(bounds)
-
+export const buildFeatureQueryUrl = (layerUrl, bounds, where = null) => {
   const params = new URLSearchParams({
-    where: "1=1",
-    geometry: `${west},${south},${east},${north}`,
-    geometryType: "esriGeometryEnvelope",
+    where: where || "1=1",
     inSR: "4326",
     outSR: "4326",
-    spatialRel: "esriSpatialRelIntersects",
     outFields: "*",
     returnGeometry: "true",
     resultRecordCount: String(MAX_FEATURES_PER_QUERY),
     f: "json",
   })
+
+  // Sin recuadro se consulta la capa entera. Es lo que permite filtrar por "toda
+  // la capa" y no solo por lo que se está mirando: un título que cumpla el
+  // filtro puede estar a mil kilómetros de donde está la vista. El precio es que
+  // el servicio recorta la respuesta, y por eso el aviso de recorte importa aún
+  // más en ese modo.
+  if (bounds) {
+    const { west, south, east, north } = clampBounds(bounds)
+    params.set("geometry", `${west},${south},${east},${north}`)
+    params.set("geometryType", "esriGeometryEnvelope")
+    params.set("spatialRel", "esriSpatialRelIntersects")
+  }
 
   return `${layerUrl}/query?${params.toString()}`
 }
@@ -180,8 +188,8 @@ export const didExceedLimit = (data, featureCount) =>
  * cuerpo `{"error": ...}` cuando algo va mal, y esos fallos se confundían con
  * "no hay nada por aquí".
  */
-export const fetchLayerFeatures = async (layerUrl, bounds, options) => {
-  const data = await fetchArcgisJson(buildFeatureQueryUrl(layerUrl, bounds), options)
+export const fetchLayerFeatures = async (layerUrl, bounds, options, where = null) => {
+  const data = await fetchArcgisJson(buildFeatureQueryUrl(layerUrl, bounds, where), options)
   const featureCollection = arcgisResponseToGeoJSON(data)
 
   return {

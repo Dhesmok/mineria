@@ -19,13 +19,22 @@ import { ANM_LAYERS } from "./anmLayers"
  * Módulo puro, sin nada de MapLibre.
  */
 
-/** Cada área trae los trazos de su icono, para dibujarlo con SVG en línea. */
+/**
+ * Cada área trae los trazos de su icono, para dibujarlo con SVG en línea.
+ *
+ * `searchable` dice si su lupa está habilitada. Hoy solo Minería: el buscador
+ * pregunta por TENURE_ID y CODIGO_EXPEDIENTE, que son campos de la ANM. Cuando
+ * se conecten los servicios de las demás habrá que decidir por qué se busca en
+ * cada una, y hasta entonces es más honesto tener el botón apagado que uno que
+ * no encuentra nada.
+ */
 export const AREAS = [
   {
     id: "mineria",
     name: "Minería",
     source: "ANM",
     color: "#894444",
+    searchable: true,
     icon: [
       "M13.8 2.6 21.4 10.2",
       "M10.6 7.2 3.6 14.2a2.9 2.9 0 0 0 4.1 4.1l7-7",
@@ -34,6 +43,7 @@ export const AREAS = [
   },
   {
     id: "geologia",
+    searchable: false,
     name: "Geología",
     source: "SGC",
     color: "#6B4E8A",
@@ -41,6 +51,7 @@ export const AREAS = [
   },
   {
     id: "hidrocarburos",
+    searchable: false,
     name: "Hidrocarburos",
     source: "ANH",
     color: "#2E6B5E",
@@ -52,6 +63,7 @@ export const AREAS = [
   },
   {
     id: "catastro",
+    searchable: false,
     name: "Catastro",
     source: "IGAC",
     color: "#22577A",

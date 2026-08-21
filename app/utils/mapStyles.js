@@ -12,6 +12,13 @@
  */
 
 import {
+  ALL_BASEMAP_LAYERS,
+  BASEMAP_LAYERS,
+  BASEMAP_SOURCES,
+  DEFAULT_BASEMAP,
+  visibleBasemapLayers,
+} from "./basemaps"
+import {
   ANM_LAYERS,
   anmFillLayerId,
   anmLineLayerId,
@@ -35,47 +42,21 @@ export const MAX_ZOOM = 22
  * Identificadores de las dos capas base. Se toca la visibilidad de estas capas
  * por nombre, así que conviene tenerlos en un solo sitio.
  */
-export const BASE_LAYERS = {
-  osm: "base-osm",
-  satellite: "base-satellite",
-}
+/**
+ * Se conserva el nombre `BASE_LAYERS` para no tocar a quien ya lo usaba —el
+ * componente lo espera para saber si el estilo está listo—, pero ahora apunta al
+ * registro de fondos.
+ */
+export const BASE_LAYERS = BASEMAP_LAYERS
 
 /**
- * OSM ya no necesita repartir las peticiones entre a/b/c.tile: eso era un truco
- * para HTTP/1.1, que limitaba las descargas simultáneas por dominio. MapLibre
- * habla HTTP/2, donde el truco no aporta nada y solo multiplica las conexiones.
+ * Las capas de fondo se describen en `utils/basemaps.js`, no aquí.
  *
- * `maxzoom: 19` dice "no existen teselas más allá de z19". MapLibre entonces
- * estira la tesela de z19 al acercarse más. Esto elimina de raíz el bug que
- * había en Leaflet, donde volver de satélite a OSM desde un zoom alto dejaba el
- * mapa en gris porque la capa simplemente dejaba de pedir teselas.
+ * Antes había dos escritas a mano —OSM y satélite— y alternarlas era un `if`.
+ * Con cinco fondos, y con la posibilidad de quitarles los nombres, esa lista
+ * pasó a ser un dato con sus propias pruebas, y este archivo se limita a
+ * volcarla en el estilo.
  */
-const OSM_SOURCE = {
-  type: "raster",
-  tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-  tileSize: 256,
-  maxzoom: 19,
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-}
-
-/**
- * Satélite de Google, heredado tal cual del visor Leaflet para que la
- * comparación lado a lado sea justa. `lyrs=s,h` es satélite con nombres y vías
- * encima. Los cuatro subdominios mt0..mt3 sí se conservan porque el reparto lo
- * hace el propio servicio de Google, no el navegador.
- */
-const SATELLITE_SOURCE = {
-  type: "raster",
-  tiles: [
-    "https://mt0.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
-    "https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
-    "https://mt2.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
-    "https://mt3.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}",
-  ],
-  tileSize: 256,
-  maxzoom: 21,
-  attribution: "© Google",
-}
 
 /**
  * Modelo de elevación para el terreno 3D y el sombreado del relieve.
@@ -144,29 +125,17 @@ const hillshadeLayer = () => ({
  * El costo es que el navegador conoce las dos fuentes desde el inicio; como la
  * capa oculta no se pinta, tampoco pide teselas. Es decir: no cuesta nada.
  *
- * @param {"osm"|"satellite"} initialBaseLayer capa visible al arrancar
+ * @param {string} initialBaseLayer identificador del fondo visible al arrancar
  */
-export const createBaseStyle = (initialBaseLayer = "osm") => ({
+export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
   version: 8,
   sources: {
-    osm: OSM_SOURCE,
-    satellite: SATELLITE_SOURCE,
+    ...BASEMAP_SOURCES,
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
     ...anmSources(),
   },
   layers: [
-    {
-      id: BASE_LAYERS.osm,
-      type: "raster",
-      source: "osm",
-      layout: { visibility: initialBaseLayer === "osm" ? "visible" : "none" },
-    },
-    {
-      id: BASE_LAYERS.satellite,
-      type: "raster",
-      source: "satellite",
-      layout: { visibility: initialBaseLayer === "satellite" ? "visible" : "none" },
-    },
+    ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
     ...anmLayers(),
     ...searchLayers(),
@@ -238,6 +207,22 @@ const searchLayers = () => [
  * solo al relleno y deje el contorno nítido, que es como se comportaba el visor
  * anterior.
  */
+/**
+ * Todas las capas de fondo, declaradas de una vez y ocultas salvo la del fondo
+ * inicial. Van primero en la lista porque en MapLibre el orden es el orden de
+ * pintado: todo lo demás tiene que quedar por encima.
+ */
+const basemapLayers = (initialBaseLayer) => {
+  const visibles = new Set(visibleBasemapLayers(initialBaseLayer, true))
+
+  return ALL_BASEMAP_LAYERS.map((id) => ({
+    id,
+    type: "raster",
+    source: `${id}-src`,
+    layout: { visibility: visibles.has(id) ? "visible" : "none" },
+  }))
+}
+
 const anmSources = () => ({
   ...Object.fromEntries(
     ANM_LAYERS.map(({ key }) => [
