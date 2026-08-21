@@ -4,16 +4,38 @@ import {
   BASEMAP_SOURCES,
   DEFAULT_BASEMAP,
   basemapById,
+  hasFixedLabels,
   supportsLabelToggle,
   visibleBasemapLayers,
 } from "./basemaps"
 
 describe("basemaps", () => {
   it("cada fondo declara capas para las dos formas", () => {
-    BASEMAPS.forEach((basemap) => {
+    // Salvo «Ninguno», que es justamente no encender ninguna: sin fondo se ve
+    // el color neutro que el estilo pone debajo de todo.
+    BASEMAPS.filter((basemap) => basemap.id !== "none").forEach((basemap) => {
       expect(basemap.withLabels.length).toBeGreaterThan(0)
       expect(basemap.withoutLabels.length).toBeGreaterThan(0)
     })
+  })
+
+  it("«Ninguno» no enciende ninguna capa de fondo", () => {
+    // Es lo que hace falta para mirar el modelo de elevación solo: sobre una
+    // imagen de satélite, la pendiente compite con el color del terreno.
+    expect(visibleBasemapLayers("none", true)).toEqual([])
+    expect(visibleBasemapLayers("none", false)).toEqual([])
+    expect(supportsLabelToggle("none")).toBe(false)
+  })
+
+  it("«Ninguno» tampoco tiene nombres fijos que anunciar", () => {
+    // Las dos respuestas son «no», pero por razones distintas, y la lista de
+    // fondos las distingue: en OSM enseña «nombres fijos» porque los hay y no
+    // se pueden quitar; aquí no debe enseñar nada, porque no hay nombres. La
+    // primera versión decía «nombres fijos» sobre un fondo vacío.
+    expect(hasFixedLabels("none")).toBe(false)
+    expect(hasFixedLabels("osm")).toBe(true)
+    expect(hasFixedLabels("topo")).toBe(true)
+    expect(hasFixedLabels("positron")).toBe(false)
   })
 
   it("todas las capas que nombra un fondo están en la lista general", () => {

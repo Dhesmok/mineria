@@ -179,6 +179,10 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     ...anmSources(),
   },
   layers: [
+    // Debajo de todo, un fondo neutro. Solo se ve con el mapa base en
+    // «Ninguno»; el resto del tiempo queda tapado por las teselas. Sin él, esa
+    // opción dejaría el mapa en blanco y las capas claras se perderían.
+    { id: "fondo-neutro", type: "background", paint: { "background-color": "#eef2f6" } },
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
     derivativeLayer(),
