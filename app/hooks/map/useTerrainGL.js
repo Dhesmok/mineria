@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { HILLSHADE_LAYER_ID, TERRAIN_SOURCE_ID } from "../../utils/mapStyles"
+import { sampleGrid, slopeAspectFrom } from "../../utils/terrainAnalysis"
 
 /**
  * Terreno 3D y sombreado del relieve.
@@ -85,6 +86,10 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   // Y el giro continuo, dentro del manejador de `moveend`.
   const spinningRef = useRef(isSpinning)
   spinningRef.current = isSpinning
+  // Para saber, al salir de la consulta puntual, si el terreno lo había puesto
+  // el 3D: quitarlo entonces apagaría el 3D por debajo.
+  const is3DRef = useRef(is3D)
+  is3DRef.current = is3D
 
   const setHillshadeVisible = useCallback(
     (visible) => {
@@ -342,6 +347,55 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     return () => mapInstance.off("error", alFallar)
   }, [mapInstance, is3D])
 
+  /**
+   * Poner o quitar el terreno sin entrar en 3D.
+   *
+   * `queryTerrainElevation` solo responde con el terreno puesto, y consultar la
+   * pendiente de un punto no tiene por qué obligar a inclinar la cámara: en
+   * vista cenital el mapa se ve igual con terreno que sin él, y lo que se quiere
+   * es el dato, no el efecto.
+   */
+  const setTerrainForQuery = useCallback(
+    (on) => {
+      const map = mapRef.current
+      if (!map) return
+
+      if (on) {
+        if (!map.getTerrain()) {
+          map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: exaggerationRef.current })
+        }
+        return
+      }
+
+      // Solo se quita si no era el 3D quien lo tenía puesto.
+      if (!is3DRef.current && map.getTerrain()) map.setTerrain(null)
+    },
+    [mapRef],
+  )
+
+  /**
+   * Cota, pendiente y orientación en un punto.
+   *
+   * Es lo que de verdad se usa en campo, y lo más barato de las tres cosas que
+   * se pueden sacar del modelo: una consulta puntual no necesita recorrer nada,
+   * solo mirar las nueve alturas de alrededor.
+   *
+   * @returns {Object|null} null si el modelo todavía no ha llegado a ese punto
+   */
+  const queryTerrain = useCallback(
+    (lngLat) => {
+      const map = mapRef.current
+      if (!map?.getTerrain()) return null
+
+      const alturas = sampleGrid([lngLat.lng, lngLat.lat]).map((punto) => elevationAt(punto))
+      const centro = alturas[4]
+      if (!Number.isFinite(centro)) return null
+
+      return { elevation: centro, ...(slopeAspectFrom(alturas) ?? {}) }
+    },
+    [elevationAt, mapRef],
+  )
+
   // Al desmontar hay que quitar el terreno: si no, MapLibre intenta seguir
   // dibujándolo mientras el mapa se destruye.
   useEffect(() => {
@@ -361,6 +415,8 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     toggle3D,
     terrainError,
     dismissTerrainError,
+    setTerrainForQuery,
+    queryTerrain,
     showHillshade,
     toggleHillshade,
     exaggeration,

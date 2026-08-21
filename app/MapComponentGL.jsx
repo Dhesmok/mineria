@@ -26,6 +26,7 @@ import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
 import { DrawToolbar } from "./components/DrawToolbar"
 import { ImageExport } from "./components/ImageExport"
+import { TerrainQuery } from "./components/TerrainQuery"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
@@ -35,6 +36,7 @@ import {
   Download,
   Loader2,
   ImageDown,
+  MountainSnow,
   Layers,
   Mountain,
   Play,
@@ -115,6 +117,12 @@ export default function MapComponentGL({
   const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
   const [basemapPicker, setBasemapPicker] = useState(null)
   const [exportandoImagen, setExportandoImagen] = useState(false)
+  // La consulta de terreno se declara aquí arriba y no junto a su hook: quien
+  // primero la necesita es `useMapLayersGL`, para callar la ficha del polígono
+  // mientras está encendida. Declarada más abajo, leerla desde ahí daba
+  // «Cannot access before initialization» y el visor no se pintaba.
+  const [queryingTerrain, setQueryingTerrain] = useState(false)
+  const [terrainResult, setTerrainResult] = useState(null)
 
   // El panel entrega el estado de las capas ya agrupado por clave: encendida,
   // opacidad y colores. Antes llegaban ocho props sueltas que había que volver a
@@ -127,6 +135,7 @@ export default function MapComponentGL({
     filters,
     setError,
     setShowErrorBanner,
+    !queryingTerrain,
   )
 
   // Lo cargado sube al panel, que es donde viven el filtro y la tabla: las
@@ -200,7 +209,41 @@ export default function MapComponentGL({
     elevationAt,
     terrainError,
     dismissTerrainError,
+    setTerrainForQuery,
+    queryTerrain,
   } = useTerrainGL(mapRef, mapInstance)
+
+  /**
+   * La consulta puntual al terreno: un modo, no un botón de una sola vez.
+   *
+   * Con la consulta encendida, cada clic en el mapa responde por ese punto y la
+   * ficha del polígono se calla, para que la respuesta no quede tapada.
+   * `terrainResult` es `null` mientras no se ha pulsado nada, y un objeto vacío
+   * cuando se pulsó pero el modelo todavía no tenía dato ahí: son dos cosas
+   * distintas y la tarjeta las dice distinto.
+   */
+  const toggleTerrainQuery = useCallback(() => {
+    setQueryingTerrain((actual) => {
+      const siguiente = !actual
+      setTerrainForQuery(siguiente)
+      setTerrainResult(null)
+      return siguiente
+    })
+  }, [setTerrainForQuery])
+
+  useEffect(() => {
+    if (!mapInstance || !queryingTerrain) return
+
+    const alPulsar = (event) => setTerrainResult(queryTerrain(event.lngLat) ?? {})
+    mapInstance.on("click", alPulsar)
+    // El cursor lo dice: en este modo el mapa se pregunta, no se navega.
+    mapInstance.getCanvas().style.cursor = "crosshair"
+
+    return () => {
+      mapInstance.off("click", alPulsar)
+      mapInstance.getCanvas().style.cursor = ""
+    }
+  }, [mapInstance, queryingTerrain, queryTerrain])
 
   // El aviso de "arrastra con Ctrl" solo tiene sentido con ratón: en una
   // pantalla táctil se gira con dos dedos y ese gesto ya lo conoce todo el
@@ -373,6 +416,10 @@ export default function MapComponentGL({
         {/* Ajustes de cómo se ve el mapa. Van encima de los botones de acción,
             en la misma columna, y cada uno solo aparece cuando hay algo que
             ajustar: un control que no hace nada visible confunde más que ayuda. */}
+        {queryingTerrain && (
+          <TerrainQuery result={terrainResult} onClose={toggleTerrainQuery} />
+        )}
+
         {(is3D || isCompassActive) && (
           <div className="space-y-2">
             {is3D && (
@@ -496,6 +543,16 @@ export default function MapComponentGL({
           title="Levantar el terreno e inclinar la cámara"
         >
           {is3D ? "Volver a 2D" : "Ver en 3D"}
+        </MapButton>
+
+        <MapButton
+          onClick={toggleTerrainQuery}
+          active={queryingTerrain}
+          aria-pressed={queryingTerrain}
+          icon={MountainSnow}
+          title="Pulsar en el mapa para leer cota, pendiente y orientación"
+        >
+          Consultar terreno
         </MapButton>
 
         <MapButton

@@ -56,6 +56,7 @@ export const useMapLayersGL = (
   filters,
   setError,
   setShowErrorBanner,
+  popupsEnabled = true,
 ) => {
   const [isBelowMinZoom, setIsBelowMinZoom] = useState(false)
   const [truncatedLayers, setTruncatedLayers] = useState([])
@@ -92,6 +93,9 @@ export const useMapLayersGL = (
   // prop, esa función se quedaría viendo el estado del render en que se creó.
   const stateRef = useRef(layerState)
   stateRef.current = layerState
+  // Se lee dentro del manejador de clic, que se registra una sola vez.
+  const popupsEnabledRef = useRef(popupsEnabled)
+  popupsEnabledRef.current = popupsEnabled
 
   /**
    * El filtro que le toca a una capa: el de su área.
@@ -543,6 +547,10 @@ export const useMapLayersGL = (
       ANM_LAYERS.map(({ key }) => anmFillLayerId(key)).filter((id) => mapInstance.getLayer(id))
 
     const onClick = (event) => {
+      // Con la consulta de terreno encendida, el clic es para preguntar por la
+      // ladera; abrir además la ficha del polígono taparía la respuesta.
+      if (!popupsEnabledRef.current) return
+
       // Solo se consultan las capas de la ANM: sin esta lista, el clic también
       // encontraría las teselas del mapa base.
       const hits = mapInstance.queryRenderedFeatures(event.point, { layers: fillLayerIds() })
