@@ -132,25 +132,71 @@ export const buildMapFilter = (selections = {}, areaRange = null) => {
   return condiciones.length === 1 ? condiciones[0] : ["all", ...condiciones]
 }
 
+/** Comilla simple duplicada: es como SQL escapa una comilla dentro de un texto. */
+const quote = (value) => `'${String(value).replace(/'/g, "''")}'`
+
+/**
+ * El mismo filtro, pero en SQL, para pedírselo al servicio.
+ *
+ * Existe porque filtrar "en pantalla" y filtrar "en toda la capa" son dos cosas
+ * distintas de verdad, no dos formas de decir lo mismo. En pantalla se esconde
+ * lo que ya está cargado, y es instantáneo. En toda la capa hay que preguntarle
+ * al servicio, porque los títulos que cumplen pueden estar a mil kilómetros de
+ * donde se está mirando.
+ *
+ * El respaldo entre nombres de campo se traduce a un `OR`: una capa que no tenga
+ * TITULO_ESTADO puede tener ESTADO, y preguntar solo por el primero devolvería
+ * cero resultados en esa capa sin decir por qué.
+ *
+ * @returns {string|null} la cláusula, o null si no hay nada que filtrar
+ */
+export const buildWhereClause = (selections = {}, areaRange = null) => {
+  const partes = []
+
+  FILTER_FIELDS.forEach((campo) => {
+    const elegidos = selections?.[campo.key]
+    if (!Array.isArray(elegidos) || elegidos.length === 0) return
+
+    const lista = elegidos.map(quote).join(", ")
+    const porCampo = campo.fields.map((field) => `${field} IN (${lista})`)
+    partes.push(porCampo.length === 1 ? porCampo[0] : `(${porCampo.join(" OR ")})`)
+  })
+
+  if (areaRange) {
+    if (Number.isFinite(areaRange.min)) partes.push(`${AREA_FIELD} >= ${areaRange.min}`)
+    if (Number.isFinite(areaRange.max)) partes.push(`${AREA_FIELD} <= ${areaRange.max}`)
+  }
+
+  return partes.length === 0 ? null : partes.join(" AND ")
+}
+
 /** ¿Hay algún filtro puesto? Lo usa el panel para enseñar el botón de limpiar. */
 export const hasActiveFilters = (selections = {}, areaRange = null) =>
   Boolean(buildMapFilter(selections, areaRange))
 
+/**
+ * ¿Estos atributos pasan el filtro?
+ *
+ * Es la misma decisión que toma `buildMapFilter` dentro de MapLibre, pero en
+ * JavaScript, para poder contarlos y para llenar la tabla de resultados sin
+ * preguntarle al mapa qué está pintando.
+ */
+export const matchesFilters = (properties, selections = {}, areaRange = null) => {
+  const pasaCampos = FILTER_FIELDS.every((campo) => {
+    const elegidos = selections?.[campo.key]
+    if (!Array.isArray(elegidos) || elegidos.length === 0) return true
+    return elegidos.includes(readField(properties, campo.fields))
+  })
+  if (!pasaCampos) return false
+
+  if (!areaRange) return true
+  const area = Number(properties?.[AREA_FIELD])
+  if (!Number.isFinite(area)) return false
+  return area >= areaRange.min && area <= areaRange.max
+}
+
 /** Cuántas figuras pasan el filtro, para poder decirlo antes de aplicarlo. */
 export const countMatching = (featureProperties, selections = {}, areaRange = null) => {
   const lista = Array.isArray(featureProperties) ? featureProperties : []
-
-  return lista.filter((properties) => {
-    const pasaCampos = FILTER_FIELDS.every((campo) => {
-      const elegidos = selections?.[campo.key]
-      if (!Array.isArray(elegidos) || elegidos.length === 0) return true
-      return elegidos.includes(readField(properties, campo.fields))
-    })
-    if (!pasaCampos) return false
-
-    if (!areaRange) return true
-    const area = Number(properties?.[AREA_FIELD])
-    if (!Number.isFinite(area)) return false
-    return area >= areaRange.min && area <= areaRange.max
-  }).length
+  return lista.filter((properties) => matchesFilters(properties, selections, areaRange)).length
 }

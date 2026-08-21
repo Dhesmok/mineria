@@ -1,13 +1,12 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
-import { GripVertical } from "lucide-react"
+import { ChevronRight, Filter, GripVertical, Search } from "lucide-react"
 
 import { AREAS, THEME_LAYERS, layerByKey } from "../utils/themeAreas"
 import { darken } from "../utils/colors"
 import { indexForPointer, moveWithinSubset } from "../utils/reorder"
 import { ColorPopover } from "./ColorPopover"
-import { LayerFilters } from "./LayerFilters"
 
 /**
  * Panel de capas agrupadas por área temática.
@@ -180,6 +179,41 @@ const LayerRow = ({
   </div>
 )
 
+/**
+ * Uno de los dos botones del encabezado de un área.
+ *
+ * Llevan el color del área para que se entiendan sin explicación: son "cosas de
+ * Minería" o "cosas de Geología". Encendido cuando ese filtro está puesto, para
+ * que se vea desde fuera que un área está filtrada aunque esté plegada.
+ *
+ * `stopPropagation` no es opcional: viven dentro del botón que pliega el área, y
+ * sin él, filtrar o buscar cerraría el área de paso.
+ */
+const HeaderButton = ({ icon: Icon, label, color, active, disabled, onClick }) => (
+  <button
+    type="button"
+    disabled={disabled}
+    title={label}
+    aria-label={label}
+    onClick={(event) => {
+      event.stopPropagation()
+      onClick(event.currentTarget.getBoundingClientRect())
+    }}
+    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
+      active ? "border-transparent text-white" : "border-slate-200 bg-white"
+    }`}
+    style={
+      active
+        ? { backgroundColor: color }
+        : disabled
+          ? { color: "#94a3b8" }
+          : { color }
+    }
+  >
+    <Icon className="h-3.5 w-3.5" />
+  </button>
+)
+
 export const LayerPanel = ({
   layers,
   order,
@@ -187,13 +221,14 @@ export const LayerPanel = ({
   onOpacity,
   onColor,
   onReorder,
-  loadedProperties = [],
-  filterSelections = {},
-  filterArea = null,
-  onFilterChange,
-  onFilterArea,
+  areaHasFilter,
+  onOpenFilters,
+  onOpenSearch,
 }) => {
   const [onlyActive, setOnlyActive] = useState(false)
+  // Qué área está desplegada. Solo una a la vez: con cuatro áreas abiertas el
+  // panel medía más que la pantalla y había que desplazarse para todo.
+  const [openArea, setOpenArea] = useState("mineria")
   const [colorTarget, setColorTarget] = useState(null)
   // Qué se está arrastrando y dónde caería si se soltara ahora.
   const [drag, setDrag] = useState(null)
@@ -307,43 +342,85 @@ export const LayerPanel = ({
             </>
           )
         ) : (
-          // ───────────── Todas: agrupadas por área ─────────────
+          // ───────────── Todas: un área abierta a la vez ─────────────
           AREAS.map((area) => {
             const delArea = THEME_LAYERS.filter((layer) => layer.areaId === area.id)
             const encendidas = delArea.filter((layer) => layers[layer.key]?.on).length
+            const abierta = openArea === area.id
+            const filtrada = areaHasFilter(area.id)
 
             return (
               <div key={area.id}>
-                <div className="sticky top-0 z-[2] flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-[7px]">
-                  <AreaIcon area={area} className="h-3.5 w-3.5" />
-                  <span
-                    className="text-[11px] font-semibold uppercase tracking-[0.06em]"
-                    style={{ color: area.color }}
+                {/* El encabezado es el propio botón de plegar. Los dos botones
+                    de la derecha llevan `stopPropagation` porque viven dentro de
+                    él: sin eso, filtrar o buscar cerraría el área de paso. */}
+                <div
+                  className={`sticky top-0 z-[2] flex items-center gap-2 border-b border-slate-200 px-4 py-2 transition-colors ${
+                    abierta ? "bg-slate-100" : "bg-slate-50 hover:bg-slate-100"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenArea(abierta ? null : area.id)}
+                    aria-expanded={abierta}
+                    // El nombre accesible se pone a mano aunque el botón ya lleve
+                    // el texto del área dentro: si no, los tres botones del
+                    // encabezado —este, filtrar y buscar— se llamarían todos
+                    // "Geología" y no habría forma de distinguirlos, ni para un
+                    // lector de pantalla ni para las pruebas.
+                    aria-label={`Capas de ${area.name}`}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
-                    {area.name}
-                  </span>
-                  <span className="text-[11px] text-slate-400">{area.source}</span>
-                  <span className="flex-1" />
-                  <span className="text-[11px] tabular-nums text-slate-500">
+                    <ChevronRight
+                      className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${
+                        abierta ? "rotate-90" : ""
+                      }`}
+                    />
+                    <AreaIcon area={area} className="h-3.5 w-3.5 shrink-0" />
+                    <span
+                      className="truncate text-[11px] font-semibold uppercase tracking-[0.06em]"
+                      style={{ color: area.color }}
+                    >
+                      {area.name}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-slate-400">{area.source}</span>
+                  </button>
+
+                  <span className="shrink-0 text-[11px] tabular-nums text-slate-500">
                     {encendidas}/{delArea.length}
                   </span>
+
+                  <HeaderButton
+                    icon={Filter}
+                    label={`Filtrar ${area.name}`}
+                    color={area.color}
+                    active={filtrada}
+                    disabled={false}
+                    onClick={(rect) => onOpenFilters(area.id, rect)}
+                  />
+                  <HeaderButton
+                    icon={Search}
+                    label={
+                      area.searchable
+                        ? `Buscar en ${area.name}`
+                        : `Buscar en ${area.name}: falta conectar su servicio`
+                    }
+                    color={area.color}
+                    active={false}
+                    disabled={!area.searchable}
+                    onClick={(rect) => onOpenSearch(area.id, rect)}
+                  />
                 </div>
-                {delArea.map((layer) => (
-                  <LayerRow key={layer.key} {...filaProps(layer, -1, false)} />
-                ))}
+
+                {abierta &&
+                  delArea.map((layer) => (
+                    <LayerRow key={layer.key} {...filaProps(layer, -1, false)} />
+                  ))}
               </div>
             )
           })
         )}
       </div>
-
-      <LayerFilters
-        properties={loadedProperties}
-        selections={filterSelections}
-        areaRange={filterArea}
-        onChange={onFilterChange}
-        onArea={onFilterArea}
-      />
 
       {colorTarget && (
         <ColorPopover

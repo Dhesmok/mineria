@@ -111,3 +111,40 @@ describe("countMatching", () => {
     expect(countMatching(FIGURAS, {}, null)).toBe(FIGURAS.length)
   })
 })
+
+describe("buildWhereClause", () => {
+  it("no pide nada cuando no hay filtros", () => {
+    const { buildWhereClause } = require("./layerFilters")
+    expect(buildWhereClause({}, null)).toBeNull()
+    expect(buildWhereClause({ etapa: [] }, null)).toBeNull()
+  })
+
+  it("traduce un campo a un IN", () => {
+    const { buildWhereClause } = require("./layerFilters")
+    expect(buildWhereClause({ etapa: ["Explotación", "Exploración"] })).toBe(
+      "ETAPA IN ('Explotación', 'Exploración')",
+    )
+  })
+
+  it("convierte el respaldo entre nombres en un OR", () => {
+    // Una capa que no tenga TITULO_ESTADO puede tener ESTADO: preguntar solo por
+    // el primero devolvería cero en esa capa sin decir por qué.
+    const { buildWhereClause } = require("./layerFilters")
+    expect(buildWhereClause({ estado: ["Vigente"] })).toBe(
+      "(TITULO_ESTADO IN ('Vigente') OR STATUS IN ('Vigente') OR ESTADO IN ('Vigente'))",
+    )
+  })
+
+  it("escapa las comillas del valor", () => {
+    // Un valor con apóstrofo cerraría la cadena y rompería la consulta.
+    const { buildWhereClause } = require("./layerFilters")
+    expect(buildWhereClause({ modalidad: ["O'Brien"] })).toBe("MODALIDAD IN ('O''Brien')")
+  })
+
+  it("junta campos y área con AND", () => {
+    const { buildWhereClause } = require("./layerFilters")
+    expect(buildWhereClause({ etapa: ["Explotación"] }, { min: 100, max: 500 })).toBe(
+      "ETAPA IN ('Explotación') AND AREA_HA >= 100 AND AREA_HA <= 500",
+    )
+  })
+})

@@ -18,11 +18,31 @@ const suggestionResponse = (codes) => ({
   json: async () => ({ features: codes.map((code) => ({ attributes: { TENURE_ID: code } })) }),
 })
 
+/**
+ * El buscador dejó de estar fijo en el panel: sale de la lupa del encabezado de
+ * Minería, porque solo sirve para esa área. Abrirlo es parte de la prueba.
+ */
+const openSearch = async (user) => {
+  await user.click(screen.getByRole("button", { name: /Buscar en Minería/ }))
+  return screen.getByPlaceholderText("Ingrese el expediente")
+}
+
 const typeInSearch = async (user, text) => {
-  const input = screen.getByPlaceholderText("Ingrese el expediente")
+  const input =
+    screen.queryByPlaceholderText("Ingrese el expediente") ?? (await openSearch(user))
   await user.click(input)
   await user.type(input, text)
   return input
+}
+
+/**
+ * Despliega un área del panel, que ahora arranca plegada salvo Minería.
+ *
+ * Por nombre exacto y no por parecido: en el encabezado hay tres botones cuyo
+ * nombre contiene el del área —desplegar, filtrar y buscar—.
+ */
+const openArea = async (user, nombre) => {
+  await user.click(screen.getByRole("button", { name: `Capas de ${nombre}` }))
 }
 
 describe("buscador de expedientes", () => {
@@ -62,15 +82,24 @@ describe("buscador de expedientes", () => {
 
   it("no reabre el desplegable después de elegir una sugerencia", async () => {
     // Regresión: elegir una sugerencia actualizaba expedientCode, lo que volvía a
-    // disparar la consulta y reabría la lista 300 ms más tarde.
+    // disparar la consulta y reabría la lista 300 ms más tarde. Ahora elegir
+    // además busca y cierra el buscador, así que la lista no puede reaparecer
+    // ni sola ni al volver a abrirlo con el mismo código.
     const user = userEvent.setup()
     render(<Component />)
 
     await typeInSearch(user, "ABC")
     await user.click(await screen.findByText("ABC-123"))
 
-    expect(screen.getByPlaceholderText("Ingrese el expediente")).toHaveValue("ABC-123")
+    expect(screen.queryByRole("dialog", { name: "Buscar expediente" })).not.toBeInTheDocument()
+    // La búsqueda se lanzó de verdad: aparecen las acciones sobre el resultado.
+    expect(screen.getByRole("button", { name: /Borrar/ })).toBeInTheDocument()
+
+    await new Promise((resolve) => setTimeout(resolve, 400))
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
+
+    const input = await openSearch(user)
+    expect(input).toHaveValue("ABC-123")
 
     await new Promise((resolve) => setTimeout(resolve, 400))
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
@@ -87,8 +116,11 @@ describe("buscador de expedientes", () => {
     expect(screen.getAllByRole("option")[1]).toHaveAttribute("aria-selected", "true")
 
     await user.keyboard("{Enter}")
-    expect(screen.getByPlaceholderText("Ingrese el expediente")).toHaveValue("ABC-456")
+    // Enter sobre la marcada hace lo mismo que el clic: busca y cierra.
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
+    expect(screen.queryByRole("dialog", { name: "Buscar expediente" })).not.toBeInTheDocument()
+
+    expect(await openSearch(user)).toHaveValue("ABC-456")
   })
 
   it("cierra el desplegable con Escape", async () => {
@@ -129,12 +161,37 @@ describe("panel de capas por áreas", () => {
   })
 
   it("deja apagadas las capas cuyo servicio todavía no existe", async () => {
+    const user = userEvent.setup()
     render(<Component />)
 
-    expect(screen.getByRole("switch", { name: "Planchas geológicas" })).toBeDisabled()
-    expect(screen.getByRole("switch", { name: "Predios" })).toBeDisabled()
-    // Las que sí tienen servicio se pueden pulsar.
+    // Minería viene desplegada; las demás hay que abrirlas.
     expect(screen.getByRole("switch", { name: "Títulos Vigentes" })).toBeEnabled()
+
+    await openArea(user, "Geología")
+    expect(screen.getByRole("switch", { name: "Planchas geológicas" })).toBeDisabled()
+  })
+
+  it("solo deja un área desplegada a la vez", async () => {
+    // Con las cuatro abiertas el panel medía más que la pantalla y había que
+    // desplazarse para cualquier cosa.
+    const user = userEvent.setup()
+    render(<Component />)
+
+    expect(screen.getByRole("switch", { name: "Títulos Vigentes" })).toBeInTheDocument()
+
+    await openArea(user, "Geología")
+    expect(screen.queryByRole("switch", { name: "Títulos Vigentes" })).not.toBeInTheDocument()
+    expect(screen.getByRole("switch", { name: "Planchas geológicas" })).toBeInTheDocument()
+  })
+
+  it("la lupa solo está habilitada en Minería", async () => {
+    // El buscador pregunta por campos de la ANM; en las demás áreas encontraría
+    // cero y parecería roto.
+    render(<Component />)
+
+    expect(screen.getByRole("button", { name: /Buscar en Minería/ })).toBeEnabled()
+    expect(screen.getByRole("button", { name: /Buscar en Geología/ })).toBeDisabled()
+    expect(screen.getByRole("button", { name: /Buscar en Catastro/ })).toBeDisabled()
   })
 
   it("en Activas solo salen las capas encendidas, en orden", async () => {
@@ -182,7 +239,9 @@ describe("panel de capas por áreas", () => {
   })
 
   it("no deja tocar el color de una capa sin servicio", async () => {
+    const user = userEvent.setup()
     render(<Component />)
+    await openArea(user, "Catastro")
     expect(screen.getByRole("button", { name: "Cambiar el color de Predios" })).toBeDisabled()
   })
 })

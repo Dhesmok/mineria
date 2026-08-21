@@ -54,6 +54,13 @@ describe("themeAreas", () => {
     expect([...DEFAULT_ORDER].sort()).toEqual(THEME_LAYERS.map((l) => l.key).sort())
   })
 
+  it("solo Minería tiene el buscador habilitado", () => {
+    // El buscador pregunta por campos de la ANM; en las demás áreas encontraría
+    // cero y parecería roto.
+    expect(AREAS.filter((a) => a.searchable).map((a) => a.id)).toEqual(["mineria"])
+    AREAS.forEach((area) => expect(typeof area.searchable).toBe("boolean"))
+  })
+
   it("cada área tiene tres trazos de icono", () => {
     AREAS.forEach((area) => {
       expect(area.icon).toHaveLength(3)
