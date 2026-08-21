@@ -21,6 +21,19 @@
  *
  * La decisión —¿esto fue un toque?— es una función pura y está probada; el
  * enganche a los eventos es el envoltorio mínimo alrededor de ella.
+ *
+ * **El punto se entrega como `[x, y]`, nunca como `{x, y}`.** Esto costó un bug
+ * feo: `queryRenderedFeatures(punto, opciones)` mira si su primer argumento es
+ * un punto o un arreglo, y si no lo es, **lo toma por las opciones y consulta la
+ * pantalla entera**. No avisa de nada. El resultado era que en el teléfono tocar
+ * cualquier sitio abría la ficha de algún expediente, hubiera o no un polígono
+ * debajo: la consulta devolvía todos los de la pantalla y se abría el primero.
+ * Es la misma clase de trampa que la del punto 2 de CLAUDE.md —una llamada que
+ * en vez de fallar devuelve algo verosímil—.
+ *
+ * El arreglo, y no el `Point` de MapLibre, para que este módulo siga sin conocer
+ * el motor de mapa: es la separación que hizo posible cambiar de Leaflet a
+ * MapLibre sin reescribir la parte difícil.
  */
 
 /**
@@ -73,8 +86,19 @@ export const onMapTap = (map, handler) => {
     return { x: touch.clientX - caja.left, y: touch.clientY - caja.top }
   }
 
+  /**
+   * ¿El dedo cayó sobre el mapa, o sobre algo que hay encima?
+   *
+   * La ficha del expediente, y cualquier marcador, **cuelgan del contenedor del
+   * lienzo**, así que sus toques llegan hasta aquí igual que los del mapa. Sin
+   * esta comprobación, tocar la propia ficha contaba como tocar el mapa: en un
+   * teléfono la ficha tapa media pantalla, y debajo de ella está justo el
+   * polígono que la abrió, así que no había forma de deshacerse de ella.
+   */
+  const sobreElMapa = (evento) => evento.target === map.getCanvas()
+
   const alEmpezar = (evento) => {
-    if (evento.touches.length !== 1) {
+    if (evento.touches.length !== 1 || !sobreElMapa(evento)) {
       inicio = null
       return
     }
@@ -92,8 +116,8 @@ export const onMapTap = (map, handler) => {
     inicio = null
     if (!eraToque) return
 
-    const point = { x: fin.x, y: fin.y }
-    handler({ point, lngLat: map.unproject([point.x, point.y]), originalEvent: evento })
+    const point = [fin.x, fin.y]
+    handler({ point, lngLat: map.unproject(point), originalEvent: evento })
   }
 
   contenedor.addEventListener("touchstart", alEmpezar, { passive: true })

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { GripHorizontal, X } from "lucide-react"
 
 /**
@@ -20,10 +20,14 @@ import { GripHorizontal, X } from "lucide-react"
  * donde vive la columna de controles: así, al cambiar el tamaño de la ventana, el
  * panel no se va fuera de la pantalla.
  */
+/** Cuánto respira el panel contra el borde de la pantalla. */
+const MARGEN = 8
+
 export const FloatingPanel = ({ title, icon: Icon, children, onRequestClose }) => {
   const [collapsed, setCollapsed] = useState(false)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const dragRef = useRef(null)
+  const nodoRef = useRef(null)
   // Si el puntero se movió de verdad, lo que viene después es el final de un
   // arrastre y no un clic.
   const movedRef = useRef(false)
@@ -62,18 +66,48 @@ export const FloatingPanel = ({ title, icon: Icon, children, onRequestClose }) =
     dragRef.current = null
   }
 
-  // Si la ventana encoge, el panel podría quedar fuera. Se recorta al volver a
-  // dibujarse en vez de dejarlo inalcanzable.
-  useEffect(() => {
-    const alRedimensionar = () => {
-      setOffset((actual) => ({
-        x: Math.min(Math.max(actual.x, 0), Math.max(window.innerWidth - 220, 0)),
-        y: Math.min(Math.max(actual.y, 0), Math.max(window.innerHeight - 160, 0)),
-      }))
-    }
-    window.addEventListener("resize", alRedimensionar)
-    return () => window.removeEventListener("resize", alRedimensionar)
+  /**
+   * Devolver el panel a la pantalla si se salió.
+   *
+   * **Se mide, no se calcula.** La versión anterior recortaba la posición con
+   * dos números fijos —220 y 160— que pretendían ser el tamaño del panel, y solo
+   * lo hacía al cambiar el tamaño de la ventana. Eso dejaba pasar el caso que de
+   * verdad rompía: arrimar el botón guardado al borde y desplegarlo. El panel
+   * abierto es mucho más grande que el botón, así que crecía hacia fuera de la
+   * pantalla y se llevaba consigo su barra —con el asa para moverlo y la equis
+   * para cerrarlo—. A partir de ahí no había manera de recuperarlo salvo salir
+   * del 3D y volver a entrar.
+   *
+   * Ahora se mide el rectángulo real y se corrige lo que sobresalga. Corregir el
+   * borde izquierdo y el superior en último lugar es deliberado: si el panel no
+   * cabe entero, lo que tiene que quedar dentro es su barra, que es por donde se
+   * agarra y se cierra.
+   */
+  const devolverAPantalla = useCallback(() => {
+    const caja = nodoRef.current?.getBoundingClientRect()
+    if (!caja) return
+
+    let mover = { x: 0, y: 0 }
+    if (caja.right > window.innerWidth - MARGEN) mover.x = window.innerWidth - MARGEN - caja.right
+    if (caja.bottom > window.innerHeight - MARGEN) mover.y = window.innerHeight - MARGEN - caja.bottom
+    if (caja.left + mover.x < MARGEN) mover.x = MARGEN - caja.left
+    if (caja.top + mover.y < MARGEN) mover.y = MARGEN - caja.top
+
+    if (!mover.x && !mover.y) return
+    // `offset` se mide hacia dentro desde el borde inferior derecho: mover el
+    // panel a la derecha es restarle, no sumarle.
+    setOffset((actual) => ({ x: actual.x - mover.x, y: actual.y - mover.y }))
   }, [])
+
+  // Tras cada cambio de sitio y cada cambio de forma —abrirse o cerrarse—, antes
+  // de que el navegador pinte, para que el usuario no llegue a ver el panel a
+  // medio salir.
+  useLayoutEffect(devolverAPantalla, [devolverAPantalla, offset, collapsed])
+
+  useEffect(() => {
+    window.addEventListener("resize", devolverAPantalla)
+    return () => window.removeEventListener("resize", devolverAPantalla)
+  }, [devolverAPantalla])
 
   const asa = {
     onPointerDown: startDrag,
@@ -91,6 +125,7 @@ export const FloatingPanel = ({ title, icon: Icon, children, onRequestClose }) =
     return (
       <div style={posicion} className="flex justify-end">
         <button
+          ref={nodoRef}
           type="button"
           {...asa}
           onClick={() => {
@@ -112,6 +147,7 @@ export const FloatingPanel = ({ title, icon: Icon, children, onRequestClose }) =
 
   return (
     <div
+      ref={nodoRef}
       style={posicion}
       className="w-[min(16rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
     >
