@@ -11,6 +11,7 @@ import {
   EXAGGERATION_MIN,
   PITCH_MAX,
 } from "./hooks/map/useTerrainGL"
+import { useSlopeLayerGL } from "./hooks/map/useSlopeLayerGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
 import { useAreaDownloadGL } from "./hooks/map/useAreaDownloadGL"
@@ -27,6 +28,7 @@ import { FloatingPanel } from "./components/FloatingPanel"
 import { DrawToolbar } from "./components/DrawToolbar"
 import { ImageExport } from "./components/ImageExport"
 import { TerrainQuery } from "./components/TerrainQuery"
+import { SlopeLegend } from "./components/SlopeLegend"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
@@ -37,6 +39,7 @@ import {
   Loader2,
   ImageDown,
   MountainSnow,
+  Triangle,
   Layers,
   Mountain,
   Play,
@@ -212,6 +215,10 @@ export default function MapComponentGL({
     setTerrainForQuery,
     queryTerrain,
   } = useTerrainGL(mapRef, mapInstance)
+
+  const { showSlope, toggleSlope, slopeUnavailable } = useSlopeLayerGL(mapRef, mapInstance, {
+    setTerrainForQuery,
+  })
 
   /**
    * La consulta puntual al terreno: un modo, no un botón de una sola vez.
@@ -416,6 +423,8 @@ export default function MapComponentGL({
         {/* Ajustes de cómo se ve el mapa. Van encima de los botones de acción,
             en la misma columna, y cada uno solo aparece cuando hay algo que
             ajustar: un control que no hace nada visible confunde más que ayuda. */}
+        {showSlope && <SlopeLegend unavailable={slopeUnavailable} />}
+
         {queryingTerrain && (
           <TerrainQuery result={terrainResult} onClose={toggleTerrainQuery} />
         )}
@@ -543,6 +552,16 @@ export default function MapComponentGL({
           title="Levantar el terreno e inclinar la cámara"
         >
           {is3D ? "Volver a 2D" : "Ver en 3D"}
+        </MapButton>
+
+        <MapButton
+          onClick={toggleSlope}
+          active={showSlope}
+          aria-pressed={showSlope}
+          icon={Triangle}
+          title="Pintar la pendiente del terreno por colores"
+        >
+          Pendiente
         </MapButton>
 
         <MapButton

@@ -85,6 +85,48 @@ const TERRAIN_SOURCE = {
     '<a href="https://registry.opendata.aws/terrain-tiles/">Terrain Tiles</a> (AWS Open Data)',
 }
 
+/**
+ * La capa de pendiente.
+ *
+ * Se declara desde el arranque, como todo lo demás, aunque nazca vacía: la
+ * pendiente no se pide a ningún servicio, se calcula en el navegador a partir
+ * del modelo de elevación y se entrega como una imagen sobre el rectángulo que
+ * se está viendo. Ver `utils/slopeRaster.js`.
+ *
+ * Un píxel transparente de 1×1 como imagen de partida: una fuente de tipo
+ * `image` exige una imagen y unas coordenadas al declararla, y esta es la forma
+ * de decir «todavía nada» sin pedir un archivo a nadie.
+ */
+export const SLOPE_SOURCE_ID = "slope"
+export const SLOPE_LAYER_ID = "slope-layer"
+
+const TRANSPARENT_PIXEL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+const SLOPE_SOURCE = {
+  type: "image",
+  url: TRANSPARENT_PIXEL,
+  coordinates: [
+    [-180, 85],
+    [180, 85],
+    [180, -85],
+    [-180, -85],
+  ],
+}
+
+const slopeLayer = () => ({
+  id: SLOPE_LAYER_ID,
+  type: "raster",
+  source: SLOPE_SOURCE_ID,
+  layout: { visibility: "none" },
+  paint: {
+    // Sin difuminado: cada celda de la rejilla es una medida, y suavizar entre
+    // celdas inventaría valores intermedios que no se calcularon.
+    "raster-resampling": "nearest",
+    "raster-fade-duration": 0,
+  },
+})
+
 /** Identificador de la capa de sombreado. */
 export const HILLSHADE_LAYER_ID = "hillshade"
 
@@ -132,11 +174,13 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
   sources: {
     ...BASEMAP_SOURCES,
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
+    [SLOPE_SOURCE_ID]: SLOPE_SOURCE,
     ...anmSources(),
   },
   layers: [
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
+    slopeLayer(),
     ...anmLayers(),
     ...searchLayers(),
   ],

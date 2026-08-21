@@ -23,13 +23,22 @@ export const EXPORT_SCALES = [
 /**
  * Metros por píxel en la pantalla, a una latitud y un zoom dados.
  *
- * Es la fórmula de Web Mercator: la circunferencia de la Tierra dividida entre
- * los píxeles que ocupa el mundo a ese zoom, corregida por el coseno de la
- * latitud. Sin esa corrección, una barra de escala calculada en Bogotá saldría
- * un 0,3 % larga, y en Leticia casi exacta; el error crece hacia los polos.
+ * Es la circunferencia de la Tierra dividida entre los píxeles que ocupa el
+ * mundo a ese zoom, corregida por el coseno de la latitud. Sin esa corrección,
+ * una barra de escala calculada en Bogotá saldría un 0,3 % larga; el error crece
+ * hacia los polos.
+ *
+ * **El 78.271 no es un error de tecleo, y aquí estuvo el fallo.** La cifra que
+ * uno encuentra en todas partes es 156.543, que vale para los mapas de teselas
+ * de 256 píxeles —Leaflet, OSM—. MapLibre define su zoom con teselas de 512, así
+ * que a un mismo número de zoom su escala es la mitad. Con la cifra de 256, la
+ * barra de escala de la imagen exportada decía «1 km» sobre un tramo que medía
+ * 500 m, y la capa de pendiente daba 30° donde el terreno tenía 50. Ninguna de
+ * las dos cosas se ve mirando el código; se vio comparando la fórmula con lo que
+ * devuelve `map.unproject` para dos puntos separados 100 píxeles.
  */
 export const metersPerPixel = (latitude, zoom) =>
-  (156543.03392 * Math.cos((latitude * Math.PI) / 180)) / 2 ** zoom
+  (78271.51696 * Math.cos((latitude * Math.PI) / 180)) / 2 ** zoom
 
 /** Los saltos "redondos" de una barra de escala, en metros. */
 const NICE_STEPS = [

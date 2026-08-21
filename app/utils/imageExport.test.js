@@ -7,9 +7,17 @@ import {
 } from "./imageExport"
 
 describe("metersPerPixel", () => {
-  it("en el ecuador y zoom 0, el mundo cabe en 256 píxeles", () => {
-    // 156.543 m/px × 256 px ≈ 40.075 km, la circunferencia de la Tierra.
-    expect(metersPerPixel(0, 0) * 256).toBeCloseTo(40075016, -3)
+  it("en el ecuador y zoom 0, el mundo cabe en 512 píxeles", () => {
+    // MapLibre define su zoom con teselas de 512, no de 256: a un mismo número
+    // de zoom su escala es la mitad que en Leaflet. Comprobado contra
+    // `map.unproject` en un navegador: a zoom 15 y 6,24° de latitud da
+    // 2,3745 m/px, que es lo que sale de esta fórmula y la mitad de lo que
+    // salía de la de 256.
+    expect(metersPerPixel(0, 0) * 512).toBeCloseTo(40075016, -3)
+  })
+
+  it("coincide con lo que mide MapLibre de verdad", () => {
+    expect(metersPerPixel(6.24, 15)).toBeCloseTo(2.3745, 4)
   })
 
   it("corrige por la latitud", () => {
