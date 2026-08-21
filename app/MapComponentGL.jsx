@@ -11,7 +11,7 @@ import {
   EXAGGERATION_MIN,
   PITCH_MAX,
 } from "./hooks/map/useTerrainGL"
-import { useSlopeLayerGL } from "./hooks/map/useSlopeLayerGL"
+import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
 import { useAreaDownloadGL } from "./hooks/map/useAreaDownloadGL"
@@ -28,7 +28,7 @@ import { FloatingPanel } from "./components/FloatingPanel"
 import { DrawToolbar } from "./components/DrawToolbar"
 import { ImageExport } from "./components/ImageExport"
 import { TerrainQuery } from "./components/TerrainQuery"
-import { SlopeLegend } from "./components/SlopeLegend"
+import { TerrainRasterLegend } from "./components/TerrainRasterLegend"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
@@ -216,9 +216,11 @@ export default function MapComponentGL({
     queryTerrain,
   } = useTerrainGL(mapRef, mapInstance)
 
-  const { showSlope, toggleSlope, slopeUnavailable } = useSlopeLayerGL(mapRef, mapInstance, {
-    setTerrainForQuery,
-  })
+  const { terrainMode, chooseTerrainMode, terrainRasterUnavailable } = useTerrainRasterGL(
+    mapRef,
+    mapInstance,
+    { setTerrainForQuery },
+  )
 
   /**
    * La consulta puntual al terreno: un modo, no un botón de una sola vez.
@@ -423,7 +425,9 @@ export default function MapComponentGL({
         {/* Ajustes de cómo se ve el mapa. Van encima de los botones de acción,
             en la misma columna, y cada uno solo aparece cuando hay algo que
             ajustar: un control que no hace nada visible confunde más que ayuda. */}
-        {showSlope && <SlopeLegend unavailable={slopeUnavailable} />}
+        {terrainMode && (
+          <TerrainRasterLegend mode={terrainMode} unavailable={terrainRasterUnavailable} />
+        )}
 
         {queryingTerrain && (
           <TerrainQuery result={terrainResult} onClose={toggleTerrainQuery} />
@@ -555,13 +559,23 @@ export default function MapComponentGL({
         </MapButton>
 
         <MapButton
-          onClick={toggleSlope}
-          active={showSlope}
-          aria-pressed={showSlope}
+          onClick={() => chooseTerrainMode("slope")}
+          active={terrainMode === "slope"}
+          aria-pressed={terrainMode === "slope"}
           icon={Triangle}
           title="Pintar la pendiente del terreno por colores"
         >
           Pendiente
+        </MapButton>
+
+        <MapButton
+          onClick={() => chooseTerrainMode("aspect")}
+          active={terrainMode === "aspect"}
+          aria-pressed={terrainMode === "aspect"}
+          icon={Compass}
+          title="Pintar hacia dónde mira cada ladera"
+        >
+          Orientación
         </MapButton>
 
         <MapButton

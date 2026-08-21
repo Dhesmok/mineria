@@ -86,24 +86,25 @@ const TERRAIN_SOURCE = {
 }
 
 /**
- * La capa de pendiente.
+ * La capa de las derivadas del terreno: pendiente u orientación.
  *
- * Se declara desde el arranque, como todo lo demás, aunque nazca vacía: la
- * pendiente no se pide a ningún servicio, se calcula en el navegador a partir
- * del modelo de elevación y se entrega como una imagen sobre el rectángulo que
- * se está viendo. Ver `utils/slopeRaster.js`.
+ * Se declara desde el arranque, como todo lo demás, aunque nazca vacía: no se
+ * piden a ningún servicio, se calculan en el navegador a partir del modelo de
+ * elevación y se entregan como una imagen sobre el rectángulo que se está
+ * viendo. Ver `utils/terrainRaster.js`. Es una sola capa porque las dos no
+ * pueden estar encendidas a la vez: superpuestas no se lee ninguna.
  *
  * Un píxel transparente de 1×1 como imagen de partida: una fuente de tipo
  * `image` exige una imagen y unas coordenadas al declararla, y esta es la forma
  * de decir «todavía nada» sin pedir un archivo a nadie.
  */
-export const SLOPE_SOURCE_ID = "slope"
-export const SLOPE_LAYER_ID = "slope-layer"
+export const DERIVATIVE_SOURCE_ID = "terrain-derivative"
+export const DERIVATIVE_LAYER_ID = "terrain-derivative-layer"
 
 const TRANSPARENT_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
-const SLOPE_SOURCE = {
+const DERIVATIVE_SOURCE = {
   type: "image",
   url: TRANSPARENT_PIXEL,
   coordinates: [
@@ -114,10 +115,10 @@ const SLOPE_SOURCE = {
   ],
 }
 
-const slopeLayer = () => ({
-  id: SLOPE_LAYER_ID,
+const derivativeLayer = () => ({
+  id: DERIVATIVE_LAYER_ID,
   type: "raster",
-  source: SLOPE_SOURCE_ID,
+  source: DERIVATIVE_SOURCE_ID,
   layout: { visibility: "none" },
   paint: {
     // Sin difuminado: cada celda de la rejilla es una medida, y suavizar entre
@@ -174,13 +175,13 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
   sources: {
     ...BASEMAP_SOURCES,
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
-    [SLOPE_SOURCE_ID]: SLOPE_SOURCE,
+    [DERIVATIVE_SOURCE_ID]: DERIVATIVE_SOURCE,
     ...anmSources(),
   },
   layers: [
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
-    slopeLayer(),
+    derivativeLayer(),
     ...anmLayers(),
     ...searchLayers(),
   ],

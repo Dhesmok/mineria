@@ -1,4 +1,8 @@
 import {
+  ASPECT_LEGEND,
+  ASPECT_MIN_SLOPE,
+  aspectColorFor,
+  derivativeGridFrom,
   SAMPLE_STEP_PX,
   SLOPE_ALPHA,
   SLOPE_LEGEND,
@@ -7,7 +11,7 @@ import {
   slopeGridFrom,
   slopePixels,
   slopeUnavailableReason,
-} from "./slopeRaster"
+} from "./terrainRaster"
 
 /** Una rejilla que sube `porCelda` metros hacia el este. */
 const rampaEste = (cols, rows, porCelda) => {
@@ -110,5 +114,40 @@ describe("cuándo no se dibuja", () => {
 
   it("la rejilla es lo bastante fina para que valga la pena", () => {
     expect(SAMPLE_STEP_PX).toBeLessThanOrEqual(10)
+  })
+})
+
+describe("orientación", () => {
+  it("una rampa hacia el este da laderas que miran al oeste", () => {
+    const { aspect } = derivativeGridFrom(rampaEste(5, 5, 30), 5, 5, 30)
+    aspect.forEach((valor) => expect(valor).toBeCloseTo(270, 5))
+  })
+
+  it("en terreno casi llano no dice nada", () => {
+    // El azimut de una llanura lo decide el ruido del modelo, no el relieve:
+    // dos celdas vecinas saldrían «norte» y «sur» por medio metro. Pintar eso
+    // sería un confeti que parece información.
+    const casiLlano = rampaEste(5, 5, 0.2)
+    const { slope, aspect } = derivativeGridFrom(casiLlano, 5, 5, 30)
+    expect(slope[12]).toBeLessThan(ASPECT_MIN_SLOPE)
+    expect(Number.isNaN(aspect[12])).toBe(true)
+  })
+
+  it("la rampa de color cierra el círculo", () => {
+    // El norte y el noroeste son vecinos: una escala que no vuelva al color de
+    // partida deja un corte brusco justo en el norte, que se lee como un límite
+    // de terreno donde no lo hay.
+    expect(ASPECT_LEGEND[0].color).toEqual(ASPECT_LEGEND[ASPECT_LEGEND.length - 1].color)
+    expect(aspectColorFor(1)).toEqual(aspectColorFor(359))
+  })
+
+  it("reparte los ocho rumbos", () => {
+    expect(aspectColorFor(90)).toEqual([...ASPECT_LEGEND[2].color, 150])
+    expect(aspectColorFor(180)).toEqual([...ASPECT_LEGEND[4].color, 150])
+    expect(aspectColorFor(270)).toEqual([...ASPECT_LEGEND[6].color, 150])
+  })
+
+  it("sin dato, transparente", () => {
+    expect(aspectColorFor(NaN)).toEqual([0, 0, 0, 0])
   })
 })

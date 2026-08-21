@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import { SLOPE_LAYER_ID, SLOPE_SOURCE_ID, TERRAIN_SOURCE_ID } from "../../utils/mapStyles"
+import { DERIVATIVE_LAYER_ID, DERIVATIVE_SOURCE_ID, TERRAIN_SOURCE_ID } from "../../utils/mapStyles"
 import { metersPerPixel } from "../../utils/imageExport"
 import {
   SAMPLE_STEP_PX,
-  slopeGridFrom,
-  slopePixels,
+  aspectColorFor,
+  derivativeGridFrom,
+  rasterPixels,
+  slopeColorFor,
   slopeUnavailableReason,
-} from "../../utils/slopeRaster"
+} from "../../utils/terrainRaster"
 import { debounce } from "@/lib/utils"
 
 /**
- * La capa de pendiente sobre el mapa.
+ * Las capas derivadas del terreno —pendiente y orientación— sobre el mapa.
  *
  * No hay una capa de pendiente que pedir a nadie: se deriva del modelo de
  * elevación, aquí, en el navegador. El procedimiento es el mismo que usaría
@@ -32,18 +34,24 @@ import { debounce } from "@/lib/utils"
  *
  * Y se recalcula al terminar de mover, no mientras se mueve: son diez mil
  * consultas de altura, y hacerlas por fotograma dejaría el mapa inservible.
+ *
+ * Las dos capas comparten todo salvo el color, y por eso comparten hook: las dos
+ * salen de las mismas dos derivadas, así que tenerlas separadas sería recorrer
+ * la rejilla dos veces para repetir la misma cuenta. Solo una puede estar
+ * encendida a la vez: superpuestas no se lee ninguna.
  */
 
 /** Cuánto se espera a que el usuario se quede quieto antes de recalcular. */
 const REDRAW_DELAY_MS = 350
 
-export const useSlopeLayerGL = (mapRef, mapInstance, { setTerrainForQuery }) => {
-  const [showSlope, setShowSlope] = useState(false)
+export const useTerrainRasterGL = (mapRef, mapInstance, { setTerrainForQuery }) => {
+  /** `null`, `"slope"` o `"aspect"`. */
+  const [mode, setMode] = useState(null)
   // El motivo por el que la capa no se está pintando, si es que no se pinta.
   const [unavailable, setUnavailable] = useState(null)
 
-  const showSlopeRef = useRef(showSlope)
-  showSlopeRef.current = showSlope
+  const modeRef = useRef(mode)
+  modeRef.current = mode
   const canvasRef = useRef(null)
 
   /**
@@ -54,10 +62,10 @@ export const useSlopeLayerGL = (mapRef, mapInstance, { setTerrainForQuery }) => 
    */
   const redraw = useCallback(() => {
     const map = mapRef.current
-    if (!map || !map.getSource(SLOPE_SOURCE_ID)) return
+    if (!map || !map.getSource(DERIVATIVE_SOURCE_ID)) return
 
-    if (!showSlopeRef.current) {
-      map.setLayoutProperty(SLOPE_LAYER_ID, "visibility", "none")
+    if (!modeRef.current) {
+      map.setLayoutProperty(DERIVATIVE_LAYER_ID, "visibility", "none")
       return
     }
 
@@ -71,13 +79,13 @@ export const useSlopeLayerGL = (mapRef, mapInstance, { setTerrainForQuery }) => 
 
     setUnavailable(motivo)
     if (motivo) {
-      map.setLayoutProperty(SLOPE_LAYER_ID, "visibility", "none")
+      map.setLayoutProperty(DERIVATIVE_LAYER_ID, "visibility", "none")
       return
     }
 
     if (!map.getTerrain()) {
       setUnavailable("El modelo de elevación todavía no está listo.")
-      map.setLayoutProperty(SLOPE_LAYER_ID, "visibility", "none")
+      map.setLayoutProperty(DERIVATIVE_LAYER_ID, "visibility", "none")
       return
     }
 
@@ -103,14 +111,16 @@ export const useSlopeLayerGL = (mapRef, mapInstance, { setTerrainForQuery }) => 
       }
     }
 
-    const pendientes = slopeGridFrom(alturas, cols, rows, mpp * SAMPLE_STEP_PX)
+    const { slope, aspect } = derivativeGridFrom(alturas, cols, rows, mpp * SAMPLE_STEP_PX)
+    const valores = modeRef.current === "aspect" ? aspect : slope
+    const colorear = modeRef.current === "aspect" ? aspectColorFor : slopeColorFor
 
     const canvas = canvasRef.current ?? document.createElement("canvas")
     canvasRef.current = canvas
     canvas.width = cols
     canvas.height = rows
     const ctx = canvas.getContext("2d")
-    ctx.putImageData(new ImageData(slopePixels(pendientes), cols, rows), 0, 0)
+    ctx.putImageData(new ImageData(rasterPixels(valores, colorear), cols, rows), 0, 0)
 
     // Las cuatro esquinas del rectángulo muestreado, en coordenadas. Con el mapa
     // plano son las esquinas de la pantalla; el orden es el que espera MapLibre:
@@ -122,7 +132,7 @@ export const useSlopeLayerGL = (mapRef, mapInstance, { setTerrainForQuery }) => 
     const anchoMuestreado = (cols - 1) * SAMPLE_STEP_PX
     const altoMuestreado = (rows - 1) * SAMPLE_STEP_PX
 
-    map.getSource(SLOPE_SOURCE_ID).updateImage({
+    map.getSource(DERIVATIVE_SOURCE_ID).updateImage({
       url: canvas.toDataURL("image/png"),
       coordinates: [
         esquina(0, 0),
@@ -132,27 +142,31 @@ export const useSlopeLayerGL = (mapRef, mapInstance, { setTerrainForQuery }) => 
       ],
     })
 
-    map.setLayoutProperty(SLOPE_LAYER_ID, "visibility", "visible")
+    map.setLayoutProperty(DERIVATIVE_LAYER_ID, "visibility", "visible")
   }, [mapRef])
 
   const redrawSoon = useMemo(() => debounce(() => redraw(), REDRAW_DELAY_MS), [redraw])
 
-  const toggleSlope = useCallback(() => {
-    setShowSlope((actual) => {
-      const siguiente = !actual
-      // La pendiente necesita el terreno puesto para poder preguntar alturas,
-      // pero no necesita que el mapa esté inclinado.
-      setTerrainForQuery(siguiente)
-      showSlopeRef.current = siguiente
-      if (!siguiente) setUnavailable(null)
-      return siguiente
-    })
-  }, [setTerrainForQuery])
+  /** Enciende un modo, o lo apaga si ya estaba puesto. */
+  const chooseMode = useCallback(
+    (siguiente) => {
+      setMode((actual) => {
+        const elegido = actual === siguiente ? null : siguiente
+        // Estas capas necesitan el terreno puesto para poder preguntar alturas,
+        // pero no necesitan que el mapa esté inclinado.
+        setTerrainForQuery(Boolean(elegido))
+        modeRef.current = elegido
+        if (!elegido) setUnavailable(null)
+        return elegido
+      })
+    },
+    [setTerrainForQuery],
+  )
 
   // Al encender, y cada vez que el mapa se queda quieto.
   useEffect(() => {
     if (!mapInstance) return
-    if (!showSlope) {
+    if (!mode) {
       redraw()
       return
     }
@@ -172,7 +186,7 @@ export const useSlopeLayerGL = (mapRef, mapInstance, { setTerrainForQuery }) => 
       mapInstance.off("sourcedata", onSourceData)
       redrawSoon.cancel()
     }
-  }, [mapInstance, showSlope, redraw, redrawSoon])
+  }, [mapInstance, mode, redraw, redrawSoon])
 
-  return { showSlope, toggleSlope, slopeUnavailable: unavailable }
+  return { terrainMode: mode, chooseTerrainMode: chooseMode, terrainRasterUnavailable: unavailable }
 }

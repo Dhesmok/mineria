@@ -1,9 +1,9 @@
 /**
- * La pendiente como capa de color sobre el mapa.
+ * Pendiente y orientación como capas de color sobre el mapa.
  *
  * La consulta puntual responde por un punto; esto responde por toda la pantalla
- * de un vistazo, que es como se busca «dónde hay ladera suave para una vía» o
- * «qué parte de este título es escarpada».
+ * de un vistazo, que es como se busca «dónde hay ladera suave para una vía»,
+ * «qué parte de este título es escarpada» o «qué laderas miran al sur».
  *
  * **Cómo se calcula, y por qué así.** No hay una capa de pendiente que pedir a
  * nadie: hay que derivarla del modelo de elevación. Se muestrea la pantalla en
@@ -55,6 +55,47 @@ export const SLOPE_LEGEND = [
 /** Cuánto se deja ver el mapa por debajo de la capa. */
 export const SLOPE_ALPHA = 150
 
+/**
+ * Los colores de la orientación.
+ *
+ * **La rampa tiene que ser circular**, y esa es toda la dificultad: el norte y
+ * el noroeste son vecinos, igual que el norte y el noreste, así que una escala
+ * que vaya de un color a otro de 0° a 360° deja un salto brusco justo en el
+ * norte que se lee como un límite de terreno donde no lo hay. Estos ocho colores
+ * cierran el círculo: el último vuelve al primero.
+ *
+ * Es también la razón por la que la orientación va en ocho tramos y no en una
+ * escala continua: nadie lee «213°», lee «mira al suroeste».
+ */
+export const ASPECT_LEGEND = [
+  { max: 22.5, color: [93, 122, 176], label: "N", hint: "Norte" },
+  { max: 67.5, color: [110, 170, 176], label: "NE", hint: "Noreste" },
+  { max: 112.5, color: [124, 178, 118], label: "E", hint: "Este" },
+  { max: 157.5, color: [186, 195, 96], label: "SE", hint: "Sureste" },
+  { max: 202.5, color: [222, 176, 84], label: "S", hint: "Sur" },
+  { max: 247.5, color: [214, 133, 92], label: "SO", hint: "Suroeste" },
+  { max: 292.5, color: [186, 106, 132], label: "O", hint: "Oeste" },
+  { max: 337.5, color: [140, 108, 168], label: "NO", hint: "Noroeste" },
+  { max: 360.1, color: [93, 122, 176], label: "N", hint: "Norte" },
+]
+
+/**
+ * Pendiente por debajo de la cual la orientación no significa nada.
+ *
+ * En terreno casi llano el azimut lo decide el ruido del modelo, no el relieve:
+ * dos celdas vecinas pueden salir «norte» y «sur» por una diferencia de medio
+ * metro. Pintar eso sería un confeti de colores que parece información.
+ */
+export const ASPECT_MIN_SLOPE = 2
+
+/** El color de una orientación, en RGBA. */
+export const aspectColorFor = (aspectDegrees) => {
+  if (!Number.isFinite(aspectDegrees)) return [0, 0, 0, 0]
+  const normalizado = ((aspectDegrees % 360) + 360) % 360
+  const tramo = ASPECT_LEGEND.find((t) => normalizado < t.max) ?? ASPECT_LEGEND[0]
+  return [...tramo.color, SLOPE_ALPHA]
+}
+
 /** El color de una pendiente, en RGBA. */
 export const slopeColorFor = (slopeDegrees) => {
   if (!Number.isFinite(slopeDegrees)) return [0, 0, 0, 0]
@@ -101,8 +142,21 @@ const at = (heights, cols, rows, col, row) => {
  * @param {number} spacingMeters distancia en el terreno entre celdas vecinas
  * @returns {Float32Array} grados, una por celda; NaN donde falta el dato
  */
-export const slopeGridFrom = (heights, cols, rows, spacingMeters) => {
+export const slopeGridFrom = (heights, cols, rows, spacingMeters) =>
+  derivativeGridFrom(heights, cols, rows, spacingMeters).slope
+
+/**
+ * Pendiente y orientación de cada celda, en una sola pasada.
+ *
+ * Las dos salen de las mismas dos derivadas, así que calcularlas por separado
+ * sería recorrer la rejilla dos veces para repetir la misma cuenta.
+ *
+ * @returns {{slope: Float32Array, aspect: Float32Array}} grados; NaN donde falta
+ *   el dato, y en el azimut también donde el terreno es plano
+ */
+export const derivativeGridFrom = (heights, cols, rows, spacingMeters) => {
   const salida = new Float32Array(cols * rows)
+  const azimut = new Float32Array(cols * rows)
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
@@ -115,31 +169,41 @@ export const slopeGridFrom = (heights, cols, rows, spacingMeters) => {
       const z8 = at(heights, cols, rows, col, row + 1)
       const z9 = at(heights, cols, rows, col + 1, row + 1)
 
+      const i = row * cols + col
+
       if ([z1, z2, z3, z4, z6, z7, z8, z9].some((z) => !Number.isFinite(z))) {
-        salida[row * cols + col] = NaN
+        salida[i] = NaN
+        azimut[i] = NaN
         continue
       }
 
       const dzdx = (z3 + 2 * z6 + z9 - (z1 + 2 * z4 + z7)) / (8 * spacingMeters)
       const dzdy = (z7 + 2 * z8 + z9 - (z1 + 2 * z2 + z3)) / (8 * spacingMeters)
-      salida[row * cols + col] = (Math.atan(Math.hypot(dzdx, dzdy)) * 180) / Math.PI
+      const magnitud = Math.hypot(dzdx, dzdy)
+
+      salida[i] = (Math.atan(magnitud) * 180) / Math.PI
+      azimut[i] =
+        salida[i] < ASPECT_MIN_SLOPE
+          ? NaN
+          : (((90 - (Math.atan2(dzdy, -dzdx) * 180) / Math.PI) % 360) + 360) % 360
     }
   }
 
-  return salida
+  return { slope: salida, aspect: azimut }
 }
 
 /**
  * Los píxeles de la capa, listos para un `ImageData`.
  *
- * @param {Float32Array} slopes grados por celda
+ * @param {Float32Array} values grados por celda
+ * @param {(v: number) => number[]} colorFor cómo se colorea cada valor
  * @returns {Uint8ClampedArray} cuatro bytes por celda
  */
-export const slopePixels = (slopes) => {
-  const pixeles = new Uint8ClampedArray(slopes.length * 4)
+export const rasterPixels = (values, colorFor = slopeColorFor) => {
+  const pixeles = new Uint8ClampedArray(values.length * 4)
 
-  for (let i = 0; i < slopes.length; i++) {
-    const [r, g, b, a] = slopeColorFor(slopes[i])
+  for (let i = 0; i < values.length; i++) {
+    const [r, g, b, a] = colorFor(values[i])
     pixeles[i * 4] = r
     pixeles[i * 4 + 1] = g
     pixeles[i * 4 + 2] = b
@@ -148,6 +212,9 @@ export const slopePixels = (slopes) => {
 
   return pixeles
 }
+
+/** Atajo para la pendiente, que es el uso más común. */
+export const slopePixels = (slopes) => rasterPixels(slopes, slopeColorFor)
 
 /**
  * ¿Tiene sentido dibujar la capa con este zoom y esta separación?
@@ -160,16 +227,16 @@ export const slopeUnavailableReason = ({ zoom, pitch, metrosPorPixel }) => {
     // La capa se coloca como una imagen sobre el rectángulo de pantalla, y con
     // la cámara inclinada ese rectángulo no es un rectángulo en el terreno: la
     // imagen quedaría estirada y señalando pendientes donde no las hay.
-    return "La pendiente solo se dibuja con el mapa plano. Vuelve a 2D para verla."
+    return "Esta capa solo se dibuja con el mapa plano. Vuelve a 2D para verla."
   }
 
   if (zoom < SLOPE_MIN_ZOOM) {
-    return "Acerca el mapa para ver la pendiente: a esta escala la rejilla sería más gruesa que el propio modelo."
+    return "Acerca el mapa: a esta escala la rejilla sería más gruesa que el propio modelo."
   }
 
   const separacion = metrosPorPixel * SAMPLE_STEP_PX
   if (separacion > DEM_RESOLUTION_M * 4) {
-    return "Acerca el mapa para ver la pendiente."
+    return "Acerca el mapa para ver esta capa."
   }
 
   return null
