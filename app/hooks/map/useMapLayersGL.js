@@ -18,6 +18,7 @@ import { labelElementFor } from "../../utils/mapLabelsGL"
 import { selectVisibleLabels } from "../../utils/labelPlacement"
 import { createPopupContent, getFeatureLabel, getLabelCoordinates } from "../../utils/mapUtils"
 import { findTenureLayerNumbers, tenureLayerUrl } from "../../utils/tenureLayers"
+import { onMapTap } from "../../utils/tapGesture"
 import { debounce } from "@/lib/utils"
 
 // Arrastrar el mapa dispara un `moveend` por gesto, y cada uno es una consulta a
@@ -567,6 +568,15 @@ export const useMapLayersGL = (
 
     mapInstance.on("click", onClick)
 
+    // Y el mismo manejador para los toques, por separado.
+    //
+    // En un teléfono el clic no llega: `mapbox-gl-draw` cancela el `touchend`
+    // para manejar sus propios gestos, y con ese evento cancelado el navegador
+    // ya no genera el clic de compatibilidad. Sin clic, MapLibre no emite nada y
+    // tocar un polígono no abría su ficha —parecía que el dato no existiera—.
+    // Ver `utils/tapGesture` para el diagnóstico completo.
+    const quitarToque = onMapTap(mapInstance, onClick)
+
     // El cursor sí va por capa: es lo que avisa de que un polígono responde.
     const cursorHandlers = []
     ANM_LAYERS.forEach(({ key }) => {
@@ -587,6 +597,7 @@ export const useMapLayersGL = (
 
     return () => {
       mapInstance.off("click", onClick)
+      quitarToque()
       cursorHandlers.forEach(([layerId, onEnter, onLeave]) => {
         mapInstance.off("mouseenter", layerId, onEnter)
         mapInstance.off("mouseleave", layerId, onLeave)

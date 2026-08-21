@@ -125,8 +125,34 @@ export const BASEMAP_SOURCES = {
  *   "swap"    — hay dos direcciones, una con y otra sin
  *   "overlay" — los nombres son una capa aparte que se superpone
  *   "fixed"   — vienen pintados en la tesela y no se pueden quitar
+ *   "none"    — no hay nombres de los que hablar
  */
 export const BASEMAPS = [
+  {
+    /**
+     * Sin fondo.
+     *
+     * No es un hueco en la lista: es lo que hace falta para mirar el modelo de
+     * elevación solo. Sobre una imagen de satélite, la capa de pendiente compite
+     * con el color del propio terreno y cuesta leer dónde empieza un escarpe;
+     * sin nada debajo, los colores son solo los de la pendiente.
+     *
+     * No apaga el mapa entero: debajo de todo queda un fondo neutro declarado en
+     * el estilo, para que las capas se lean sobre algo y no sobre el blanco de
+     * la página.
+     */
+    id: "none",
+    name: "Sin mapa de fondo",
+    short: "Ninguno",
+    source: "",
+    hint: "Fondo neutro. Para leer el relieve, la pendiente o los títulos sin nada que compita.",
+    // "none", no "fixed": sin teselas no hay nombres ni fijos ni quitables, y
+    // la lista de fondos anunciaba «nombres fijos» en esta fila, que es
+    // sencillamente falso. Se vio en una captura, no en las pruebas.
+    labels: "none",
+    withLabels: [],
+    withoutLabels: [],
+  },
   {
     id: "positron",
     name: "Cartográfico claro",
@@ -193,8 +219,21 @@ const BY_ID = new Map(BASEMAPS.map((basemap) => [basemap.id, basemap]))
 
 export const basemapById = (id) => BY_ID.get(id) ?? BY_ID.get(DEFAULT_BASEMAP)
 
-/** ¿Se le pueden quitar los nombres a este fondo? */
-export const supportsLabelToggle = (id) => basemapById(id).labels !== "fixed"
+/**
+ * ¿Se le pueden quitar los nombres a este fondo?
+ *
+ * Se listan los dos casos que sí, en vez de excluir el que no: cuando se añadió
+ * el fondo vacío —que no tiene nombres de ninguna clase— la versión anterior,
+ * escrita como «distinto de fijos», lo dio por alternable y la lista le ofrecía
+ * un interruptor de nombres que no existían.
+ */
+export const supportsLabelToggle = (id) => {
+  const { labels } = basemapById(id)
+  return labels === "swap" || labels === "overlay"
+}
+
+/** ¿Trae nombres pintados en la tesela, que no hay forma de quitar? */
+export const hasFixedLabels = (id) => basemapById(id).labels === "fixed"
 
 /**
  * Qué capas del estilo deben verse para un fondo y un estado de etiquetas.

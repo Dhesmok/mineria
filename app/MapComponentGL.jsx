@@ -21,6 +21,7 @@ import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } 
 import { COMPASS_SIZE_MAX, COMPASS_SIZE_MIN } from "./hooks/map/useGeolocationGL"
 import { basemapById } from "./utils/basemaps"
 import { readPreferences } from "./utils/preferences"
+import { onMapTap } from "./utils/tapGesture"
 import { crsById } from "./utils/crs"
 import { ANM_LAYERS } from "./utils/anmLayers"
 import { BasemapPicker } from "./components/BasemapPicker"
@@ -245,11 +246,15 @@ export default function MapComponentGL({
 
     const alPulsar = (event) => setTerrainResult(queryTerrain(event.lngLat) ?? {})
     mapInstance.on("click", alPulsar)
+    // Y el toque aparte: en táctil el clic no llega, porque el control de
+    // dibujo cancela `touchend`. Ver `utils/tapGesture.js`.
+    const quitarToque = onMapTap(mapInstance, alPulsar)
     // El cursor lo dice: en este modo el mapa se pregunta, no se navega.
     mapInstance.getCanvas().style.cursor = "crosshair"
 
     return () => {
       mapInstance.off("click", alPulsar)
+      quitarToque()
       mapInstance.getCanvas().style.cursor = ""
     }
   }, [mapInstance, queryingTerrain, queryTerrain])
@@ -682,7 +687,7 @@ export default function MapComponentGL({
           map={mapInstance}
           crs={crsById(coordinateSystem)}
           layerNames={ANM_LAYERS.filter(({ key }) => layerState[key]?.on).map((l) => l.label)}
-          sources={["Agencia Nacional de Minería", basemapById(basemap).source]}
+          sources={["Agencia Nacional de Minería", basemapById(basemap).source].filter(Boolean)}
           onClose={() => setExportandoImagen(false)}
         />
       )}
@@ -787,6 +792,19 @@ export default function MapComponentGL({
         .maplibregl-popup-content p:last-child {
           border-bottom: none;
           padding-bottom: 0;
+        }
+        /* La equis de cerrar, con tamaño de dedo.
+           MapLibre la dibuja pensada para un ratón, y en un teléfono la ficha
+           tapa media pantalla: la única forma de quitarla de en medio es
+           acertarle a ese cuadrito. Se agranda solo donde el puntero es grueso
+           —un dedo—, para no engordarla en el escritorio, donde ya se acierta. */
+        @media (pointer: coarse) {
+          .maplibregl-popup-close-button {
+            width: 44px;
+            height: 44px;
+            font-size: 22px;
+            line-height: 44px;
+          }
         }
         /* La etiqueta del dato, en gris, y el valor en negro: así se distinguen
            de un vistazo sin necesidad de más líneas. */

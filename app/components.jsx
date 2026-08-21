@@ -381,7 +381,9 @@ export default function Component() {
             <button
               type="button"
               onClick={(event) => setCrsPopover(event.currentTarget.getBoundingClientRect())}
-              className="flex h-9 w-full items-center gap-2 rounded-md border border-slate-200 px-3 text-left transition-colors hover:bg-slate-50"
+              // El mismo gris que las barras de Minería, Geología y las demás: en
+              // blanco parecía de otra familia, justo encima de ellas.
+              className="flex h-9 w-full items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-left transition-colors hover:bg-slate-100"
             >
               <Globe2 className="h-4 w-4 shrink-0 text-slate-400" />
               <span className="min-w-0 flex-1 truncate text-[13px] text-slate-900">
