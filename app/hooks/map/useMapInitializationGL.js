@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react"
 
 import {
   ALL_BASEMAP_LAYERS,
-  DEFAULT_BASEMAP,
   supportsLabelToggle,
   visibleBasemapLayers,
 } from "../../utils/basemaps"
+import { readPreferences, writePreferences } from "../../utils/preferences"
 
 /**
  * El mapa de fondo y sus nombres.
@@ -26,8 +26,11 @@ import {
  * @param {Object|null} mapInstance el mapa ya listo, o null mientras se crea
  */
 export const useMapInitializationGL = (mapRef, mapInstance = null) => {
-  const [basemap, setBasemap] = useState(DEFAULT_BASEMAP)
-  const [showLabels, setShowLabels] = useState(true)
+  // El fondo elegido se recuerda entre visitas: es de las cosas que se ajustan
+  // una vez y se dejan puestas. La función va dentro de `useState` para leer el
+  // almacenamiento una sola vez y no en cada render.
+  const [basemap, setBasemap] = useState(() => readPreferences().basemap)
+  const [showLabels, setShowLabels] = useState(() => readPreferences().showLabels)
 
   /** Aplica al mapa el fondo y los nombres que digan el estado. */
   const applyBasemap = useCallback(
@@ -58,6 +61,7 @@ export const useMapInitializationGL = (mapRef, mapInstance = null) => {
       setBasemap(id)
       setShowLabels(labels)
       applyBasemap(id, labels)
+      writePreferences({ basemap: id, showLabels: labels })
     },
     [applyBasemap, basemap, showLabels],
   )

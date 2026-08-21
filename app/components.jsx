@@ -8,13 +8,14 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@
 import { ChevronLeft, ChevronDown, Download, RefreshCw, Globe2 } from "lucide-react"
 import ExportComponent from "./ExportComponent"
 import { axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
-import { areaById, DEFAULT_ORDER, initialLayerState, layerByKey } from "./utils/themeAreas"
+import { areaById, layerByKey } from "./utils/themeAreas"
 import { LayerPanel } from "./components/LayerPanel"
 import { AreaFilters } from "./components/AreaFilters"
 import { AttributeTable } from "./components/AttributeTable"
 import { CrsPicker } from "./components/CrsPicker"
 import { ExpedientSearch } from "./components/ExpedientSearch"
 import { matchesFilters } from "./utils/layerFilters"
+import { readPreferences, writePreferences } from "./utils/preferences"
 
 // `ssr: false` es obligatorio: MapLibre necesita el objeto `window` y una
 // tarjeta gráfica, y ninguno de los dos existe cuando Next genera la página en
@@ -36,7 +37,13 @@ export default function Component() {
   const [transformedCoordinates, setTransformedCoordinates] = useState([])
   const [showToggle, setShowToggle] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
-  const [selectedCoordinateSystem, setSelectedCoordinateSystem] = useState("4686")
+  // Las preferencias guardadas se leen una sola vez, al arrancar. La función va
+  // dentro de `useState` a propósito: pasarle el valor ya calculado leería el
+  // almacenamiento en cada render, y además el servidor de Next ejecuta este
+  // archivo donde `window` no existe.
+  const [selectedCoordinateSystem, setSelectedCoordinateSystem] = useState(
+    () => readPreferences().crs,
+  )
   const [expedientCode, setExpedientCode] = useState("")
   const [searchTrigger, setSearchTrigger] = useState(0)
   const [coordinatesAvailable, setCoordinatesAvailable] = useState(false)
@@ -47,10 +54,10 @@ export default function Component() {
   // Estado de las capas: encendida, opacidad y colores, todo por clave. Antes
   // eran ocho estados sueltos —uno por interruptor y otro por deslizador—, que
   // con trece capas y su color serían treinta y nueve.
-  const [layers, setLayers] = useState(initialLayerState)
+  const [layers, setLayers] = useState(() => readPreferences().layers)
   // El orden de pintado, de arriba abajo. Es lo que el usuario reordena
   // arrastrando en la pestaña "Activas".
-  const [layerOrder, setLayerOrder] = useState(DEFAULT_ORDER)
+  const [layerOrder, setLayerOrder] = useState(() => readPreferences().layerOrder)
   // Filtros sobre lo cargado, y los atributos con que el panel arma sus
   // opciones. Viven aquí y no en el mapa porque el panel es quien los enseña.
   // Un juego de filtros por área: con cuatro áreas y trece capas, un filtro
@@ -68,6 +75,13 @@ export default function Component() {
   const [searchPopover, setSearchPopover] = useState(null)
   const [crsPopover, setCrsPopover] = useState(null)
   const [showAttributeTable, setShowAttributeTable] = useState(false)
+
+  // Guardar es un efecto y no una llamada dentro de cada manejador: así no hay
+  // que acordarse de hacerlo en los cinco sitios donde se cambia una capa, y no
+  // se puede olvidar en el sexto.
+  useEffect(() => writePreferences({ layers }), [layers])
+  useEffect(() => writePreferences({ layerOrder }), [layerOrder])
+  useEffect(() => writePreferences({ crs: selectedCoordinateSystem }), [selectedCoordinateSystem])
 
   const filtroDe = useCallback(
     (areaId) => areaFilters[areaId] ?? { selections: {}, areaRange: null },

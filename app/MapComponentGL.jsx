@@ -20,7 +20,8 @@ import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } 
 import { axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
 import { parseCoordinateInput } from "./utils/coordinateInput"
 import { COMPASS_SIZE_MAX, COMPASS_SIZE_MIN } from "./hooks/map/useGeolocationGL"
-import { basemapById, DEFAULT_BASEMAP } from "./utils/basemaps"
+import { basemapById } from "./utils/basemaps"
+import { readPreferences } from "./utils/preferences"
 import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
 import {
@@ -624,7 +625,11 @@ export default function MapComponentGL({
       // fijo en "osm" desde cuando solo había dos fondos: el visor arrancaba con
       // el callejero mientras el botón anunciaba «Satélite», y no se notaba
       // hasta comparar la atribución de la esquina con lo que decía el botón.
-      style: createBaseStyle(DEFAULT_BASEMAP),
+      //
+      // Y se lee de las preferencias, no del valor de fábrica: si no, quien
+      // dejó puesto el satélite vería un parpadeo del gris de CARTO en cada
+      // recarga antes de que el fondo guardado se aplicara encima.
+      style: createBaseStyle(readPreferences().basemap),
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       maxZoom: MAX_ZOOM,
