@@ -127,8 +127,8 @@ export const AreaFilters = ({
           </div>
           <p className="mt-1.5 text-[10px] leading-tight text-slate-500">
             {scope === "viewport"
-              ? "Esconde lo que no cumple, de lo que ya está cargado. Es inmediato."
-              : "Le pregunta al servicio por todo el país, aunque quede fuera de la vista. Tarda un poco más."}
+              ? "Filtra únicamente los polígonos que se ven en la pantalla."
+              : "Filtra la capa completa, en todo el país. Tarda un poco más."}
           </p>
         </div>
 

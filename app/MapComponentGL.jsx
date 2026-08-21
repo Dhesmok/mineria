@@ -34,6 +34,7 @@ import {
   Mountain,
   Pentagon,
   Play,
+  Rotate3d,
   Square,
   Spline,
   Trash2,
@@ -384,6 +385,11 @@ const SliderRow = ({ id, label, title, value, display, min, max, step, onChange 
  * saber que se arrastra con Ctrl, y eso no está escrito en ninguna parte, así
  * que la primera vez que alguien entra en 3D se queda con un mapa inclinado que
  * no sabe girar. El aviso sale una vez por visita y se va solo.
+ *
+ * Era una píldora negra de 14 px, la única pieza oscura y redonda de toda la
+ * pantalla: se leía como un error del sistema y no como una ayuda. Ahora usa el
+ * mismo lenguaje que los botones del mapa —blanco, borde slate, 13 px, esquinas
+ * de 8— y solo la tecla va resaltada, que es el único dato que hay que retener.
  */
 const RotateHint = ({ onClose }) => {
   useEffect(() => {
@@ -392,18 +398,22 @@ const RotateHint = ({ onClose }) => {
   }, [onClose])
 
   return (
-    <div className="absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full bg-gray-900/90 px-4 py-2 text-sm text-white shadow-lg">
+    <div className="pointer-events-auto absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-2 text-[13px] text-slate-700 shadow-lg">
+      <Rotate3d className="h-4 w-4 shrink-0 text-slate-400" />
       <span>
-        Mantén <kbd className="rounded bg-white/20 px-1.5 py-0.5 font-mono text-xs">Ctrl</kbd> y
-        arrastra para girar e inclinar el mapa
+        Mantén{" "}
+        <kbd className="rounded border border-slate-300 bg-slate-100 px-1.5 py-px font-sans text-[11px] font-semibold text-slate-700">
+          Ctrl
+        </kbd>{" "}
+        y arrastra para girar e inclinar la escena
       </span>
       <button
         type="button"
         onClick={onClose}
         aria-label="Cerrar el aviso"
-        className="rounded-full p-0.5 hover:bg-white/20"
+        className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
       >
-        <X className="h-4 w-4" />
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   )
@@ -774,25 +784,6 @@ export default function MapComponentGL({
           </MapButton>
         )}
 
-        {/* Se llamaba «Satélite» y alternaba entre dos fondos. Con cinco, un
-            botón que va rotando obliga a pasar por todos para llegar al que se
-            quiere, así que ahora abre una lista. */}
-        <MapButton
-          onClick={(event) => setBasemapPicker(event.currentTarget.getBoundingClientRect())}
-          active={Boolean(basemapPicker)}
-          title="Elegir el mapa de fondo"
-        >
-          <Layers className="h-4 w-4" />
-          Mapa base
-          <span
-            className={`ml-0.5 rounded px-1 py-px text-[9px] font-semibold ${
-              basemapPicker ? "bg-white/20" : "bg-slate-100 text-slate-500"
-            }`}
-          >
-            {basemapById(basemap).name}
-          </span>
-        </MapButton>
-
         <MapButton
           onClick={toggleHillshade}
           active={showHillshade}
@@ -837,6 +828,30 @@ export default function MapComponentGL({
             {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
           </MapButton>
         )}
+
+        {/* Se llamaba «Satélite» y alternaba entre dos fondos. Con cinco, un
+            botón que va rotando obliga a pasar por todos para llegar al que se
+            quiere, así que ahora abre una lista.
+
+            Va abajo del todo, pegado a la firma: el fondo se elige una vez al
+            empezar y no se vuelve a tocar, mientras que relieve, 3D y GPS se
+            encienden y apagan a cada rato. Lo que más se usa queda más cerca
+            del pulgar. */}
+        <MapButton
+          onClick={(event) => setBasemapPicker(event.currentTarget.getBoundingClientRect())}
+          active={Boolean(basemapPicker)}
+          title="Elegir el mapa de fondo"
+        >
+          <Layers className="h-4 w-4" />
+          Mapa base
+          <span
+            className={`ml-0.5 rounded px-1 py-px text-[9px] font-semibold ${
+              basemapPicker ? "bg-white/20" : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            {basemapById(basemap).short}
+          </span>
+        </MapButton>
 
         <MapButton
           onClick={() =>

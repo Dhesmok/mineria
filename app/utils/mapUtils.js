@@ -41,15 +41,11 @@ export const formatDate = (value) => {
 /** Grados con coma decimal, la convención local. */
 export const formatDegrees = (value) => value.toFixed(5).replace(".", ",")
 
-// Por debajo de este zoom las etiquetas se apiñan y son ilegibles. No hay límite
-// superior: el satélite llega a z22 y antes desaparecían al pasar de z19.
-//
-// Vivía en mapLabels.js, el módulo de etiquetas de Leaflet, y se mudó aquí
-// porque aquel importaba Leaflet: leer este número obligaba al visor MapLibre a
-// arrastrar Leaflet entero en su descarga. mapLabels.js ya no existe.
-export const LABELS_MIN_ZOOM = 15
-
-export const shouldShowLabels = (zoom) => zoom >= LABELS_MIN_ZOOM
+// Aquí vivía `shouldShowLabels`: un umbral fijo de zoom por debajo del cual no
+// se dibujaba ninguna etiqueta. Lo sustituye `labelPlacement.js`, que decide
+// figura por figura si el código cabe dentro del polígono en pantalla. Un
+// umbral único trataba igual a un título de 5.000 ha y a uno de 20, y entre el
+// zoom 10 —donde ya hay polígonos— y el 15 no se etiquetaba nada.
 
 const ringsOfGeometry = (geometry) => {
   if (geometry?.type === "Polygon") {

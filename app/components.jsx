@@ -229,10 +229,31 @@ export default function Component() {
 
   return (
     <div className="relative flex w-full h-screen bg-gray-100">
+      {/* El panel y su pestaña se mueven juntos.
+
+          Antes eran dos mandos distintos: una X dentro del panel para
+          esconderlo y, cuando estaba escondido, un botón redondo en la esquina
+          de la pantalla para volver a sacarlo. Dos sitios y dos formas para una
+          sola cosa. Ahora es una pestaña pegada al costado del panel: la
+          pestaña se desliza con él y queda asomando, así que ocultar y mostrar
+          se hacen siempre en el mismo punto y la flecha dice hacia dónde va.
+
+          El título «Títulos y Solicitudes» desapareció: el panel ya no es solo
+          de la ANM —agrupa Geología, Hidrocarburos y Catastro—, y un encabezado
+          que nombra a una sola de las cuatro áreas confunde más de lo que
+          orienta. Sin él, el panel arranca 44 px más arriba. */}
       <div
-        // -translate-x-full solo desplaza el ancho del panel, y al estar en left-4
-        // quedaba una franja de 16px asomando bajo el botón de mostrar.
-        //
+        className={`absolute top-4 left-4 z-10 flex max-h-[calc(100vh-5rem)] items-start transition-transform duration-300 ease-out ${
+          showSidebar ? "translate-x-0" : "-translate-x-[calc(100%-0.5rem)]"
+        }`}
+        // La cuenta del desplazamiento, que no es evidente: el bloque mide el
+        // panel (350) más la pestaña (24) = 374, y arranca a 16 del borde. Para
+        // que el panel salga entero de la pantalla hay que correrlo 366, o sea
+        // 100 % menos media unidad. Con «100 % menos la pestaña» —que es lo que
+        // parece— quedaba una franja de 16 px del panel asomando por la
+        // izquierda, y no se veía leyendo el código: se vio en una captura.
+      >
+      <div
         // El alto máximo con desplazamiento interno no es un adorno: el panel
         // crece cada vez que se le añade algo, y al añadirle el campo de
         // coordenadas su fila de botones bajó hasta meterse debajo de los
@@ -240,21 +261,9 @@ export default function Component() {
         // un tope, el panel se desplaza por dentro en vez de invadir la
         // pantalla. Los 5rem de abajo son para la escala y la lectura del
         // cursor, que viven en esa esquina.
-        className={`absolute top-4 left-4 z-10 flex max-h-[calc(100vh-5rem)] w-[350px] flex-col overflow-y-auto overflow-x-hidden bg-white shadow-lg rounded-xl transition-transform duration-300 ease-in-out ${showSidebar ? "translate-x-0" : "-translate-x-[calc(100%+1rem)]"}`}
+        className="flex max-h-[calc(100vh-5rem)] w-[350px] flex-col overflow-y-auto overflow-x-hidden rounded-xl bg-white shadow-lg"
       >
         <div className="p-4 space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Títulos y Solicitudes</h2>
-            <Button
-              variant="ghost"
-              onClick={() => setShowSidebar(false)}
-              className="p-1 rounded-full"
-              aria-label="Ocultar panel"
-              title="Ocultar panel"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </Button>
-          </div>
           {/* El buscador de expedientes se mudó a la lupa del área de Minería.
               Estaba aquí arriba, fijo, aunque solo sirva para esa área: pregunta
               por TENURE_ID y CODIGO_EXPEDIENTE, que son campos de la ANM. */}
@@ -327,6 +336,23 @@ export default function Component() {
           )}
         </div>
       </div>
+
+        {/* La pestaña. Va fuera de la caja que se desplaza por dentro, para que
+            no se vaya con el contenido al recorrer la lista de capas. */}
+        <button
+          type="button"
+          onClick={() => setShowSidebar((visible) => !visible)}
+          aria-expanded={showSidebar}
+          aria-label={showSidebar ? "Ocultar panel" : "Mostrar panel"}
+          title={showSidebar ? "Ocultar panel" : "Mostrar panel"}
+          className="mt-3 flex h-14 w-6 items-center justify-center rounded-r-lg border-l border-slate-100 bg-white text-slate-400 shadow-lg transition-colors hover:bg-slate-50 hover:text-slate-700"
+        >
+          <ChevronLeft
+            className={`h-4 w-4 transition-transform duration-300 ${showSidebar ? "" : "rotate-180"}`}
+          />
+        </button>
+      </div>
+
       <div className="flex-grow relative">
         <MapComponent
           expedientCode={expedientCode}
@@ -339,17 +365,6 @@ export default function Component() {
           filters={filters}
           onLayerData={setLayerData}
         />
-        {!showSidebar && (
-          <Button
-            variant="outline"
-            onClick={() => setShowSidebar(true)}
-            className="absolute top-4 left-4 z-20 bg-white shadow-md rounded-full p-2"
-            aria-label="Mostrar panel"
-            title="Mostrar panel"
-          >
-            <ChevronRight className="h-6 w-6" />
-          </Button>
-        )}
       </div>
       {showTable && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
