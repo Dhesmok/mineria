@@ -1,3 +1,5 @@
+import { LAYER_PALETTE } from "./colors"
+
 /**
  * El color con que se empieza a dibujar. Vivió un tiempo en `drawOptions.js`,
  * que era el módulo de opciones de dibujo de Leaflet; se mudó aquí para que el
@@ -5,6 +7,26 @@
  * color, y aquí se quedó cuando aquel módulo se borró con el visor viejo.
  */
 export const DEFAULT_DRAWING_COLOR = "#f357a1"
+
+/**
+ * Los colores que ofrece la paleta del dibujo.
+ *
+ * Es la paleta de las capas con dos colores delante. Los dos primeros son de
+ * aquí y no de allí por un motivo concreto: lo que se dibuja tiene que verse
+ * **encima** de las capas, y la paleta de capas es deliberadamente apagada
+ * —tierras, verdes, azules grisáceos— para que los títulos no compitan con el
+ * mapa. Un polígono propio pintado con uno de esos colores se confunde con un
+ * título de la ANM, que es justo lo contrario de para qué se dibuja.
+ *
+ * Detrás va la paleta compartida entera, y eso también es a propósito: permite
+ * pintar un área propia exactamente del mismo color que una capa, que es lo que
+ * hace falta cuando se quiere comparar una contra otra.
+ *
+ * Catorce, que son dos filas de siete justas. Antes eran ocho colores escritos a
+ * mano en el componente del mapa, distintos de los del panel: dos juegos de
+ * color en la misma pantalla para lo mismo.
+ */
+export const DRAW_PALETTE = [DEFAULT_DRAWING_COLOR, "#111827", ...LAYER_PALETTE]
 
 /**
  * Cómo se pintan las figuras que dibuja el usuario, en MapLibre.

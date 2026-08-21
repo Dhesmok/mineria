@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useRef } from "react"
+
+import { useDismiss } from "../hooks/useDismiss"
 import { Check } from "lucide-react"
 
 import { LAYER_PALETTE, darken, readableInk } from "../utils/colors"
@@ -17,27 +19,9 @@ import { LAYER_PALETTE, darken, readableInk } from "../utils/colors"
  * pareja, así que lo que se ve en el botón es exactamente lo que va a aparecer
  * en el mapa.
  */
-export const ColorPopover = ({ color, onChange, onClose, anchorRect }) => {
+export const ColorPopover = ({ color, onChange, onClose, anchorRect, anchorEl }) => {
   const panelRef = useRef(null)
-
-  // Cerrar al pulsar fuera o con Escape. El clic se escucha en la fase de
-  // captura porque las filas de la lista detienen la propagación para no
-  // encender la capa al tocar sus controles.
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (!panelRef.current?.contains(event.target)) onClose()
-    }
-    const handleKey = (event) => {
-      if (event.key === "Escape") onClose()
-    }
-
-    document.addEventListener("mousedown", handleClickOutside, true)
-    document.addEventListener("keydown", handleKey)
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside, true)
-      document.removeEventListener("keydown", handleKey)
-    }
-  }, [onClose])
+  useDismiss(panelRef, anchorEl, onClose)
 
   // Se posiciona sobre la ventana y no dentro de la lista: la lista tiene
   // desplazamiento propio y `overflow` recorta cualquier cosa que asome, así que

@@ -23,7 +23,20 @@ import { GripHorizontal, X } from "lucide-react"
 /** Cuánto respira el panel contra el borde de la pantalla. */
 const MARGEN = 8
 
-export const FloatingPanel = ({ title, icon: Icon, children, onRequestClose }) => {
+/**
+ * @param collapsible  qué hace la equis. Con `true` —lo de siempre— reduce el
+ *   panel a un botón pequeño que lo devuelve al pulsarlo, que es lo que quiere
+ *   el de 3D: se abre solo al entrar en 3D y no hay otra forma de recuperarlo.
+ *   Con `false` lo cierra del todo, para los paneles que ya tienen su propio
+ *   botón en la columna y no necesitan dejar un segundo rastro en pantalla.
+ */
+export const FloatingPanel = ({
+  title,
+  icon: Icon,
+  children,
+  onRequestClose,
+  collapsible = true,
+}) => {
   const [collapsed, setCollapsed] = useState(false)
   const [offset, setOffset] = useState({ x: 0, y: 0 })
   const dragRef = useRef(null)
@@ -148,6 +161,11 @@ export const FloatingPanel = ({ title, icon: Icon, children, onRequestClose }) =
   return (
     <div
       ref={nodoRef}
+      // Con nombre propio, como las demás superficies flotantes del visor. No
+      // lleva `aria-modal`: no bloquea el mapa, se trabaja con él a la vez —que
+      // es justamente para lo que se puede arrastrar—.
+      role="dialog"
+      aria-label={title}
       style={posicion}
       className="w-[min(16rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
     >
@@ -160,11 +178,11 @@ export const FloatingPanel = ({ title, icon: Icon, children, onRequestClose }) =
         <button
           type="button"
           onClick={() => {
-            setCollapsed(true)
+            if (collapsible) setCollapsed(true)
             onRequestClose?.()
           }}
-          aria-label={`Guardar ${title}`}
-          title="Guardar en un botón"
+          aria-label={collapsible ? `Guardar ${title}` : `Cerrar ${title}`}
+          title={collapsible ? "Guardar en un botón" : "Cerrar"}
           className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
         >
           <X className="h-3.5 w-3.5" />

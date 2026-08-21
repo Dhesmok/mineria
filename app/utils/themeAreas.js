@@ -62,9 +62,14 @@ export const AREAS = [
     ],
   },
   {
+    // El identificador sigue siendo "catastro" a propósito: es el nombre con el
+    // que se guardan el orden y el filtro de estas capas en el navegador de cada
+    // usuario, y cambiarlo dejaría esas preferencias huérfanas. El nombre que se
+    // ve sí cambia — el área va a alojar drenajes, curvas de nivel y demás, que
+    // son cartografía y no catastro.
     id: "catastro",
     searchable: false,
-    name: "Catastro",
+    name: "Cartografía",
     source: "IGAC",
     color: "#22577A",
     icon: ["M3.4 3.4h17.2v17.2H3.4Z", "M3.4 10.2h17.2", "M10.2 20.6V10.2"],

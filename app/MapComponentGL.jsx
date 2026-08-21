@@ -80,22 +80,6 @@ import {
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
 
 
-/**
- * Los colores con que se puede dibujar. El primero es el de partida.
- *
- * Vive aquí y no en `DrawToolbar` porque quien decide con qué se dibuja es el
- * hook de dibujo; la barra solo los enseña.
- */
-const DRAW_COLORS = [
-  "#f357a1",
-  "#ef4444",
-  "#f59e0b",
-  "#10b981",
-  "#3b82f6",
-  "#8b5cf6",
-  "#111827",
-  "#ffffff",
-]
 
 
 export default function MapComponentGL({
@@ -125,6 +109,9 @@ export default function MapComponentGL({
   // un estado por menú: abrir una tiene que cerrar la anterior, y con estados
   // separados se quedaban dos abiertas, una encima de otra.
   const [menuAbierto, setMenuAbierto] = useState(null)
+  // El dibujo no es una ventana anclada como las demás: es un panel que se
+  // arrastra y se queda puesto mientras se trabaja, así que su estado es aparte.
+  const [dibujoAbierto, setDibujoAbierto] = useState(false)
   const [exportandoImagen, setExportandoImagen] = useState(false)
   // La consulta de terreno se declara aquí arriba y no junto a su hook: quien
   // primero la necesita es `useMapLayersGL`, para callar la ficha del polígono
@@ -254,8 +241,10 @@ export default function MapComponentGL({
    * respondiera.
    */
   const abrirMenu = useCallback((id, event) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    setMenuAbierto((actual) => (actual?.id === id ? null : { id, rect }))
+    const el = event.currentTarget
+    setMenuAbierto((actual) =>
+      actual?.id === id ? null : { id, el, rect: el.getBoundingClientRect() },
+    )
   }, [])
 
   const cerrarMenu = useCallback(() => setMenuAbierto(null), [])
@@ -466,26 +455,22 @@ export default function MapComponentGL({
         // panel, tapando justo la lupa y el filtro. Mientras la hoja está
         // abierta, la columna se aparta; en escritorio no hay conflicto porque
         // el panel vive al otro lado.
-        className={`absolute bottom-16 right-2 z-10 flex flex-col items-end space-y-2 md:bottom-10 md:right-4 ${
+        // Dos columnas, no una: a la izquierda los paneles que se arrastran, a
+        // la derecha los botones. Antes los paneles iban dentro de la columna,
+        // encima de los botones, y con el de 3D abierto la columna crecía hacia
+        // arriba y empujaba todo. Al costado quedan al lado de lo que los
+        // gobierna y sin desplazar nada.
+        //
+        // Alineado abajo (`items-end`) para que el panel salga a la altura del
+        // último botón y no flotando a media pantalla.
+        className={`absolute bottom-16 right-2 z-10 items-end gap-2 md:bottom-10 md:right-4 ${
           panelOpen ? "hidden md:flex" : "flex"
         }`}
       >
-        {/* Ajustes de cómo se ve el mapa. Van encima de los botones de acción,
-            en la misma columna, y cada uno solo aparece cuando hay algo que
-            ajustar: un control que no hace nada visible confunde más que ayuda. */}
-        {terrainMode && (
-          <TerrainRasterLegend mode={terrainMode} unavailable={terrainRasterUnavailable} />
-        )}
-
-        {queryingTerrain && (
-          <TerrainQuery result={terrainResult} onClose={toggleTerrainQuery} />
-        )}
-
-        {(is3D || isCompassActive) && (
-          <div className="space-y-2">
-            {is3D && (
-              <FloatingPanel title="Vista 3D" icon={Box}>
-                <div className="space-y-1.5">
+        <div className="flex flex-col items-end gap-2">
+          {is3D && (
+            <FloatingPanel title="Vista 3D" icon={Box}>
+              <div className="space-y-1.5">
                 <SliderRow
                   id="exageracion"
                   label="Exageración"
@@ -497,8 +482,8 @@ export default function MapComponentGL({
                   display={`${exaggeration.toFixed(1)}×`}
                   onChange={changeExaggeration}
                 />
-                {/* Girar e inclinar sin pelearse con la brújula de 29 px que trae
-                    MapLibre, y sin tener que saber el atajo de Ctrl. */}
+                {/* Girar e inclinar sin pelearse con la brújula de 29 px que
+                    trae MapLibre, y sin tener que saber el atajo de Ctrl. */}
                 <SliderRow
                   id="inclinacion"
                   label="Inclinación"
@@ -529,49 +514,84 @@ export default function MapComponentGL({
                     title={isSpinning ? "Detener el giro" : "Girar el mapa solo, en bucle"}
                     className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                       isSpinning
-                        ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-700"
+                        ? "border-slate-900 bg-slate-900 text-white"
                         : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                     }`}
                   >
                     {isSpinning ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                     {isSpinning ? "Detener" : "Girar solo"}
                   </button>
-
                   <button
                     type="button"
                     onClick={resetNorth}
+                    title="Volver a dejar el norte hacia arriba"
                     className="flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-blue-600 hover:text-blue-800"
                   >
                     <Compass className="h-3 w-3" />
                     Norte arriba
                   </button>
-                  </div>
                 </div>
-              </FloatingPanel>
-            )}
-
-            {/* 250 px es mucho en un celular y poco en un monitor grande. */}
-            {isCompassActive && (
-              <div className="rounded-md bg-white px-3 py-2 shadow-md">
-                <SliderRow
-                  id="tamano-brujula"
-                  label="Brújula"
-                  min={COMPASS_SIZE_MIN}
-                  max={COMPASS_SIZE_MAX}
-                  step="10"
-                  value={compassSize}
-                  display={`${compassSize} px`}
-                  onChange={(value) => changeCompassSize(Math.round(value))}
-                />
               </div>
-            )}
-          </div>
+            </FloatingPanel>
+          )}
+
+          {/* Las herramientas de dibujo. Panel flotante y no ventana anclada:
+              se usan mientras se mira el mapa, y una ventana que se cierra al
+              primer clic fuera obligaba a reabrirla para cambiar de herramienta
+              o de color. Su equis lo cierra del todo —no lo guarda en un botón
+              como el de 3D— porque para volver ya está el botón «Dibujo». */}
+          {dibujoAbierto && (
+            <FloatingPanel
+              title="Dibujo y medidas"
+              icon={PencilRuler}
+              collapsible={false}
+              onRequestClose={() => setDibujoAbierto(false)}
+            >
+              <DrawToolbar
+                mode={mode}
+                startMode={startMode}
+                deleteSelected={deleteSelected}
+                drawingColor={drawingColor}
+                onColorChange={handleColorChange}
+                hasSelection={selectedIds.length > 0}
+                summary={drawSummary}
+              />
+            </FloatingPanel>
+          )}
+
+          {/* 250 px es mucho en un celular y poco en un monitor grande. */}
+          {isCompassActive && (
+            <div className="rounded-md bg-white px-3 py-2 shadow-md">
+              <SliderRow
+                id="tamano-brujula"
+                label="Brújula"
+                min={COMPASS_SIZE_MIN}
+                max={COMPASS_SIZE_MAX}
+                step="10"
+                value={compassSize}
+                display={`${compassSize} px`}
+                onChange={(value) => changeCompassSize(Math.round(value))}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col items-end space-y-2">
+        {/* Ajustes de cómo se ve el mapa. Van encima de los botones de acción,
+            en la misma columna, y cada uno solo aparece cuando hay algo que
+            ajustar: un control que no hace nada visible confunde más que ayuda. */}
+        {terrainMode && (
+          <TerrainRasterLegend mode={terrainMode} unavailable={terrainRasterUnavailable} />
+        )}
+
+        {queryingTerrain && (
+          <TerrainQuery result={terrainResult} onClose={toggleTerrainQuery} />
         )}
 
         {/* La función diferenciadora: dibujar un polígono y salir con los
-            archivos de las capas encendidas dentro de esa área. Va en esta
-            columna de acciones del mapa, no junto a la barra de dibujo, para no
-            solaparse con ella; solo aparece cuando hay un área dibujada. */}
+            archivos de las capas encendidas dentro de esa área. Va en la columna
+            de acciones del mapa y no en el panel de dibujo, para que se vea sin
+            abrirlo; solo aparece cuando hay un área dibujada. */}
         {hasArea && (
           <MapButton
             onClick={downloadArea}
@@ -590,8 +610,8 @@ export default function MapComponentGL({
             esquina distinta según el tamaño de la pantalla; ahora salen de aquí,
             que es donde el usuario ya busca lo demás. */}
         <MapButton
-          onClick={(event) => abrirMenu("dibujo", event)}
-          active={menuAbierto?.id === "dibujo" || mode.startsWith("draw_")}
+          onClick={() => setDibujoAbierto((abierto) => !abierto)}
+          active={dibujoAbierto || mode.startsWith("draw_")}
           icon={PencilRuler}
           badge={resumenDibujo}
           title="Dibujar y medir polígonos, líneas y puntos"
@@ -684,6 +704,7 @@ export default function MapComponentGL({
         >
           Fabio A. Espinosa
         </MapButton>
+        </div>
       </div>
 
       {/* La caja de escribir coordenadas acompaña a la herramienta de punto: es
@@ -717,22 +738,8 @@ export default function MapComponentGL({
           current={basemap}
           showLabels={showLabels}
           anchorRect={menuAbierto.rect}
+          anchorEl={menuAbierto.el}
           onChoose={chooseBasemap}
-          onClose={cerrarMenu}
-        />
-      )}
-
-      {menuAbierto?.id === "dibujo" && (
-        <DrawToolbar
-          mode={mode}
-          startMode={startMode}
-          deleteSelected={deleteSelected}
-          drawingColor={drawingColor}
-          onColorChange={handleColorChange}
-          hasSelection={selectedIds.length > 0}
-          summary={drawSummary}
-          colors={DRAW_COLORS}
-          anchorRect={menuAbierto.rect}
           onClose={cerrarMenu}
         />
       )}
@@ -741,7 +748,12 @@ export default function MapComponentGL({
           Pendiente y orientación se excluyen entre sí —las pinta la misma capa—,
           así que `chooseTerrainMode` con el modo que ya está puesto lo apaga. */}
       {menuAbierto?.id === "terreno" && (
-        <MapMenuPanel label="Terreno" anchorRect={menuAbierto.rect} onClose={cerrarMenu}>
+        <MapMenuPanel
+          label="Terreno"
+          anchorRect={menuAbierto.rect}
+          anchorEl={menuAbierto.el}
+          onClose={cerrarMenu}
+        >
           <MapMenuItem
             icon={Mountain}
             name="Relieve"

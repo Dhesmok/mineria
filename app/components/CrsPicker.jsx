@@ -1,7 +1,9 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import { Check, X } from "lucide-react"
+import { useRef } from "react"
+import { Check } from "lucide-react"
+
+import { useDismiss } from "../hooks/useDismiss"
 
 import { CRS_LIST } from "../utils/crs"
 import { anchorToViewport, popoverWidth } from "../utils/popoverPosition"
@@ -16,23 +18,9 @@ import { anchorToViewport, popoverWidth } from "../utils/popoverPosition"
  * Aquí sí cabe la explicación de cada sistema, que es donde hace falta: en el
  * momento de elegir, no permanentemente en el panel.
  */
-export const CrsPicker = ({ current, onChoose, onClose, anchorRect }) => {
+export const CrsPicker = ({ current, onChoose, onClose, anchorRect, anchorEl }) => {
   const panelRef = useRef(null)
-
-  useEffect(() => {
-    const fuera = (event) => {
-      if (!panelRef.current?.contains(event.target)) onClose()
-    }
-    const escape = (event) => {
-      if (event.key === "Escape") onClose()
-    }
-    document.addEventListener("mousedown", fuera, true)
-    document.addEventListener("keydown", escape)
-    return () => {
-      document.removeEventListener("mousedown", fuera, true)
-      document.removeEventListener("keydown", escape)
-    }
-  }, [onClose])
+  useDismiss(panelRef, anchorEl, onClose)
 
   const { top, left } = anchorToViewport(
     anchorRect,
@@ -48,19 +36,10 @@ export const CrsPicker = ({ current, onChoose, onClose, anchorRect }) => {
       style={{ top, left }}
       className="fixed z-50 max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
     >
-      <div className="sticky top-0 flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5">
-        <span className="text-[13px] font-semibold text-slate-900">Sistema de coordenadas</span>
-        <span className="flex-1" />
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Cerrar"
-          className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
+      {/* Sin cabecera ni equis. El título repetía palabra por palabra el rótulo
+          del botón que acaba de pulsarse, justo encima, y la equis hacía lo que
+          ya hacen otras tres cosas: volver a pulsar el botón, elegir un sistema,
+          o pulsar en cualquier otro sitio. Dos renglones para no decir nada. */}
       <div className="p-1.5">
         {CRS_LIST.map((crs) => {
           const elegido = crs.id === current

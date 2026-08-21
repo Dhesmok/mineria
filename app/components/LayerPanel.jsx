@@ -57,7 +57,7 @@ const ColorSwatch = ({ layer, state, disabled, onOpen }) => (
   <button
     type="button"
     disabled={disabled}
-    onClick={(event) => onOpen(layer.key, event.currentTarget.getBoundingClientRect())}
+    onClick={(event) => onOpen(layer.key, event.currentTarget)}
     title={disabled ? undefined : `Cambiar el color de ${layer.label}`}
     aria-label={`Cambiar el color de ${layer.label}`}
     className="-mx-1 flex h-6 w-6 shrink-0 items-center justify-center rounded transition-transform disabled:cursor-default enabled:hover:scale-125"
@@ -197,7 +197,7 @@ const HeaderButton = ({ icon: Icon, label, color, active, disabled, onClick }) =
     aria-label={label}
     onClick={(event) => {
       event.stopPropagation()
-      onClick(event.currentTarget.getBoundingClientRect())
+      onClick(event.currentTarget)
     }}
     className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
       active ? "border-transparent text-white" : "border-slate-200 bg-white"
@@ -237,7 +237,13 @@ export const LayerPanel = ({
   const activeKeys = order.filter((key) => layers[key]?.on)
   const activeCount = activeKeys.length
 
-  const openColor = useCallback((key, rect) => setColorTarget({ key, rect }), [])
+  // Se guarda el botón, no solo su recuadro: `useDismiss` lo necesita para no
+  // tomar por «fuera» el clic que llega al propio botón, y sin eso volver a
+  // pulsarlo no cerraba la ventana. El recuadro se saca de él en el momento.
+  const openColor = useCallback(
+    (key, el) => setColorTarget((actual) => (actual?.key === key ? null : { key, el })),
+    [],
+  )
 
   // ─────────────────────────────── arrastrar ───────────────────────────────
   // Con eventos de puntero y no con la API de arrastre de HTML: aquella no
@@ -396,7 +402,7 @@ export const LayerPanel = ({
                     color={area.color}
                     active={filtrada}
                     disabled={false}
-                    onClick={(rect) => onOpenFilters(area.id, rect)}
+                    onClick={(el) => onOpenFilters(area.id, el)}
                   />
                   <HeaderButton
                     icon={Search}
@@ -408,7 +414,7 @@ export const LayerPanel = ({
                     color={area.color}
                     active={false}
                     disabled={!area.searchable}
-                    onClick={(rect) => onOpenSearch(area.id, rect)}
+                    onClick={(el) => onOpenSearch(area.id, el)}
                   />
                 </div>
 
@@ -425,7 +431,8 @@ export const LayerPanel = ({
       {colorTarget && (
         <ColorPopover
           color={layers[colorTarget.key].fillColor}
-          anchorRect={colorTarget.rect}
+          anchorRect={colorTarget.el.getBoundingClientRect()}
+          anchorEl={colorTarget.el}
           onChange={(color) => onColor(colorTarget.key, color, darken(color, 0.35))}
           onClose={() => setColorTarget(null)}
         />
