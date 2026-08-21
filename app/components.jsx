@@ -4,9 +4,8 @@ import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "rea
 import dynamic from "next/dynamic"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
-import { ChevronLeft, ChevronDown, Download, RefreshCw, ChevronRight, Globe2 } from "lucide-react"
+import { ChevronLeft, ChevronDown, Download, RefreshCw, Globe2 } from "lucide-react"
 import ExportComponent from "./ExportComponent"
 import { CRS_LIST, axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
 import { areaById, DEFAULT_ORDER, initialLayerState } from "./utils/themeAreas"
@@ -43,7 +42,8 @@ export default function Component() {
   const [coordinatesAvailable, setCoordinatesAvailable] = useState(false)
   const [geoJsonData, setGeoJsonData] = useState(null)
   const mapRef = useRef(null)
-  const [mapInitialized, setMapInitialized] = useState(false)
+  // Solo se guarda el «ya está listo»; el mapa en sí vive en mapRef.
+  const [, setMapInitialized] = useState(false)
   // Estado de las capas: encendida, opacidad y colores, todo por clave. Antes
   // eran ocho estados sueltos —uno por interruptor y otro por deslizador—, que
   // con trece capas y su color serían treinta y nueve.

@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react"
 import { Check, X } from "lucide-react"
 
-import { CRS_LIST, crsById } from "../utils/crs"
+import { CRS_LIST } from "../utils/crs"
 
 /**
  * Elegir el sistema de coordenadas.

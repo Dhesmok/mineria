@@ -492,11 +492,16 @@ export const useMapLayersGL = (
   // solos. La misma trampa que documentaba el visor Leaflet con sus layerGroups.
   useEffect(() => {
     if (!mapInstance) return
+    // Se copia el objeto de marcadores a una variable local: el ref puede
+    // apuntar a otro sitio para cuando corra esta limpieza, y entonces se
+    // quitarían los marcadores equivocados —o ninguno—.
+    const marcadores = labelMarkersRef.current
+    const aborter = abortRef
     return () => {
-      abortRef.current?.abort()
-      Object.keys(labelMarkersRef.current).forEach((key) => clearLabels(key))
+      aborter.current?.abort()
+      Object.values(marcadores).forEach((lista) => lista?.forEach((m) => m.remove()))
     }
-  }, [mapInstance, clearLabels])
+  }, [mapInstance])
 
   return {
     // Una capa encendida por debajo del zoom mínimo no dibuja nada: hay que

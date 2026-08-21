@@ -1,0 +1,40 @@
+{
+  "root": true,
+  "extends": "next/core-web-vitals",
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "node": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-undef": "error",
+    "no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "react-hooks/exhaustive-deps": "warn"
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/*.test.js",
+        "**/*.test.jsx",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "jest.setup.js",
+        "jest.config.js"
+      ],
+      "env": {
+        "jest": true,
+        "node": true
+      }
+    }
+  ]
+}
