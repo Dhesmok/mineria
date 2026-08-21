@@ -4,7 +4,8 @@ import MapboxDraw from "@mapbox/mapbox-gl-draw"
 
 import { createDrawStyles, DEFAULT_DRAWING_COLOR } from "../../utils/drawStyles"
 import { areaInHectares, areaInSquareMeters, lengthInMeters } from "../../utils/measure"
-import { formatArea, formatDegrees, formatDistance, getLabelCoordinates } from "../../utils/mapUtils"
+import { formatArea, formatDistance, getLabelCoordinates } from "../../utils/mapUtils"
+import { formatCoordinate, fromGeographic, SOURCE_CRS } from "../../utils/crs"
 
 /**
  * Dibujo y medición sobre MapLibre.
@@ -65,7 +66,7 @@ const hasCoordinates = (geometry) => {
 }
 
 /** Qué dice la etiqueta y dónde se ancla, según el tipo de figura. */
-const measurementOf = (feature) => {
+const measurementOf = (feature, crsId) => {
   const geometry = feature?.geometry
 
   if (geometry?.type === "Polygon") {
@@ -89,18 +90,26 @@ const measurementOf = (feature) => {
   if (geometry?.type === "Point") {
     // El evento draw.render se dispara también mientras se coloca el punto, con
     // el punto siguiendo al cursor antes del clic. En ese instante las
-    // coordenadas pueden no estar completas todavía, y formatDegrees(undefined)
-    // reventaba con "Cannot read properties of undefined". Es un fallo por
+    // coordenadas pueden no estar completas todavía, y darle undefined al
+    // formateador reventaba con "Cannot read properties of undefined". Es un fallo por
     // tiempos: aparecía o no según cuándo cayera el render.
     const [lon, lat] = geometry.coordinates ?? []
     if (typeof lon !== "number" || typeof lat !== "number") return null
-    return { text: `${formatDegrees(lat)}, ${formatDegrees(lon)}`, point: geometry.coordinates }
+
+    // En el sistema elegido en el panel, no siempre en grados: marcar un punto
+    // para leer su coordenada y que salga en un sistema distinto del que se está
+    // usando obliga a convertirla a mano, que es justo lo que se quería evitar.
+    const [x, y] = fromGeographic([lon, lat], crsId)
+    return {
+      text: `${formatCoordinate(y, crsId)}, ${formatCoordinate(x, crsId)}`,
+      point: geometry.coordinates,
+    }
   }
 
   return null
 }
 
-export const useDrawControlGL = (mapRef, mapInstance) => {
+export const useDrawControlGL = (mapRef, mapInstance, crsId = SOURCE_CRS) => {
   const [drawingColor, setDrawingColor] = useState(DEFAULT_DRAWING_COLOR)
   const [mode, setMode] = useState("simple_select")
   // Ids de lo que está seleccionado. La paleta de colores se muestra con esto y
@@ -120,6 +129,9 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
   // el valor del estado se quedarían viendo el del primer render.
   const colorRef = useRef(drawingColor)
   colorRef.current = drawingColor
+  // El sistema de coordenadas se lee dentro de manejadores creados una sola vez.
+  const crsRef = useRef(crsId)
+  crsRef.current = crsId
 
   /**
    * Elegir color hace dos cosas: fija el color de lo que se dibuje a partir de
@@ -146,7 +158,7 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
     const alive = new Set()
 
     features.forEach((feature) => {
-      const measurement = measurementOf(feature)
+      const measurement = measurementOf(feature, crsRef.current)
       if (!measurement) return
 
       alive.add(feature.id)
@@ -331,6 +343,10 @@ export const useDrawControlGL = (mapRef, mapInstance) => {
    * mientras el usuario intentaba, por ejemplo, hacer clic en un título para ver
    * su ficha.
    */
+  useEffect(() => {
+    syncMeasurements()
+  }, [crsId, syncMeasurements])
+
   const startMode = useCallback((nextMode) => {
     const draw = drawRef.current
     if (!draw) return

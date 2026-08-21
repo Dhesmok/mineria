@@ -37,6 +37,12 @@ const SKY = {
 /** Hasta dónde deja inclinarse la cámara. Es el maxPitch con que se crea el mapa. */
 export const PITCH_MAX = 85
 
+/**
+ * Velocidad del giro continuo, en grados por segundo. Una vuelta completa cada
+ * 36 segundos: lo bastante lento para leer el terreno mientras pasa.
+ */
+const SPIN_DEGREES_PER_SECOND = 10
+
 export const useTerrainGL = (mapRef, mapInstance) => {
   const [is3D, setIs3D] = useState(false)
   const [showHillshade, setShowHillshade] = useState(false)
@@ -46,10 +52,15 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   // llegado ahí con ellos o arrastrando con Ctrl.
   const [bearing, setBearing] = useState(0)
   const [pitch, setPitch] = useState(0)
+  // ¿Está girando solo? Es un play/stop, no un ajuste.
+  const [isSpinning, setIsSpinning] = useState(false)
 
   // La exageración se lee dentro de callbacks creados una sola vez.
   const exaggerationRef = useRef(exaggeration)
   exaggerationRef.current = exaggeration
+  // Y el giro continuo, dentro del manejador de `moveend`.
+  const spinningRef = useRef(isSpinning)
+  spinningRef.current = isSpinning
 
   const setHillshadeVisible = useCallback(
     (visible) => {
@@ -145,6 +156,64 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     mapRef.current?.easeTo({ bearing: 0, duration: 500 })
   }, [mapRef])
 
+  /**
+   * Giro continuo, para mirar el relieve sin tener que arrastrar.
+   *
+   * Va con `requestAnimationFrame` y no con un temporizador: el navegador lo
+   * sincroniza con el repintado de la pantalla, así que el giro sale parejo en
+   * vez de a tirones, y se detiene solo cuando la pestaña pasa a segundo plano
+   * en lugar de acumular fotogramas que nadie ve.
+   *
+   * El paso se mide en grados por segundo y no por fotograma: en una pantalla
+   * de 120 Hz, un paso por fotograma giraría al doble de velocidad que en una
+   * de 60.
+   */
+  const spin = useCallback(() => {
+    setIsSpinning((current) => !current)
+  }, [])
+
+  useEffect(() => {
+    if (!isSpinning || !mapInstance) return
+
+    let frame = 0
+    let previous = performance.now()
+    let lastPublished = 0
+
+    const step = (now) => {
+      const seconds = (now - previous) / 1000
+      previous = now
+      // jumpTo y no easeTo: una animación por fotograma se pisaría con la
+      // siguiente y el giro saldría a saltos.
+      const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * seconds
+      mapInstance.jumpTo({ bearing })
+
+      // El deslizador de giro sigue al mapa, pero no a 60 veces por segundo:
+      // cada jumpTo dispara un `moveend`, y publicar eso al estado repintaría el
+      // visor entero en cada fotograma. Cuatro veces por segundo basta para que
+      // el control se vea vivo y no cuesta nada.
+      if (now - lastPublished > 250) {
+        lastPublished = now
+        setBearing(mapInstance.getBearing())
+      }
+
+      frame = requestAnimationFrame(step)
+    }
+
+    frame = requestAnimationFrame(step)
+
+    return () => {
+      cancelAnimationFrame(frame)
+      // Al parar, el estado se pone al día con dónde quedó de verdad la cámara.
+      setBearing(mapInstance.getBearing())
+    }
+  }, [isSpinning, mapInstance])
+
+  // Al salir del 3D se para el giro: seguir dando vueltas sobre el mapa plano
+  // marea y no enseña nada.
+  useEffect(() => {
+    if (!is3D) setIsSpinning(false)
+  }, [is3D])
+
   // El mapa también se gira e inclina arrastrando con Ctrl, o con dos dedos en
   // el celular. Sin escuchar esos eventos, los deslizadores se quedarían
   // marcando el último valor que se les puso y mentirían sobre dónde está la
@@ -153,6 +222,10 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     if (!mapInstance) return
 
     const syncCamera = () => {
+      // Mientras gira solo, el propio bucle publica el rumbo a su ritmo. Sin
+      // esta salida, cada uno de sus `jumpTo` entraría también por aquí y el
+      // visor se repintaría en cada fotograma.
+      if (spinningRef.current) return
       setBearing(mapInstance.getBearing())
       setPitch(mapInstance.getPitch())
     }
@@ -226,6 +299,8 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     bearing,
     changeBearing,
     resetNorth,
+    isSpinning,
+    spin,
     pitch,
     changePitch,
   }

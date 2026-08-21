@@ -17,7 +17,8 @@ import { useAreaDownloadGL } from "./hooks/map/useAreaDownloadGL"
 import { useGeolocationGL } from "./hooks/map/useGeolocationGL"
 import { useExpedientSearchGL } from "./hooks/map/useExpedientSearchGL"
 import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } from "./utils/mapStyles"
-import { formatDegrees } from "./utils/mapUtils"
+import { axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
+import { parseCoordinateInput } from "./utils/coordinateInput"
 import { COMPASS_SIZE_MAX, COMPASS_SIZE_MIN } from "./hooks/map/useGeolocationGL"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,7 +31,9 @@ import {
   MapPin,
   Mountain,
   Pentagon,
+  Play,
   Satellite,
+  Square,
   Spline,
   Trash2,
   User,
@@ -71,8 +74,12 @@ setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
  *
  * Va en su propio componente porque el ratón dispara eventos decenas de veces
  * por segundo: así se vuelve a pintar solo este recuadro y no el visor entero.
+ *
+ * Se expresa en el sistema de coordenadas que esté elegido en el panel, no
+ * siempre en grados: si alguien está trabajando en Origen Nacional, leer la
+ * posición del ratón en grados le obliga a convertir de cabeza cada vez.
  */
-const CursorCoordinates = ({ map }) => {
+const CursorCoordinates = ({ map, crsId }) => {
   const [position, setPosition] = useState(null)
 
   useEffect(() => {
@@ -96,13 +103,115 @@ const CursorCoordinates = ({ map }) => {
   // simplemente no aparece, en vez de quedarse mostrando ceros.
   if (!position) return null
 
+  const ejes = axisLabels(crsId)
+  const [x, y] = fromGeographic([position.lng, position.lat], crsId)
+
   return (
-    // Abajo a la izquierda, justo encima de la barra de escala: las dos son
-    // información sobre dónde estás mirando, y así la esquina derecha queda
-    // libre para los botones. Antes estaba a la derecha y ahí ahora hay
-    // controles que la taparían.
-    <div className="absolute bottom-10 left-4 z-10 rounded bg-white/90 px-3 py-1 font-mono text-xs text-gray-700 shadow-md">
-      Lat {formatDegrees(position.lat)} · Lon {formatDegrees(position.lng)}
+    // Centrada abajo. Estuvo en las dos esquinas inferiores y las dos acabaron
+    // ocupadas: la derecha por los botones y la izquierda por la escala. En el
+    // centro no compite con nada y es donde la vista ya está mirando.
+    <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-slate-200 bg-white/95 px-3 py-1.5 font-mono text-xs tabular-nums text-slate-700 shadow-sm">
+      {ejes.first} {formatCoordinate(y, crsId)} · {ejes.second} {formatCoordinate(x, crsId)}
+    </div>
+  )
+}
+
+/**
+ * Escribir una coordenada para marcarla.
+ *
+ * Vivía en el panel lateral, siempre a la vista, y ahí estorbaba: es algo que se
+ * usa de vez en cuando y ocupaba sitio permanente. Ahora sale aquí abajo, en el
+ * centro, y solo mientras está activa la herramienta de punto. Así ese botón
+ * sirve para las dos formas de marcar un punto —con el ratón sobre el mapa o
+ * escribiendo la coordenada—, que son la misma tarea.
+ *
+ * Dos casillas y no una sola: separar la ordenada de la abscisa evita la
+ * ambigüedad de la coma que obligaba a adivinar dónde partía el par. Cada
+ * casilla se sigue leyendo con el mismo intérprete, así que dentro de una se
+ * puede escribir con coma decimal o en grados, minutos y segundos.
+ */
+const CoordinateEntry = ({ crsId, onGo }) => {
+  const [first, setFirst] = useState("")
+  const [second, setSecond] = useState("")
+  const [message, setMessage] = useState(null)
+
+  const ejes = axisLabels(crsId)
+  const crs = crsById(crsId)
+  const ejemplo = crs.projected ? ["2247195", "4713441"] : ["6,2308", "-75,5906"]
+
+  const go = () => {
+    const resultado = parseCoordinateInput(`${first} ${second}`, crsId)
+
+    if (resultado.error) {
+      setMessage({ tone: "error", text: resultado.error })
+      return
+    }
+
+    onGo(resultado.lon, resultado.lat)
+    // Fuera de Colombia no es un error —puede ser a propósito—, pero casi
+    // siempre significa haber intercambiado los dos números.
+    setMessage(
+      resultado.outsideColombia
+        ? { tone: "warning", text: "Ese punto queda fuera de Colombia. Revisa el orden y el sistema." }
+        : null,
+    )
+    setFirst("")
+    setSecond("")
+  }
+
+  const alPulsarEnter = (event) => {
+    if (event.key === "Enter") go()
+  }
+
+  return (
+    <div className="absolute bottom-16 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur">
+      <div className="flex items-end gap-2">
+        {[
+          { label: ejes.first, value: first, set: setFirst, hint: ejemplo[0] },
+          { label: ejes.second, value: second, set: setSecond, hint: ejemplo[1] },
+        ].map((campo) => (
+          <label key={campo.label} className="flex flex-col gap-1">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+              {campo.label}
+            </span>
+            <input
+              value={campo.value}
+              onChange={(event) => {
+                campo.set(event.target.value)
+                setMessage(null)
+              }}
+              onKeyDown={alPulsarEnter}
+              placeholder={campo.hint}
+              aria-label={campo.label}
+              autoComplete="off"
+              className="h-8 w-28 rounded-md border border-slate-200 px-2 font-mono text-[13px] text-slate-900 outline-none focus:border-slate-400"
+            />
+          </label>
+        ))}
+
+        <button
+          type="button"
+          onClick={go}
+          className="h-8 rounded-md bg-slate-900 px-4 text-[13px] font-medium text-white transition-colors hover:bg-slate-700"
+        >
+          Ir
+        </button>
+      </div>
+
+      <p className="mt-1.5 text-[10px] leading-tight text-slate-500">
+        {crs.label}
+        {!crs.projected && " · también entiende grados, minutos y segundos"}
+      </p>
+
+      {message && (
+        <p
+          className={`mt-1 text-[11px] leading-tight ${
+            message.tone === "error" ? "text-red-500" : "text-amber-600"
+          }`}
+        >
+          {message.text}
+        </p>
+      )}
     </div>
   )
 }
@@ -209,6 +318,29 @@ const DrawToolbar = ({
 }
 
 /**
+ * Botón de la columna de controles del mapa.
+ *
+ * Existe porque esos botones venían del componente genérico de la aplicación y
+ * el panel de capas se rediseñó aparte: convivían dos tipografías, dos tamaños
+ * y dos grises en la misma pantalla. Este reproduce el lenguaje del panel —13
+ * píxeles, colores slate, esquinas de 8— para que el visor entero se lea como
+ * una sola cosa.
+ */
+const MapButton = ({ active, className = "", children, ...props }) => (
+  <button
+    type="button"
+    {...props}
+    className={`flex h-9 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium shadow-sm transition-colors ${
+      active
+        ? "border-slate-300 bg-slate-900 text-white hover:bg-slate-700"
+        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+    } ${className}`}
+  >
+    {children}
+  </button>
+)
+
+/**
  * Una fila de ajuste: nombre, barra y valor, todo en un renglón.
  *
  * Va en horizontal y no con la etiqueta encima porque estos ajustes viven en un
@@ -276,6 +408,9 @@ export default function MapComponentGL({
   onCoordinatesUpdate,
   layerState,
   layerOrder,
+  coordinateSystem,
+  filters,
+  onLoadedProperties,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
@@ -292,14 +427,21 @@ export default function MapComponentGL({
   // El panel entrega el estado de las capas ya agrupado por clave: encendida,
   // opacidad y colores. Antes llegaban ocho props sueltas que había que volver a
   // juntar aquí con dos useMemo.
-  const { showZoomInHint, truncatedLayers } = useMapLayersGL(
+  const { showZoomInHint, truncatedLayers, loadedProperties } = useMapLayersGL(
     mapRef,
     mapInstance,
     layerState,
     layerOrder,
+    filters,
     setError,
     setShowErrorBanner,
   )
+
+  // Los atributos de lo cargado suben al panel, que es donde vive el filtro: sus
+  // opciones se arman con lo que hay en pantalla.
+  useEffect(() => {
+    onLoadedProperties?.(loadedProperties)
+  }, [loadedProperties, onLoadedProperties])
 
   const {
     drawingColor,
@@ -312,7 +454,7 @@ export default function MapComponentGL({
     clearDrawings,
     getDrawnFeatures,
     hasArea,
-  } = useDrawControlGL(mapRef, mapInstance)
+  } = useDrawControlGL(mapRef, mapInstance, coordinateSystem)
 
   // La descarga por área solo necesita saber qué está encendido, no con qué
   // color ni en qué orden. Se le entrega esa vista reducida para no obligar a
@@ -353,6 +495,8 @@ export default function MapComponentGL({
     bearing,
     changeBearing,
     resetNorth,
+    isSpinning,
+    spin,
     pitch,
     changePitch,
     elevationAt,
@@ -540,14 +684,33 @@ export default function MapComponentGL({
                   display={`${Math.round((bearing + 360) % 360)}°`}
                   onChange={changeBearing}
                 />
-                <button
-                  type="button"
-                  onClick={resetNorth}
-                  className="flex items-center gap-1 whitespace-nowrap pt-0.5 text-[11px] font-medium text-blue-600 hover:text-blue-800"
-                >
-                  <Compass className="h-3 w-3" />
-                  Volver a poner el norte arriba
-                </button>
+                <div className="flex items-center gap-2 pt-0.5">
+                  {/* Play y stop en el mismo sitio: es un único estado con dos
+                      caras, no dos acciones distintas. */}
+                  <button
+                    type="button"
+                    onClick={spin}
+                    aria-pressed={isSpinning}
+                    title={isSpinning ? "Detener el giro" : "Girar el mapa solo, en bucle"}
+                    className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+                      isSpinning
+                        ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-700"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {isSpinning ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                    {isSpinning ? "Detener" : "Girar solo"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={resetNorth}
+                    className="flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-blue-600 hover:text-blue-800"
+                  >
+                    <Compass className="h-3 w-3" />
+                    Norte arriba
+                  </button>
+                </div>
                 {/* Decirlo evita que alguien lea el relieve como una medida. */}
                 <p className="text-[10px] leading-tight text-gray-500">
                   La exageración solo afecta a cómo se ve: no cambia alturas ni áreas.
@@ -578,100 +741,80 @@ export default function MapComponentGL({
             columna de acciones del mapa, no junto a la barra de dibujo, para no
             solaparse con ella; solo aparece cuando hay un área dibujada. */}
         {hasArea && (
-          <Button
+          <MapButton
             onClick={downloadArea}
             disabled={isDownloading}
             title="Descargar en un ZIP las capas encendidas dentro del área dibujada"
-            className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+            className="!border-emerald-700 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-60"
           >
             {isDownloading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Download className="mr-2 h-4 w-4" />
+              <Download className="h-4 w-4" />
             )}
             {isDownloading ? "Preparando…" : "Descargar área"}
-          </Button>
+          </MapButton>
         )}
 
-        <Button onClick={toggleBaseLayer} className="bg-white text-black hover:bg-gray-200">
-          {baseLayer === "osm" ? (
-            <Satellite className="mr-2 h-4 w-4" />
-          ) : (
-            <MapIcon className="mr-2 h-4 w-4" />
-          )}
+        <MapButton onClick={toggleBaseLayer} title="Cambiar entre mapa y satélite">
+          {baseLayer === "osm" ? <Satellite className="h-4 w-4" /> : <MapIcon className="h-4 w-4" />}
           {baseLayer === "osm" ? "Satélite" : "Mapa"}
-        </Button>
+        </MapButton>
 
-        <Button
+        <MapButton
           onClick={toggleHillshade}
+          active={showHillshade}
           aria-pressed={showHillshade}
           title="Sombrear el relieve sobre el mapa plano"
-          className={
-            showHillshade
-              ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
-              : "bg-white text-black hover:bg-gray-200"
-          }
         >
-          <Mountain className="mr-2 h-4 w-4" />
+          <Mountain className="h-4 w-4" />
           Relieve
-        </Button>
+        </MapButton>
 
-        <Button
+        <MapButton
           onClick={toggle3D}
+          active={is3D}
           aria-pressed={is3D}
           title="Levantar el terreno e inclinar la cámara"
-          className={
-            is3D ? "bg-blue-50 text-blue-700 hover:bg-blue-100" : "bg-white text-black hover:bg-gray-200"
-          }
         >
-          <Box className="mr-2 h-4 w-4" />
+          <Box className="h-4 w-4" />
           {is3D ? "Volver a 2D" : "Ver en 3D"}
-        </Button>
+        </MapButton>
 
-        <Button
+        <MapButton
           onClick={handleLocateUser}
-          className={`transition-colors ${
-            isLocating
-              ? "bg-blue-50 text-blue-500 animate-pulse"
-              : hasLocated
-                ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                : "bg-white text-black hover:bg-gray-200"
-          }`}
+          active={hasLocated}
           title="Mostrar tu ubicación con el GPS"
+          className={isLocating ? "animate-pulse" : ""}
         >
-          <Crosshair className={`mr-2 h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
-          {isLocating ? "Ubicando..." : hasLocated ? "Ubicación activa" : "Activar GPS"}
-        </Button>
+          <Crosshair className={`h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
+          {isLocating ? "Ubicando…" : hasLocated ? "Ubicación activa" : "Activar GPS"}
+        </MapButton>
 
         {/* La brújula 360° se dibuja encima del marcador del GPS: sin ubicación
             no hay dónde ponerla. Estaba siempre visible y pulsarla sin el GPS
             encendido no hacía nada, que es la peor respuesta posible. */}
         {hasLocated && (
-          <Button
+          <MapButton
             onClick={handleToggleCompass360}
+            active={isCompassActive}
             aria-pressed={isCompassActive}
             title="Girar una rosa de los vientos con la orientación del celular"
-            className={`transition-colors ${
-              isCompassActive
-                ? "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                : "bg-white text-black hover:bg-gray-200"
-            }`}
           >
-            <Compass className={`mr-2 h-4 w-4 ${isCompassActive ? "text-blue-600" : ""}`} />
+            <Compass className="h-4 w-4" />
             {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
-          </Button>
+          </MapButton>
         )}
 
-        <Button
+        <MapButton
           onClick={() =>
             window.open("https://www.linkedin.com/in/fabio-espinosa/", "_blank", "noopener,noreferrer")
           }
           title="Perfil del autor en LinkedIn"
-          className="bg-white text-black hover:bg-gray-200"
         >
-          <User className="mr-2 h-4 w-4" />
+          <User className="h-4 w-4" />
           Fabio A. Espinosa
-        </Button>
+        </MapButton>
       </div>
 
       <DrawToolbar
@@ -683,7 +826,19 @@ export default function MapComponentGL({
         hasSelection={selectedIds.length > 0}
       />
 
-      <CursorCoordinates map={mapInstance} />
+      {/* La caja de escribir coordenadas acompaña a la herramienta de punto: es
+          la otra forma de hacer lo mismo. */}
+      {mode === "draw_point" && (
+        <CoordinateEntry
+          crsId={coordinateSystem}
+          onGo={(lon, lat) => {
+            addPointAt([lon, lat])
+            mapRef.current?.flyTo({ center: [lon, lat], zoom: 16, duration: 1200 })
+          }}
+        />
+      )}
+
+      <CursorCoordinates map={mapInstance} crsId={coordinateSystem} />
 
       {showRotateHint && <RotateHint onClose={hideRotateHint} />}
 
@@ -753,8 +908,25 @@ export default function MapComponentGL({
           border-bottom: 1px solid #ccc;
           padding-bottom: 4px;
         }
+        /* Un filete tenue entre dato y dato. Sin él las trece filas se leían
+           como un bloque macizo y había que ir contando con el dedo para no
+           saltarse una; con él, cada renglón es una unidad y el ojo salta de una
+           a otra sin perderse. El aire va dentro de la fila y no entre filas,
+           para que la separación se note sin alargar la ficha. */
         .maplibregl-popup-content p {
-          margin: 0 0 2px;
+          margin: 0;
+          padding: 4px 0;
+          border-bottom: 1px solid #eef2f6;
+        }
+        .maplibregl-popup-content p:last-child {
+          border-bottom: none;
+          padding-bottom: 0;
+        }
+        /* La etiqueta del dato, en gris, y el valor en negro: así se distinguen
+           de un vistazo sin necesidad de más líneas. */
+        .maplibregl-popup-content p strong {
+          font-weight: 500;
+          color: #64748b;
         }
         /* Esta regla estaba puesta sobre todos los globos y era la causa de que
            la ficha de un expediente saliera con un renglón en blanco entre cada
@@ -829,6 +1001,24 @@ export default function MapComponentGL({
           border: 3px solid #ffffff;
           box-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
           z-index: 3;
+        }
+        /* La lectura del rumbo, dentro de la rosa. Fondo oscuro y sólido en vez
+           de texto con contorno: es un dato que se consulta, no un rótulo del
+           mapa, y sobre una imagen de satélite el contorno no basta. */
+        .gps-compass__lectura {
+          position: absolute;
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 3px 10px;
+          border-radius: 9999px;
+          background: rgba(15, 23, 42, 0.82);
+          color: #ffffff;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          white-space: nowrap;
+          pointer-events: none;
+          z-index: 4;
         }
         .gps-compass__pulse {
           position: absolute;

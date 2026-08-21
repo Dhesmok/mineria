@@ -7,11 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
-import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight, MapPin } from "lucide-react"
+import { Loader2, ChevronLeft, Search, Download, RefreshCw, ChevronRight } from "lucide-react"
 import ExportComponent from "./ExportComponent"
 import { fetchArcgisJson } from "./utils/arcgis"
 import { CRS_LIST, axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
-import { parseCoordinateInput } from "./utils/coordinateInput"
 import { DEFAULT_ORDER, initialLayerState } from "./utils/themeAreas"
 import { LayerPanel } from "./components/LayerPanel"
 import {
@@ -47,8 +46,6 @@ export default function Component() {
   const [showExportModal, setShowExportModal] = useState(false)
   const [selectedCoordinateSystem, setSelectedCoordinateSystem] = useState("4686")
   const [expedientCode, setExpedientCode] = useState("")
-  const [coordinateText, setCoordinateText] = useState("")
-  const [coordinateMessage, setCoordinateMessage] = useState(null)
   const [searchTrigger, setSearchTrigger] = useState(0)
   const [coordinatesAvailable, setCoordinatesAvailable] = useState(false)
   const [geoJsonData, setGeoJsonData] = useState(null)
@@ -69,6 +66,16 @@ export default function Component() {
   // El orden de pintado, de arriba abajo. Es lo que el usuario reordena
   // arrastrando en la pestaña "Activas".
   const [layerOrder, setLayerOrder] = useState(DEFAULT_ORDER)
+  // Filtros sobre lo cargado, y los atributos con que el panel arma sus
+  // opciones. Viven aquí y no en el mapa porque el panel es quien los enseña.
+  const [filterSelections, setFilterSelections] = useState({})
+  const [filterArea, setFilterArea] = useState(null)
+  const [loadedProperties, setLoadedProperties] = useState([])
+
+  const filters = useMemo(
+    () => ({ selections: filterSelections, areaRange: filterArea }),
+    [filterSelections, filterArea],
+  )
 
   const actualizarCapa = useCallback((key, cambios) => {
     setLayers((current) => ({ ...current, [key]: { ...current[key], ...cambios } }))
@@ -155,42 +162,6 @@ export default function Component() {
   useEffect(() => {
     setActiveSuggestion(-1)
   }, [expedientSuggestions])
-
-  /**
-   * Marca en el mapa una coordenada escrita a mano.
-   *
-   * El punto se añade por el control de dibujo (`addPointAt`), no como un
-   * marcador aparte: así se ve con el mismo símbolo que los puntos del ratón, se
-   * borra con la misma papelera y sale en la exportación. Y se pueden poner
-   * varios, uno tras otro, que es lo que no permitía la versión anterior.
-   */
-  const handleGoToCoordinate = useCallback(() => {
-    const result = parseCoordinateInput(coordinateText, selectedCoordinateSystem)
-
-    if (result.error) {
-      setCoordinateMessage({ tone: "error", text: result.error })
-      return
-    }
-
-    const map = mapRef.current
-    if (!map) return
-
-    map.addPointAt?.([result.lon, result.lat])
-    map.flyTo({ center: [result.lon, result.lat], zoom: 16, duration: 1200 })
-
-    // Fuera de Colombia no es un error —puede ser a propósito—, pero casi
-    // siempre significa haber intercambiado los dos números o haber elegido el
-    // sistema equivocado, así que se avisa sin impedir nada.
-    setCoordinateMessage(
-      result.outsideColombia
-        ? {
-            tone: "warning",
-            text: "Ese punto queda fuera de Colombia. Revisa el orden de los números y el sistema elegido.",
-          }
-        : null,
-    )
-    setCoordinateText("")
-  }, [coordinateText, selectedCoordinateSystem])
 
   const handleShowCoordinates = () => {
     if (coordinatesAvailable) {
@@ -468,18 +439,24 @@ export default function Component() {
             Aplicar
           </Button>
 
-          {/* Marcar un punto escribiéndolo. Antes solo se podía con el ratón, y
-              una coordenada casi siempre llega escrita: en una resolución, en un
-              correo, en la libreta de campo. */}
-          <div className="space-y-2 border-t pt-3">
-            <Label htmlFor="coordenada" className="text-sm font-medium">
-              Ir a una coordenada
+          {/* El sistema de coordenadas gobierna todo lo que enseña una
+              posición: esta tabla, la exportación, la lectura del cursor sobre
+              el mapa, las etiquetas de los puntos dibujados y la caja de
+              escribir una coordenada. Antes solo mandaba en la tabla, así que
+              alguien trabajando en Origen Nacional veía grados por todas
+              partes y tenía que convertir de cabeza.
+
+              Escribir la coordenada ya no vive aquí: se hace en el mapa, con la
+              herramienta de punto, que es la misma tarea hecha de otra forma. */}
+          <div className="space-y-1.5 border-t pt-3">
+            <Label htmlFor="sistema" className="text-sm font-medium">
+              Sistema de coordenadas
             </Label>
             <select
+              id="sistema"
               value={selectedCoordinateSystem}
               onChange={(event) => setSelectedCoordinateSystem(event.target.value)}
               className="w-full rounded-md border px-2 py-1.5 text-xs"
-              aria-label="Sistema de coordenadas"
             >
               {CRS_LIST.map((crs) => (
                 <option key={crs.id} value={crs.id}>
@@ -487,50 +464,11 @@ export default function Component() {
                 </option>
               ))}
             </select>
-            <div className="flex gap-2">
-              <Input
-                id="coordenada"
-                value={coordinateText}
-                onChange={(event) => {
-                  setCoordinateText(event.target.value)
-                  setCoordinateMessage(null)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") handleGoToCoordinate()
-                }}
-                placeholder={
-                  crsById(selectedCoordinateSystem).projected
-                    ? "2247195 4713441"
-                    : "6,2308 -75,5906"
-                }
-                className="flex-1 text-sm"
-                autoComplete="off"
-              />
-              <Button
-                onClick={handleGoToCoordinate}
-                className="bg-blue-500 px-3 hover:bg-blue-600"
-                title="Marcar el punto y llevar el mapa hasta él"
-                aria-label="Ir a la coordenada"
-              >
-                <MapPin size={18} />
-              </Button>
-            </div>
             <p className="text-[11px] leading-tight text-gray-500">
-              {axisLabels(selectedCoordinateSystem).first} y{" "}
-              {axisLabels(selectedCoordinateSystem).second.toLowerCase()}, en ese orden.
-              {!crsById(selectedCoordinateSystem).projected &&
-                " También entiende grados, minutos y segundos."}
+              {crsById(selectedCoordinateSystem).hint}
             </p>
-            {coordinateMessage && (
-              <p
-                className={`text-xs ${
-                  coordinateMessage.tone === "error" ? "text-red-500" : "text-amber-600"
-                }`}
-              >
-                {coordinateMessage.text}
-              </p>
-            )}
           </div>
+
           <LayerPanel
             layers={layers}
             order={layerOrder}
@@ -538,6 +476,11 @@ export default function Component() {
             onOpacity={cambiarOpacidad}
             onColor={cambiarColor}
             onReorder={setLayerOrder}
+            loadedProperties={loadedProperties}
+            filterSelections={filterSelections}
+            filterArea={filterArea}
+            onFilterChange={setFilterSelections}
+            onFilterArea={setFilterArea}
           />
 
           {showToggle && (
@@ -577,6 +520,9 @@ export default function Component() {
           onMapInitialized={handleMapInitialized}
           layerState={layers}
           layerOrder={layerOrder}
+          coordinateSystem={selectedCoordinateSystem}
+          filters={filters}
+          onLoadedProperties={setLoadedProperties}
         />
         {!showSidebar && (
           <Button

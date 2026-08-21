@@ -49,53 +49,118 @@ export const buildCompassMarkup = (compassActive, compassSize = COMPASS_SIZE_DEF
     // Todas las medidas de dentro se dan en las unidades del diseño original
     // (una rosa de 250 px) y esta función las lleva al tamaño elegido.
     const s = (value) => Number((value * scale).toFixed(2))
+    const r = center - s(3)
 
+    // Marcas cada 5°, más largas cada 15° y aún más cada 45°. Los grados solo se
+    // rotulan cada 45: antes se numeraba cada 10° y en una rosa de 250 px eso son
+    // 36 números de 10 px pegados unos a otros, ilegibles y con aspecto de
+    // borrón. Con ocho rótulos hay aire de sobra y se sigue leyendo el rumbo.
     let ticks = ""
-    for (let i = 0; i < 360; i += 2) {
-      const isTen = i % 10 === 0
-      const length = isTen ? 12 : i % 5 === 0 ? 8 : 4
-      const start = isTen ? 0 : s(12 - length)
-      ticks += `<line x1="${center}" y1="${start}" x2="${center}" y2="${s(12)}" transform="rotate(${i} ${center} ${center})" stroke="rgba(255,255,255,0.8)" stroke-width="${s(1.5)}"/>`
-      ticks += `<line x1="${center}" y1="${start}" x2="${center}" y2="${s(12)}" transform="rotate(${i} ${center} ${center})" stroke="rgba(0,0,0,0.5)" stroke-width="${s(0.5)}"/>`
-      if (isTen) {
-        ticks += `<text x="${center}" y="${s(24)}" transform="rotate(${i} ${center} ${center})" fill="white" font-size="${s(10)}" text-anchor="middle" font-family="sans-serif" font-weight="bold" style="text-shadow: 1px 1px 2px black;">${i}</text>`
-      }
+    for (let i = 0; i < 360; i += 5) {
+      const mayor = i % 45 === 0
+      const media = i % 15 === 0
+      const largo = mayor ? 13 : media ? 9 : 5
+      const grosor = mayor ? 1.8 : media ? 1.2 : 0.9
+      ticks +=
+        `<line x1="${center}" y1="${s(6)}" x2="${center}" y2="${s(6 + largo)}" ` +
+        `transform="rotate(${i} ${center} ${center})" stroke="rgba(255,255,255,${mayor ? 0.95 : media ? 0.7 : 0.45})" ` +
+        `stroke-width="${s(grosor)}" stroke-linecap="round"/>`
     }
+
+    /**
+     * Un rótulo colocado en su ángulo pero **siempre derecho**.
+     *
+     * Antes se giraba el texto con `rotate()` para llevarlo a su sitio, y eso
+     * gira también las letras: a 225° el número salía boca abajo, y la E y la O
+     * de los costados se leían como una "m" y un "0". Aquí se calcula dónde cae
+     * el punto y el texto se pinta ahí sin girar, que es como se leen los
+     * rótulos de una brújula de verdad.
+     */
+    const label = (texto, angulo, radio, tamano, color, peso) => {
+      const radianes = (angulo * Math.PI) / 180
+      const x = center + radio * Math.sin(radianes)
+      const y = center - radio * Math.cos(radianes)
+      return (
+        `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="${color}" font-size="${tamano}" ` +
+        `text-anchor="middle" dominant-baseline="central" font-weight="${peso}" ` +
+        `font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">${texto}</text>`
+      )
+    }
+
+    // Los grados, en los cuatro intercardinales; las letras van en los cardinales
+    // y ocupan su sitio, así que numerarlos también sería repetir el mismo dato
+    // dos veces.
+    let degrees = ""
+    for (const i of [45, 135, 225, 315]) {
+      degrees += label(`${i}°`, i, r - s(30), s(11), "rgba(255,255,255,0.8)", 500)
+    }
+
+    const cardinal = (letra, angulo, color) =>
+      label(letra, angulo, r - s(29), s(17), color, 600)
 
     dialHtml = `
       <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="position: absolute; left: 0; top: 0; pointer-events: none;">
-        <circle cx="${center}" cy="${center}" r="${center - 2}" fill="rgba(0, 50, 100, 0.1)" stroke="rgba(255,255,255,0.4)" stroke-width="1"/>
+        <defs>
+          <radialGradient id="rosaFondo" cx="50%" cy="50%" r="50%">
+            <stop offset="55%" stop-color="rgba(15, 23, 42, 0.04)"/>
+            <stop offset="100%" stop-color="rgba(15, 23, 42, 0.34)"/>
+          </radialGradient>
+        </defs>
+        <circle cx="${center}" cy="${center}" r="${r}" fill="url(#rosaFondo)" stroke="rgba(255,255,255,0.55)" stroke-width="${s(1.2)}"/>
+        <!-- Banda oscura bajo las marcas y los rótulos. Sin ella, el blanco de
+             los números se pierde sobre el mapa claro: la rosa se diseñó
+             pensando en la imagen de satélite, que es oscura, y sobre OSM
+             quedaba ilegible. Solo cubre el anillo exterior, así que el centro
+             sigue dejando ver el mapa. -->
+        <circle cx="${center}" cy="${center}" r="${r - s(22)}" fill="none"
+                stroke="rgba(15, 23, 42, 0.5)" stroke-width="${s(44)}"/>
+        <circle cx="${center}" cy="${center}" r="${r - s(44)}" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="${s(0.8)}"/>
         ${ticks}
-        <g font-size="${s(28)}" font-weight="bold" font-family="serif" style="text-shadow: 1px 1px 3px black;">
-          <text x="${center}" y="${s(55)}" fill="#ff4444" text-anchor="middle">N</text>
-          <text x="${center}" y="${size - s(35)}" fill="white" text-anchor="middle">S</text>
-          <text x="${size - s(35)}" y="${center + s(10)}" fill="white" text-anchor="middle">E</text>
-          <text x="${s(35)}" y="${center + s(10)}" fill="white" text-anchor="middle">W</text>
-        </g>
-        <line x1="${center - s(15)}" y1="${center}" x2="${center + s(15)}" y2="${center}" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
-        <line x1="${center}" y1="${center - s(15)}" x2="${center}" y2="${center + s(15)}" stroke="rgba(255,255,255,0.7)" stroke-width="1.5"/>
+        ${degrees}
+        ${cardinal("N", 0, "#f87171")}
+        ${cardinal("E", 90, "rgba(255,255,255,0.95)")}
+        ${cardinal("S", 180, "rgba(255,255,255,0.95)")}
+        ${cardinal("O", 270, "rgba(255,255,255,0.95)")}
       </svg>
     `
 
+    // La aguja: una punta roja hacia donde apunta el dispositivo y una cola
+    // clara hacia atrás, para que se lea el eje completo y no solo la dirección.
     needleHtml = `
       <div class="gps-compass__needle" style="width:${size}px; height:${size}px; left:0; top:0; transform-origin: center; transform: rotate(0deg); background:transparent; border:none; filter:none; position:absolute;">
         <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-          <line x1="${center}" y1="${center}" x2="${center}" y2="${s(20)}" stroke="#ff4444" stroke-width="${s(2)}"/>
-          <polygon points="${center - s(4)},${s(35)} ${center + s(4)},${s(35)} ${center},${s(20)}" fill="#ff4444" />
-          <circle cx="${center}" cy="${center}" r="${s(3)}" fill="#ff4444"/>
+          <polygon points="${center},${s(30)} ${center - s(7)},${center} ${center + s(7)},${center}" fill="#ef4444"/>
+          <polygon points="${center},${size - s(46)} ${center - s(5)},${center} ${center + s(5)},${center}" fill="rgba(255,255,255,0.75)"/>
+          <circle cx="${center}" cy="${center}" r="${s(4)}" fill="#ffffff" stroke="#ef4444" stroke-width="${s(1.6)}"/>
         </svg>
       </div>
     `
   }
+
+  // La lectura del rumbo, dentro de la rosa y justo bajo el centro. Ahí no la
+  // tapa la aguja —que sale del centro hacia fuera— y se lee sin apartar la
+  // vista del mapa. Fuera del círculo competiría con los polígonos del fondo.
+  const readoutHtml = compassActive
+    ? `<div class="gps-compass__lectura" style="top: ${center + size * 0.17}px; font-size: ${Math.max(11, size * 0.058).toFixed(1)}px;">
+         <span class="gps-compass__grados">—</span>
+       </div>`
+    : ""
 
   return `
     <div class="gps-compass__pulse" style="left: ${center}px; top: ${center}px;"></div>
     <div class="gps-compass__ring" style="width: ${size}px; height: ${size}px;">
       ${dialHtml}
       ${needleHtml}
+      ${readoutHtml}
       <div class="gps-compass__dot" style="left: ${center}px; top: ${center}px;"></div>
     </div>
   `
+}
+
+/** El rumbo en palabras: 0° es Norte, 135° es Sureste. */
+export const cardinalName = (heading) => {
+  const nombres = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"]
+  return nombres[Math.round(((heading % 360) + 360) % 360 / 45) % 8]
 }
 
 /** Normaliza la orientación del dispositivo a un rumbo 0–360. */
@@ -145,8 +210,15 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
 
   const updateNeedle = useCallback((heading) => {
     if (!Number.isFinite(heading) || !markerElRef.current) return
+
     const needle = markerElRef.current.querySelector(".gps-compass__needle")
     if (needle) needle.style.transform = `rotate(${heading}deg)`
+
+    // La lectura numérica se toca aquí y no rehaciendo el marcador: esto se
+    // ejecuta cada vez que el celular se mueve un grado, y reconstruir el SVG
+    // entero a esa velocidad haría parpadear la rosa.
+    const grados = markerElRef.current.querySelector(".gps-compass__grados")
+    if (grados) grados.textContent = `${Math.round(heading)}° ${cardinalName(heading)}`
   }, [])
 
   const startOrientationTracking = useCallback(async () => {
