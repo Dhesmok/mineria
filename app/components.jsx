@@ -95,7 +95,10 @@ export default function Component() {
    * distinto de lo que pinta el navegador tira la página entera.
    */
   useEffect(() => {
-    if (window.matchMedia("(max-width: 767px)").matches) setShowSidebar(false)
+    // `matchMedia` no existe en todos los entornos —jsdom, por ejemplo, donde
+    // corren las pruebas—, y sin la comprobación esto lanzaba y se llevaba por
+    // delante el montaje entero del panel.
+    if (window.matchMedia?.("(max-width: 767px)")?.matches) setShowSidebar(false)
   }, [])
 
   useEffect(() => {
