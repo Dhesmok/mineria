@@ -7,6 +7,7 @@ import { AREAS, THEME_LAYERS, layerByKey } from "../utils/themeAreas"
 import { darken } from "../utils/colors"
 import { indexForPointer, moveWithinSubset } from "../utils/reorder"
 import { ColorPopover } from "./ColorPopover"
+import { LayerFilters } from "./LayerFilters"
 
 /**
  * Panel de capas agrupadas por área temática.
@@ -179,7 +180,19 @@ const LayerRow = ({
   </div>
 )
 
-export const LayerPanel = ({ layers, order, onToggle, onOpacity, onColor, onReorder }) => {
+export const LayerPanel = ({
+  layers,
+  order,
+  onToggle,
+  onOpacity,
+  onColor,
+  onReorder,
+  loadedProperties = [],
+  filterSelections = {},
+  filterArea = null,
+  onFilterChange,
+  onFilterArea,
+}) => {
   const [onlyActive, setOnlyActive] = useState(false)
   const [colorTarget, setColorTarget] = useState(null)
   // Qué se está arrastrando y dónde caería si se soltara ahora.
@@ -323,6 +336,14 @@ export const LayerPanel = ({ layers, order, onToggle, onOpacity, onColor, onReor
           })
         )}
       </div>
+
+      <LayerFilters
+        properties={loadedProperties}
+        selections={filterSelections}
+        areaRange={filterArea}
+        onChange={onFilterChange}
+        onArea={onFilterArea}
+      />
 
       {colorTarget && (
         <ColorPopover

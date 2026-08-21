@@ -4,10 +4,11 @@ Documento de trabajo. Marca las casillas a medida que avances y actualiza el
 estado al final de cada sesión, para que la siguiente sesión sepa dónde quedó.
 
 **Estado:** migración terminada (fases 0–7) y en `main`; Leaflet ya no existe.
-Ajustes de uso de la Fase 8, hechos salvo los filtros. Panel por áreas (Fase 9)
-hecho, a la espera de las direcciones de los servicios nuevos. Pendiente: recorte de DEM
-(Fase 5, fuente ya decidida), entidades nuevas (Fase 6) y filtros (Fase 8).
-**Última actualización:** 2026-08-20
+Hechos también los ajustes de uso (Fase 8), el panel por áreas (Fase 9) y los de
+lectura (Fase 10). Pendiente: recorte de DEM (Fase 5, fuente ya decidida), las
+entidades nuevas (Fase 6, faltan sus direcciones) y filtrar por departamento y
+municipio (Fase 8, falta sondear qué campos traen los servicios).
+**Última actualización:** 2026-08-21
 
 ---
 
@@ -188,9 +189,25 @@ herramienta.
       achicar.
 - [x] La ficha de un polígono salía con un renglón en blanco entre cada dato.
 - [x] Recuperar el botón de LinkedIn, que se perdió al reescribir el visor.
-- [ ] **Filtros** (por departamento, municipio, área, clasificación, etapa). Ver
-      la nota de sesión: hace falta antes inventariar qué campos traen de verdad
-      los servicios, y eso no se puede comprobar sin salida a internet.
+- [x] **Filtros** por estado, modalidad, etapa, clasificación y área mínima. Las
+      opciones se leen de los datos cargados, no de una lista escrita a mano.
+- [ ] Filtrar por **departamento y municipio**: esos campos no aparecen en
+      ninguna respuesta observada. `scripts/probar-campos.mjs` los sondea desde
+      una máquina con internet para decidir entre pedírselos al servicio o
+      cruzar con el mapa municipal del DANE.
+
+## Fase 10 — Ajustes de lectura
+
+- [x] El sistema de coordenadas gobierna toda lectura de posición, no solo la
+      tabla: la del cursor y las etiquetas de los puntos dibujados incluidas.
+- [x] La lectura del cursor se va al centro abajo, donde no compite con nada.
+- [x] Escribir una coordenada sale del panel y pasa al mapa, con la herramienta
+      de punto: dos casillas y un botón «Ir», visibles solo con esa herramienta.
+- [x] Giro en bucle, con play y stop en el mismo botón.
+- [x] Separadores en la ficha del expediente.
+- [x] Brújula legible: rótulos derechos, grados cada 45°, banda oscura para que
+      se lean sobre el mapa claro, y la lectura del rumbo dentro de la rosa.
+- [x] Los botones del mapa comparten tipografía, color y forma con el panel.
 
 ## Fase 9 — Panel de capas por áreas
 
@@ -856,3 +873,71 @@ anteriores en verde más 22 nuevas—, incluida la prueba que de verdad importa:
 `queryRenderedFeatures` devuelve las capas en el orden en que MapLibre las va a
 dibujar, y tras arrastrar devuelve el orden nuevo. Con capturas de la lista, del
 selector de color, del arrastre a medias y del mapa repintado.
+
+### Fase 10, ajustes de lectura — 2026-08-21
+
+Siete observaciones de Fabio sobre lo que se lee y dónde se lee.
+
+**El sistema de coordenadas solo mandaba en la tabla.** Alguien trabajando en
+Origen Nacional veía la tabla en metros y todo lo demás en grados: la lectura del
+cursor y las etiquetas de los puntos que él mismo acababa de marcar. Ahora ese
+selector gobierna las cuatro lecturas —tabla, exportación, cursor y etiquetas— y
+subió al panel principal, porque ya no es un ajuste de una tabla escondida en un
+modal.
+
+**Escribir una coordenada se mudó al mapa.** Estaba en el panel, siempre a la
+vista, ocupando sitio permanente para algo que se usa de vez en cuando. Ahora
+sale abajo al centro, con la herramienta de punto: ese botón sirve para las dos
+formas de marcar un punto —con el ratón o escribiéndolo—, que son la misma tarea.
+Y son dos casillas en vez de una: separar la ordenada de la abscisa elimina de
+raíz la ambigüedad de la coma que obligaba a adivinar dónde partía el par, sin
+perder que dentro de cada casilla se pueda escribir con coma decimal o en grados,
+minutos y segundos.
+
+**Un fallo del giro en bucle, evitado antes de que se viera.** Cada `jumpTo` del
+bucle dispara un `moveend`, y ese evento actualiza el estado que mueve el
+deslizador de giro: tal cual, el visor entero se repintaría sesenta veces por
+segundo. El bucle publica el rumbo cuatro veces por segundo, que basta para que
+el control se vea vivo, y el manejador de `moveend` se aparta mientras gira.
+
+**La brújula tenía un problema de fondo, no de gusto.** Los rótulos se colocaban
+girando el texto hasta su ángulo, y eso gira también las letras: a 225° el número
+salía boca abajo, y la E y la O de los costados se leían como una "m" y un "0".
+Ahora se calcula con trigonometría dónde cae cada rótulo y se pinta derecho, que
+es como se lee una brújula de verdad. Los grados pasan de cada 10° —36 números de
+10 px pegados, un borrón— a cada 45°, con marcas cada 5 y realces cada 15. Y se
+le añadió una banda oscura bajo el anillo: la rosa se había diseñado pensando en
+la imagen de satélite, que es oscura, y sobre el mapa claro el texto blanco
+desaparecía. Eso solo se vio mirando una captura de cerca.
+
+**Los filtros, por fin.** Se puede filtrar por estado, modalidad, etapa,
+clasificación y área mínima, y el efecto es esconder lo que no cumple sin volver
+a consultar nada: las capas ya traen todos sus atributos. La decisión de fondo es
+que **las opciones se leen de los datos que hay en pantalla**, no de una lista
+escrita en el código: nadie se sabe de memoria las etapas que usa la ANM ni cómo
+las escribe, y una lista inventada acabaría ofreciendo "Exploración" donde el
+servicio dice "EXPLORACION". Solo se ofrecen los campos con más de un valor
+distinto, porque un filtro con una sola opción no filtra nada.
+
+Departamento y municipio siguen fuera, y no por falta de ganas: no aparecen en
+ninguna respuesta observada de los cuatro servicios. `scripts/probar-campos.mjs`
+pregunta a los metadatos de cada capa qué campos declara y busca los que suenen a
+división territorial. Según lo que conteste, filtrar por ellos es añadir una línea
+o es cruzar cada polígono con el mapa municipal del DANE, que es bastante más
+trabajo. Se decide con el dato delante, no antes.
+
+**Los botones del mapa hablaban otro idioma.** Venían del componente genérico de
+la aplicación mientras el panel se rediseñó aparte, así que convivían dos
+tipografías, dos tamaños y dos grises en la misma pantalla. Ahora hay un único
+botón compartido con el lenguaje del panel: 13 px, colores slate, esquinas de 8.
+
+**Tres comprobaciones de las suites viejas se actualizaron, ninguna era una
+regresión.** La lectura del cursor cambió de texto —ahora nombra los ejes según
+el sistema—, la caja de coordenadas se mudó del panel al mapa, y las filas de la
+ficha miden un poco más porque llevan su separador.
+
+**Comprobado**: 215 pruebas unitarias (15 nuevas para los filtros) y 187
+comprobaciones en navegador —las 159 anteriores en verde más 28 nuevas—, con
+capturas de la ficha, de la caja de coordenadas, de los filtros y un primer plano
+de la brújula. El simulacro de la ANM ahora varía los atributos entre figuras: sin
+eso no habría nada por lo que filtrar y la comprobación no probaría nada.

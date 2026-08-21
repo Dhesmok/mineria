@@ -11,6 +11,7 @@ import {
   LAYERS_MIN_ZOOM,
 } from "../../utils/anmLayers"
 import { SEARCH_LAYERS } from "../../utils/mapStyles"
+import { buildMapFilter } from "../../utils/layerFilters"
 import { createLabelElement } from "../../utils/mapLabelsGL"
 import { createPopupContent, shouldShowLabels } from "../../utils/mapUtils"
 import { findTenureLayerNumbers, tenureLayerUrl } from "../../utils/tenureLayers"
@@ -39,17 +40,24 @@ const REFRESH_DELAY_MS = 400
  *   porque los cuatro cambian juntos y separarlos solo daba ocasión de que se
  *   descuadraran.
  * @param layerOrder  claves de arriba abajo: la primera se pinta encima de todo.
+ * @param filters     {selections, areaRange} — qué esconder de lo ya cargado.
  */
 export const useMapLayersGL = (
   mapRef,
   mapInstance,
   layerState,
   layerOrder,
+  filters,
   setError,
   setShowErrorBanner,
 ) => {
   const [isBelowMinZoom, setIsBelowMinZoom] = useState(false)
   const [truncatedLayers, setTruncatedLayers] = useState([])
+  // Los atributos de todo lo que hay cargado ahora mismo. Es lo que llena los
+  // desplegables del filtro: sus opciones se leen de los datos, no de una lista
+  // escrita a mano que se quedaría desfasada en cuanto la ANM cambie una
+  // palabra.
+  const [loadedProperties, setLoadedProperties] = useState([])
 
   // Los marcadores de etiqueta vivos, agrupados por capa, para poder quitarlos
   // antes de poner los nuevos.
@@ -61,6 +69,8 @@ export const useMapLayersGL = (
   // Qué capas tienen datos puestos ahora mismo, para no mandar al worker a
   // vaciar lo que ya está vacío.
   const keysWithDataRef = useRef(new Set())
+  // Los atributos por capa, para reunirlos sin recorrer las fuentes del mapa.
+  const propertiesRef = useRef({})
   // La visibilidad se lee dentro de una función asíncrona; con el valor de la
   // prop, esa función se quedaría viendo el estado del render en que se creó.
   const stateRef = useRef(layerState)
@@ -138,7 +148,10 @@ export const useMapLayersGL = (
     // Las capas apagadas se vacían aquí y no en el efecto de visibilidad: sin
     // esto, al apagar el interruptor los polígonos se ocultaban pero seguían
     // cargados, y volvían a aparecer con datos viejos al reencenderla.
-    ANM_LAYERS.filter(({ key }) => !encendida(key)).forEach(({ key }) => clearLayerData(key))
+    ANM_LAYERS.filter(({ key }) => !encendida(key)).forEach(({ key }) => {
+      clearLayerData(key)
+      delete propertiesRef.current[key]
+    })
 
     const belowMinZoom = map.getZoom() < LAYERS_MIN_ZOOM
     setIsBelowMinZoom(belowMinZoom)
@@ -149,6 +162,7 @@ export const useMapLayersGL = (
       // se ven como manchas sueltas sin contexto.
       activeLayers.forEach(({ key }) => clearLayerData(key))
       setTruncatedLayers([])
+      setLoadedProperties([])
       return
     }
 
@@ -188,6 +202,7 @@ export const useMapLayersGL = (
           mapRef.current.getSource(anmSourceId(key))?.setData(result.featureCollection)
           keysWithDataRef.current.add(key)
           drawLabels(key, result.featureCollection)
+          propertiesRef.current[key] = result.featureCollection.features.map((f) => f.properties ?? {})
 
           if (result.truncated) truncated.push(label)
         }),
@@ -195,6 +210,7 @@ export const useMapLayersGL = (
 
       if (isStale()) return
       setTruncatedLayers(truncated)
+      setLoadedProperties(activeLayers.flatMap(({ key }) => propertiesRef.current[key] ?? []))
     } catch (error) {
       // Abortar es lo normal cuando el usuario sigue moviendo el mapa; no es un
       // fallo que haya que mostrarle.
@@ -255,6 +271,26 @@ export const useMapLayersGL = (
       map.moveLayer(line, SEARCH_LAYERS.fill)
     })
   }, [mapInstance, layerOrder, mapRef])
+
+  /**
+   * Los filtros esconden lo que no cumple, sin volver a consultar nada.
+   *
+   * `setFilter(id, null)` es lo que quita un filtro puesto antes; pasarle
+   * `undefined` no lo quita, lo deja como estaba, y las figuras escondidas
+   * seguirían escondidas sin que nada en el panel lo explicara.
+   */
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const expresion = buildMapFilter(filters?.selections, filters?.areaRange)
+
+    ANM_LAYERS.forEach(({ key }) => {
+      if (!map.getLayer(anmFillLayerId(key))) return
+      map.setFilter(anmFillLayerId(key), expresion)
+      map.setFilter(anmLineLayerId(key), expresion)
+    })
+  }, [mapInstance, filters, mapRef])
 
   // Las etiquetas son marcadores HTML, no capas del estilo, así que la
   // visibilidad de la capa no las apaga: hay que quitarlas a mano.
@@ -360,5 +396,8 @@ export const useMapLayersGL = (
     // ArcGIS recorta la respuesta en silencio. Callarlo es peor que avisar: el
     // usuario creería estar viendo todos los títulos del área.
     truncatedLayers,
+    // Los atributos de lo cargado: con esto el panel arma las opciones del
+    // filtro a partir de lo que hay, no de una lista inventada.
+    loadedProperties,
   }
 }
