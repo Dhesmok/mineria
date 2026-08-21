@@ -13,8 +13,9 @@ import {
 import { SEARCH_LAYERS } from "../../utils/mapStyles"
 import { buildMapFilter, buildWhereClause } from "../../utils/layerFilters"
 import { bboxOfGeometry } from "../../utils/bboxDownload"
-import { createLabelElement } from "../../utils/mapLabelsGL"
-import { createPopupContent, shouldShowLabels } from "../../utils/mapUtils"
+import { labelElementFor } from "../../utils/mapLabelsGL"
+import { selectVisibleLabels } from "../../utils/labelPlacement"
+import { createPopupContent, getFeatureLabel, getLabelCoordinates } from "../../utils/mapUtils"
 import { findTenureLayerNumbers, tenureLayerUrl } from "../../utils/tenureLayers"
 import { debounce } from "@/lib/utils"
 
@@ -79,6 +80,10 @@ export const useMapLayersGL = (
   // Los atributos por capa, para reunirlos sin recorrer las fuentes del mapa.
   const propertiesRef = useRef({})
   const featuresRef = useRef({})
+  // Punto, recuadro y texto de cada figura: lo que necesita `labelPlacement`
+  // para decidir qué etiquetas caben. Se guarda para poder recolocarlas al
+  // cambiar el zoom sin volver a consultar al servicio.
+  const labelCandidatesRef = useRef({})
   // El filtro se lee dentro de la función asíncrona que consulta.
   const filtersRef = useRef(filters)
   filtersRef.current = filters
@@ -118,22 +123,59 @@ export const useMapLayersGL = (
     labelMarkersRef.current[key] = []
   }, [])
 
-  const drawLabels = useCallback(
-    (key, featureCollection) => {
-      const map = mapRef.current
-      clearLabels(key)
-      if (!map || !shouldShowLabels(map.getZoom())) return
-
-      const markers = []
-      featureCollection.features.forEach((feature) => {
-        const label = createLabelElement(feature)
-        if (!label) return
-        markers.push(new Marker({ element: label.element }).setLngLat(label.coordinates).addTo(map))
-      })
-      labelMarkersRef.current[key] = markers
-    },
-    [clearLabels, mapRef],
+  /**
+   * Lo que hace falta para decidir si una figura lleva etiqueta: dónde iría y
+   * qué tan grande se ve. Se calcula una sola vez, al llegar los datos, porque
+   * encontrar un punto interior de un polígono con huecos es lo caro de todo
+   * esto y no cambia al mover el mapa.
+   */
+  const labelCandidatesFor = useCallback(
+    (key, featureCollection) =>
+      featureCollection.features
+        .map((feature) => {
+          const anchor = getLabelCoordinates(feature)
+          if (!anchor) return null
+          const bbox = bboxOfGeometry(feature.geometry)
+          if (!bbox) return null
+          return { key, anchor, bbox, text: getFeatureLabel(feature.properties) }
+        })
+        .filter(Boolean),
+    [],
   )
+
+  /**
+   * Redibuja las etiquetas de todas las capas encendidas, de una vez.
+   *
+   * De una vez y no capa por capa a propósito: dos títulos de capas distintas
+   * pueden solaparse igual que dos de la misma, y quien decide quién sobrevive
+   * necesita verlos todos juntos. Antes cada capa colocaba las suyas sin saber
+   * de las demás.
+   */
+  const redrawLabels = useCallback(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    Object.keys(labelMarkersRef.current).forEach((key) => clearLabels(key))
+    if (map.getZoom() < LAYERS_MIN_ZOOM) return
+
+    const candidatos = Object.entries(labelCandidatesRef.current)
+      .filter(([key]) => Boolean(stateRef.current[key]?.on))
+      .flatMap(([, lista]) => lista)
+
+    const lienzo = map.getCanvas()
+    const elegidas = selectVisibleLabels(candidatos, {
+      project: (lngLat) => map.project(lngLat),
+      width: lienzo.clientWidth,
+      height: lienzo.clientHeight,
+    })
+
+    elegidas.forEach((candidato) => {
+      const marker = new Marker({ element: labelElementFor(candidato.text) })
+        .setLngLat(candidato.anchor)
+        .addTo(map)
+      ;(labelMarkersRef.current[candidato.key] ??= []).push(marker)
+    })
+  }, [clearLabels, labelCandidatesRef, mapRef, stateRef])
 
   /**
    * Vacía una capa sin destruirla: se queda declarada, pero sin nada que pintar.
@@ -147,6 +189,7 @@ export const useMapLayersGL = (
       if (!keysWithDataRef.current.has(key)) return
       mapRef.current?.getSource(anmSourceId(key))?.setData(emptyFeatureCollection())
       keysWithDataRef.current.delete(key)
+      delete labelCandidatesRef.current[key]
       clearLabels(key)
     },
     [clearLabels, mapRef],
@@ -238,7 +281,7 @@ export const useMapLayersGL = (
 
           mapRef.current.getSource(anmSourceId(key))?.setData(result.featureCollection)
           keysWithDataRef.current.add(key)
-          drawLabels(key, result.featureCollection)
+          labelCandidatesRef.current[key] = labelCandidatesFor(key, result.featureCollection)
           propertiesRef.current[key] = result.featureCollection.features.map((f) => f.properties ?? {})
           // El recuadro se calcula una vez, al llegar los datos, y no cada vez
           // que se abre la tabla: recorrer los vértices de dos mil polígonos en
@@ -254,6 +297,9 @@ export const useMapLayersGL = (
       )
 
       if (isStale()) return
+      // Las etiquetas se colocan cuando ya llegaron todas las capas: quién tapa
+      // a quién solo se puede decidir viéndolas juntas.
+      redrawLabels()
       setTruncatedLayers(truncated)
       setLoadedProperties(activeLayers.flatMap(({ key }) => propertiesRef.current[key] ?? []))
       setLoadedFeatures(activeLayers.flatMap(({ key }) => featuresRef.current[key] ?? []))
@@ -265,7 +311,7 @@ export const useMapLayersGL = (
       setShowErrorBanner(true)
       setError(`Error al actualizar las capas del mapa: ${error.message}`)
     }
-  }, [clearLayerData, drawLabels, mapRef, setError, setShowErrorBanner])
+  }, [clearLayerData, labelCandidatesFor, mapRef, redrawLabels, setError, setShowErrorBanner])
 
   const debouncedRefresh = useMemo(() => debounce(() => refresh(), REFRESH_DELAY_MS), [refresh])
 
@@ -365,6 +411,20 @@ export const useMapLayersGL = (
       mapInstance.off("moveend", debouncedRefresh)
     }
   }, [mapInstance, debouncedRefresh])
+
+  // Recolocar las etiquetas al terminar un zoom, sin esperar a la consulta.
+  //
+  // Qué etiquetas caben depende del zoom, y volver a pedirle los datos a la ANM
+  // para averiguarlo sería absurdo: los polígonos son los mismos, solo se ven de
+  // otro tamaño. Sin esto, al alejarse quedaban en pantalla, durante el segundo
+  // que tarda la consulta, etiquetas más grandes que su propio polígono.
+  useEffect(() => {
+    if (!mapInstance) return
+    mapInstance.on("zoomend", redrawLabels)
+    return () => {
+      mapInstance.off("zoomend", redrawLabels)
+    }
+  }, [mapInstance, redrawLabels])
 
   // Popups e indicador del cursor sobre los polígonos.
   useEffect(() => {

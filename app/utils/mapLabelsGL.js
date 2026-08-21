@@ -34,12 +34,24 @@ export const createLabelElement = (feature) => {
   const coordinates = getLabelCoordinates(feature)
   if (!coordinates) return null
 
+  return { element: labelElementFor(getFeatureLabel(feature?.properties)), coordinates }
+}
+
+/**
+ * El elemento de una etiqueta a partir de su texto.
+ *
+ * Existe aparte de `createLabelElement` porque decidir *qué* etiquetas se
+ * dibujan pasó a hacerse antes, sobre datos —ver `labelPlacement.js`—, y para
+ * eso hace falta el punto y el recuadro de cada figura pero no su nodo HTML.
+ * Crear mil nodos para tirar ochocientos era justo lo que había que evitar.
+ */
+export const labelElementFor = (text) => {
   const element = document.createElement("div")
   element.className = "map-label"
 
   const inner = document.createElement("div")
-  inner.textContent = getFeatureLabel(feature?.properties)
+  inner.textContent = text
   element.appendChild(inner)
 
-  return { element, coordinates }
+  return element
 }

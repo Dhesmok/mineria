@@ -5,7 +5,7 @@ import { createPopupContent, extractRings, formatDegrees, getFeatureLabel } from
 import { createLabelElement } from "../../utils/mapLabelsGL"
 import { fetchArcgisJson } from "../../utils/arcgis"
 import { emptyFeatureCollection } from "../../utils/anmLayers"
-import { INITIAL_CENTER, INITIAL_ZOOM, SEARCH_LAYERS, SEARCH_SOURCES } from "../../utils/mapStyles"
+import { SEARCH_LAYERS, SEARCH_SOURCES } from "../../utils/mapStyles"
 import {
   findTenureLayerNumbers,
   REQUEST_LAYER_NAME,
@@ -123,9 +123,12 @@ export const useExpedientSearchGL = (
     removeVertices()
     labelMarkerRef.current?.remove()
     labelMarkerRef.current = null
-    mapRef.current?.flyTo({ center: INITIAL_CENTER, zoom: INITIAL_ZOOM })
+    // **La vista no se toca.** Antes esto volaba al centro del país: borrar el
+    // resultado devolvía el mapa a Colombia entera, y quien estaba mirando el
+    // detalle de una vereda perdía su sitio y tenía que volver a buscarlo a
+    // mano. Borrar es deshacer la búsqueda, no deshacer la navegación.
     setError(null)
-  }, [mapRef, removeVertices, setSourceData, setError])
+  }, [removeVertices, setSourceData, setError])
 
   const fetchData = useCallback(async () => {
     const map = mapRef.current

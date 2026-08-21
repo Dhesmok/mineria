@@ -209,6 +209,23 @@ herramienta.
       se lean sobre el mapa claro, y la lectura del rumbo dentro de la rosa.
 - [x] Los botones del mapa comparten tipografía, color y forma con el panel.
 
+## Fase 12 — Espacio, textos y etiquetas
+
+- [x] Fuera el título «Títulos y Solicitudes»: el panel ya no es solo de la ANM.
+      Ocultar y mostrar pasan a ser una pestaña pegada al costado del panel, un
+      solo mando en un solo sitio.
+- [x] Las explicaciones del alcance del filtro, en castellano llano.
+- [x] «Borrar» deshace la búsqueda sin mover la vista. Antes volaba al centro
+      del país y quien miraba el detalle de una vereda perdía su sitio.
+- [x] El aviso de «Ctrl + arrastrar» al entrar en 3D, en el lenguaje del resto
+      de la interfaz.
+- [x] El fondo de partida es el gris claro de CARTO, con nombres. Nombres y
+      descripciones de los cinco fondos reescritos.
+- [x] El botón «Mapa base» baja hasta encima de la firma: se toca una vez.
+- [x] **Las etiquetas ya no dependen de un umbral de zoom.** Se etiqueta el
+      polígono en el que la etiqueta cabe, y se descarta la que chocaría con
+      otra ya puesta.
+
 ## Fase 11 — Tabla de resultados, mapas base y espacio en el panel
 
 - [x] Tabla de atributos de los resultados del filtro, como la de un SIG de
@@ -1027,3 +1044,61 @@ tanda —acordeón, botones del encabezado, filtro por área, tabla y su vuelo,
 alcance por servicio, sistema de coordenadas, los cinco fondos medidos por el
 color que pintan, el distintivo de nombres, y el panel del 3D guardado, arrastrado
 y reabierto—, con capturas de cada una.
+
+### Fase 12, espacio y etiquetas — 2026-08-21
+
+**El panel perdió su encabezado y ganó una pestaña.** «Títulos y Solicitudes»
+nombraba a una de las cuatro áreas que ahora agrupa el panel, así que orientaba
+mal; sin él se ganan 44 px de alto. Y los dos mandos de ocultar y mostrar —una X
+dentro del panel, un botón redondo en la esquina de la pantalla— se fundieron en
+una pestaña pegada al costado que se desliza con él: un solo mando, siempre en
+el mismo punto, con la flecha diciendo hacia dónde va.
+
+La cuenta del desplazamiento tiene truco y quedó anotada en el código: el bloque
+mide panel más pestaña, así que correrlo «100 % menos la pestaña» —que es lo que
+parece— deja una franja de 16 px del panel asomando. Leyendo el código no se ve;
+en una captura, sí.
+
+**«Borrar» ya no mueve la vista.** Volaba al centro del país, de modo que
+deshacer una búsqueda deshacía también toda la navegación: quien estaba mirando
+el detalle de una vereda tenía que volver a buscarla a mano. Borrar es quitar el
+polígono, sus vértices y los botones de la búsqueda; nada más.
+
+**Las etiquetas dejaron de depender de un umbral de zoom.** Salían a partir del
+15 y los polígonos se cargan desde el 10: entre esos dos zooms se veían las
+figuras sin poder saber de qué expediente era cada una. El umbral existía por
+una razón real —apiñadas son un borrón—, pero trata igual a un título de 5.000 ha
+y a uno de 20.
+
+La regla nueva cabe en una frase: **se etiqueta el polígono en el que la etiqueta
+cabe**. Si el código no cabe dentro de la figura en pantalla, la etiqueta se
+saldría por fuera y señalaría a otro sitio. Y entre dos que se pisan sobrevive la
+de mayor superficie, porque superpuestas no se lee ninguna de las dos. El efecto
+es el natural: al alejarse desaparecen primero las pequeñas, al acercarse van
+apareciendo. Vive en `utils/labelPlacement.js`, es puro y tiene sus pruebas; es
+lo que MapLibre hace solo con sus capas `symbol`, que aquí no se pueden usar
+—ver el encabezado de `mapLabelsGL.js` para el porqué—.
+
+Dos detalles que hacen que salga barato: el punto y el recuadro de cada figura se
+calculan una sola vez al llegar los datos —encontrar un punto interior de un
+polígono con huecos es lo caro de todo esto—, y las etiquetas se recolocan al
+terminar un zoom sin volver a consultar a la ANM, porque los polígonos son los
+mismos, solo se ven de otro tamaño.
+
+**El fondo de partida ahora es el gris claro de CARTO.** Lo primero que este
+visor tiene que dejar ver son los títulos, y sobre la imagen de satélite un
+polígono marrón semitransparente compite con el terreno y sus contornos se
+pierden. La imagen se enciende cuando ya se sabe dónde mirar. De paso se
+reescribieron los cinco nombres y las cinco descripciones, que tenían un tono
+de conversación —«el callejero de siempre»— y decían cosas que no interesan.
+
+**Un fallo del simulacro, no del visor, que conviene tener anotado.** El buscador
+de expedientes pide `f=geojson`, que ArcGIS sabe devolver directamente, mientras
+que las capas piden `f=json` y traducen. El simulacro contestaba siempre en el
+formato de Esri, así que el resultado de la búsqueda llegaba sin `geometry.type`:
+no se dibujaban los vértices y la etiqueta reventaba. El servicio real sí
+distingue, pero un simulacro que miente en el formato esconde justo la parte que
+había que comprobar.
+
+**Comprobado**: 240 pruebas unitarias (9 nuevas para la colocación de etiquetas)
+y 30 comprobaciones en navegador para esta tanda, con capturas.

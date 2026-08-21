@@ -117,6 +117,10 @@ export const BASEMAP_SOURCES = {
 /**
  * Los fondos que ofrece el visor.
  *
+ * `short` es el nombre para el distintivo del botón del mapa: ahí solo caben
+ * unos pocos caracteres, y «Imagen satelital Esri» estiraba el botón hasta
+ * descuadrar la columna entera de controles.
+ *
  * `labels` dice qué se puede hacer con los nombres:
  *   "swap"    — hay dos direcciones, una con y otra sin
  *   "overlay" — los nombres son una capa aparte que se superpone
@@ -124,19 +128,31 @@ export const BASEMAP_SOURCES = {
  */
 export const BASEMAPS = [
   {
+    id: "positron",
+    name: "Cartográfico claro",
+    short: "Claro",
+    source: "CARTO",
+    hint: "Base gris de bajo contraste. Los títulos y sus contornos se leen sin competir con el fondo.",
+    labels: "swap",
+    withLabels: [BASEMAP_LAYERS.cartoLabels],
+    withoutLabels: [BASEMAP_LAYERS.cartoPlain],
+  },
+  {
     id: "satellite",
-    name: "Satélite",
+    name: "Imagen satelital",
+    short: "Satélite",
     source: "Google",
-    hint: "El de mayor detalle en ciudades y cabeceras.",
+    hint: "Máxima resolución disponible en cascos urbanos y cabeceras municipales.",
     labels: "swap",
     withLabels: [BASEMAP_LAYERS.googleHybrid],
     withoutLabels: [BASEMAP_LAYERS.googlePlain],
   },
   {
     id: "esri",
-    name: "Satélite Esri",
+    name: "Imagen satelital Esri",
+    short: "Esri",
     source: "Esri · Maxar",
-    hint: "Otras fechas de toma que Google: comparar las dos delata actividad reciente.",
+    hint: "Fechas de toma distintas a las de Google. Útil cuando una zona sale con nubes o desactualizada.",
     labels: "overlay",
     withLabels: [BASEMAP_LAYERS.esriImagery, BASEMAP_LAYERS.esriReference],
     withoutLabels: [BASEMAP_LAYERS.esriImagery],
@@ -144,33 +160,34 @@ export const BASEMAPS = [
   {
     id: "topo",
     name: "Topográfico",
+    short: "Topo",
     source: "OpenTopoMap",
-    hint: "Curvas de nivel y sombreado. Hasta zoom 17.",
+    hint: "Curvas de nivel, sombreado del relieve y drenajes sobre base cartográfica.",
     labels: "fixed",
     withLabels: [BASEMAP_LAYERS.topo],
     withoutLabels: [BASEMAP_LAYERS.topo],
   },
   {
-    id: "positron",
-    name: "Claro",
-    source: "CARTO",
-    hint: "Gris muy claro: los títulos destacan sin pelearse con el fondo.",
-    labels: "swap",
-    withLabels: [BASEMAP_LAYERS.cartoLabels],
-    withoutLabels: [BASEMAP_LAYERS.cartoPlain],
-  },
-  {
     id: "osm",
-    name: "Mapa",
+    name: "Callejero",
+    short: "Calles",
     source: "OpenStreetMap",
-    hint: "El callejero de siempre.",
+    hint: "Vías, veredas y topónimos. El más completo para ubicarse por nombres de lugar.",
     labels: "fixed",
     withLabels: [BASEMAP_LAYERS.osm],
     withoutLabels: [BASEMAP_LAYERS.osm],
   },
 ]
 
-export const DEFAULT_BASEMAP = "satellite"
+/**
+ * El fondo de partida.
+ *
+ * Es el gris claro de CARTO y no la imagen de satélite, porque lo primero que
+ * este visor tiene que dejar ver son los títulos: sobre la imagen, un polígono
+ * marrón semitransparente compite con el terreno que hay debajo, y los
+ * contornos se pierden. La imagen se enciende cuando ya se sabe dónde mirar.
+ */
+export const DEFAULT_BASEMAP = "positron"
 
 const BY_ID = new Map(BASEMAPS.map((basemap) => [basemap.id, basemap]))
 
