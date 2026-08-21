@@ -379,6 +379,42 @@ const SliderRow = ({ id, label, title, value, display, min, max, step, onChange 
 )
 
 /**
+ * Un aviso sobre el mapa.
+ *
+ * Los tres que hay —zoom insuficiente, respuesta recortada y modelo de
+ * elevación caído— eran píldoras redondas con tres estilos distintos entre sí y
+ * ninguno igual al resto de la interfaz. Ahora comparten forma, tamaño y
+ * tipografía; lo único que cambia es el color, que es lo que de verdad
+ * distingue un dato de una advertencia.
+ */
+const MapNotice = ({ tone = "info", icon: Icon, children, onClose }) => {
+  const tonos = {
+    info: "border-slate-200 bg-white text-slate-700",
+    warning: "border-amber-200 bg-amber-50 text-amber-900",
+  }
+
+  return (
+    <div
+      role="status"
+      className={`flex items-center gap-2.5 rounded-lg border py-2 pl-3 pr-2 text-[13px] shadow-lg ${tonos[tone]}`}
+    >
+      {Icon && <Icon className="h-4 w-4 shrink-0 opacity-70" />}
+      <span className="leading-snug">{children}</span>
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar el aviso"
+          className="rounded p-1 opacity-60 transition-opacity hover:bg-black/5 hover:opacity-100"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
  * Aviso de cómo se gira el mapa con el ratón.
  *
  * En el celular el 3D se maneja solo: dos dedos y ya. En el navegador hay que
@@ -446,7 +482,7 @@ export default function MapComponentGL({
   // El panel entrega el estado de las capas ya agrupado por clave: encendida,
   // opacidad y colores. Antes llegaban ocho props sueltas que había que volver a
   // juntar aquí con dos useMemo.
-  const { showZoomInHint, truncatedLayers, loadedProperties, loadedFeatures } = useMapLayersGL(
+  const { showZoomInHint, truncatedLayers, loadedFeatures } = useMapLayersGL(
     mapRef,
     mapInstance,
     layerState,
@@ -462,11 +498,10 @@ export default function MapComponentGL({
   // llamada porque las tres cosas cambian a la vez.
   useEffect(() => {
     onLayerData?.({
-      properties: loadedProperties,
       features: loadedFeatures,
       truncated: truncatedLayers,
     })
-  }, [loadedProperties, loadedFeatures, truncatedLayers, onLayerData])
+  }, [loadedFeatures, truncatedLayers, onLayerData])
 
   const {
     drawingColor,
@@ -525,6 +560,8 @@ export default function MapComponentGL({
     pitch,
     changePitch,
     elevationAt,
+    terrainError,
+    dismissTerrainError,
   } = useTerrainGL(mapRef, mapInstance)
 
   // El aviso de "arrastra con Ctrl" solo tiene sentido con ratón: en una
@@ -899,21 +936,32 @@ export default function MapComponentGL({
         />
       )}
 
-      {showZoomInHint && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/95 text-gray-700 text-sm px-4 py-2 rounded-full shadow-md">
-          Acerca el mapa para ver las capas de títulos y solicitudes
-        </div>
-      )}
+      {/* Los avisos van apilados en una sola columna centrada abajo. Estaban
+          sueltos en dos alturas fijas, y cuando salían los dos a la vez, uno se
+          montaba sobre la lectura del cursor. */}
+      <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 flex w-[min(30rem,calc(100%-2rem))] -translate-x-1/2 flex-col items-center gap-2">
+        {terrainError && (
+          <div className="pointer-events-auto">
+            <MapNotice tone="warning" icon={Mountain} onClose={dismissTerrainError}>
+              {terrainError}
+            </MapNotice>
+          </div>
+        )}
 
-      {/* ArcGIS recorta la respuesta sin decirlo. Sin este aviso, el usuario
-          creería estar viendo todos los títulos del área y podría sacar
-          conclusiones sobre una zona a partir de datos incompletos. */}
-      {truncatedLayers.length > 0 && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10 rounded-full bg-amber-100/95 px-4 py-2 text-sm text-amber-900 shadow-md">
-          Hay más polígonos de los que caben en una consulta ({truncatedLayers.join(", ")}). Acerca
-          el mapa para verlos todos.
-        </div>
-      )}
+        {showZoomInHint && (
+          <MapNotice icon={Layers}>Acerca el mapa para ver las capas de títulos y solicitudes</MapNotice>
+        )}
+
+        {/* ArcGIS recorta la respuesta sin decirlo. Sin este aviso, el usuario
+            creería estar viendo todos los títulos del área y podría sacar
+            conclusiones sobre una zona a partir de datos incompletos. */}
+        {truncatedLayers.length > 0 && (
+          <MapNotice tone="warning">
+            Hay más polígonos de los que caben en una consulta ({truncatedLayers.join(", ")}). Acerca
+            el mapa para verlos todos.
+          </MapNotice>
+        )}
+      </div>
 
       {error && showErrorBanner && (
         <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 z-10 flex items-center justify-between gap-2">

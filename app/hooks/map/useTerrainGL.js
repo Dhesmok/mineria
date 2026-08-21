@@ -17,7 +17,7 @@ import { HILLSHADE_LAYER_ID, TERRAIN_SOURCE_ID } from "../../utils/mapStyles"
  */
 
 /** Inclinación de la cámara al entrar en 3D. Ni plano ni tan rasante que se pierda el norte. */
-const PITCH_3D = 60
+const PITCH_3D = 58
 const EXAGGERATION_DEFAULT = 1.5
 export const EXAGGERATION_MIN = 0.5
 export const EXAGGERATION_MAX = 3
@@ -34,8 +34,15 @@ const SKY = {
   "fog-ground-blend": 0.1,
 }
 
-/** Hasta dónde deja inclinarse la cámara. Es el maxPitch con que se crea el mapa. */
-export const PITCH_MAX = 85
+/**
+ * Hasta dónde deja inclinarse la cámara. Es el maxPitch con que se crea el mapa.
+ *
+ * Estaba en 85°. Los últimos grados son los que meten el horizonte dentro de la
+ * pantalla, y con el horizonte entran cientos de teselas lejanas que ocupan
+ * cuatro filas de píxeles: se pagan enteras y no se ven. A 72° el terreno
+ * cercano se sigue leyendo igual de bien y el trabajo baja mucho.
+ */
+export const PITCH_MAX = 72
 
 /**
  * Velocidad del giro continuo, en grados por segundo. Una vuelta completa cada
@@ -43,8 +50,25 @@ export const PITCH_MAX = 85
  */
 const SPIN_DEGREES_PER_SECOND = 10
 
+/**
+ * Cuántas teselas de elevación pueden fallar antes de dar el 3D por perdido.
+ *
+ * Una o dos fallan por mil motivos pasajeros. Cuatro seguidas dentro de la misma
+ * sesión de 3D ya no es mala suerte: es que el servicio no está respondiendo.
+ */
+const TERRAIN_FAILURES_LIMIT = 4
+
 export const useTerrainGL = (mapRef, mapInstance) => {
   const [is3D, setIs3D] = useState(false)
+  /**
+   * El 3D no podía fallar de forma visible.
+   *
+   * Si las teselas de elevación no llegan, MapLibre inclina la cámara igual y
+   * enseña un plano inclinado sin relieve, sin decir nada. «El 3D se ve raro» y
+   * «el 3D no cargó» son problemas distintos con soluciones distintas, y así se
+   * veían igual.
+   */
+  const [terrainError, setTerrainError] = useState(null)
   const [showHillshade, setShowHillshade] = useState(false)
   const [exaggeration, setExaggeration] = useState(EXAGGERATION_DEFAULT)
   // Giro e inclinación actuales de la cámara. Están aquí para que los controles
@@ -79,10 +103,13 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     })
   }, [setHillshadeVisible])
 
+  const dismissTerrainError = useCallback(() => setTerrainError(null), [])
+
   const toggle3D = useCallback(() => {
     const map = mapRef.current
     if (!map) return
 
+    setTerrainError(null)
     setIs3D((current) => {
       const next = !current
 
@@ -90,10 +117,16 @@ export const useTerrainGL = (mapRef, mapInstance) => {
         map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: exaggerationRef.current })
         map.setSky(SKY)
         map.easeTo({ pitch: PITCH_3D, duration: 700 })
-        // El relieve se enciende con el 3D: inclinado y sin sombras, un cerro y
-        // un valle se distinguen mal.
-        setHillshadeVisible(true)
-        setShowHillshade(true)
+        // **El relieve ya no se enciende solo al entrar en 3D.**
+        //
+        // Se encendía porque en vista inclinada, sin sombras, un cerro y un
+        // valle se parecen. Pero el sombreado es una segunda pasada sobre el
+        // mismo modelo de elevación que el terreno ya está usando, y en 3D la
+        // forma del relieve la da la propia geometría: la silueta contra el
+        // cielo y la perspectiva ya dicen qué sube y qué baja.
+        //
+        // Quien lo quiera lo enciende con su botón, y si ya lo tenía encendido
+        // se queda encendido. Lo que se quita es pagarlo sin haberlo pedido.
       } else {
         // `null` y no `undefined`: con undefined, MapLibre entiende "no me
         // digas nada" y deja el terreno puesto.
@@ -107,7 +140,7 @@ export const useTerrainGL = (mapRef, mapInstance) => {
 
       return next
     })
-  }, [mapRef, setHillshadeVisible])
+  }, [mapRef])
 
   const changeExaggeration = useCallback(
     (value) => {
@@ -275,6 +308,40 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     [mapRef],
   )
 
+  /**
+   * Vigila que el modelo de elevación esté llegando de verdad.
+   *
+   * MapLibre avisa de las teselas que no puede cargar por el evento `error`,
+   * con el identificador de la fuente. Solo se cuentan mientras el 3D está
+   * puesto: en 2D, la fuente ni se consulta.
+   */
+  useEffect(() => {
+    if (!mapInstance || !is3D) return
+
+    let fallos = 0
+    const alFallar = (evento) => {
+      if (evento?.sourceId !== TERRAIN_SOURCE_ID) return
+      fallos += 1
+      if (fallos < TERRAIN_FAILURES_LIMIT) return
+
+      // Volver a 2D y no dejar el plano inclinado: una cámara inclinada sobre
+      // un mapa plano no aporta nada y hace pensar que el relieve de esa zona
+      // es llano.
+      setTerrainError("No se pudo cargar el modelo de elevación. El 3D quedó desactivado.")
+      setIs3D(false)
+      try {
+        mapInstance.setTerrain(null)
+        mapInstance.setSky(undefined)
+        mapInstance.easeTo({ pitch: 0, duration: 500 })
+      } catch {
+        // El mapa se estaba destruyendo; no hay nada que devolver a su sitio.
+      }
+    }
+
+    mapInstance.on("error", alFallar)
+    return () => mapInstance.off("error", alFallar)
+  }, [mapInstance, is3D])
+
   // Al desmontar hay que quitar el terreno: si no, MapLibre intenta seguir
   // dibujándolo mientras el mapa se destruye.
   useEffect(() => {
@@ -292,6 +359,8 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     elevationAt,
     is3D,
     toggle3D,
+    terrainError,
+    dismissTerrainError,
     showHillshade,
     toggleHillshade,
     exaggeration,

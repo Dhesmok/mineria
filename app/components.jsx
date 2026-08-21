@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
 import { ChevronLeft, ChevronDown, Download, RefreshCw, Globe2 } from "lucide-react"
 import ExportComponent from "./ExportComponent"
-import { CRS_LIST, axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
-import { areaById, DEFAULT_ORDER, initialLayerState } from "./utils/themeAreas"
+import { axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
+import { areaById, DEFAULT_ORDER, initialLayerState, layerByKey } from "./utils/themeAreas"
 import { LayerPanel } from "./components/LayerPanel"
 import { AreaFilters } from "./components/AreaFilters"
 import { AttributeTable } from "./components/AttributeTable"
@@ -61,7 +61,7 @@ export default function Component() {
   const [filterScope, setFilterScope] = useState("viewport")
   // Lo que el mapa tiene cargado: atributos para armar el filtro, figuras con su
   // recuadro para la tabla, y qué capas recortó el servicio.
-  const [layerData, setLayerData] = useState({ properties: [], features: [], truncated: [] })
+  const [layerData, setLayerData] = useState({ features: [], truncated: [] })
 
   // Qué ventana flotante está abierta y a qué botón se ancla.
   const [filterPopover, setFilterPopover] = useState(null)
@@ -74,9 +74,14 @@ export default function Component() {
     [areaFilters],
   )
 
+  // Lo que viaja al mapa: el alcance, que es común, y el filtro de cada área.
+  //
+  // Antes viajaba además una copia del de Minería, aplanada, y era esa copia la
+  // que el mapa usaba para todas las capas. Funcionaba solo porque las cuatro
+  // capas conectadas son de Minería.
   const filters = useMemo(
-    () => ({ ...filtroDe("mineria"), scope: filterScope, byArea: areaFilters }),
-    [areaFilters, filterScope, filtroDe],
+    () => ({ scope: filterScope, byArea: areaFilters }),
+    [areaFilters, filterScope],
   )
 
   const areaHasFilter = useCallback(
@@ -101,10 +106,31 @@ export default function Component() {
    * "toda la capa" hay resultados que ni siquiera están en pantalla, y llegar a
    * ellos por la tabla es justamente la gracia.
    */
-  const registrosVisibles = useMemo(() => {
-    const { selections, areaRange } = filtroDe("mineria")
-    return layerData.features.filter((f) => matchesFilters(f.properties, selections, areaRange))
-  }, [layerData.features, filtroDe])
+  const registrosVisibles = useMemo(
+    () =>
+      layerData.features.filter((f) => {
+        // Cada figura se juzga con el filtro de su propia área, no con el de
+        // Minería para todas.
+        const { selections, areaRange } = filtroDe(layerByKey(f.layerKey)?.areaId)
+        return matchesFilters(f.properties, selections, areaRange)
+      }),
+    [layerData.features, filtroDe],
+  )
+
+  /**
+   * Los atributos de lo cargado que pertenece a un área.
+   *
+   * Es con lo que la ventana de filtros arma sus opciones. Estaba escrito como
+   * «si el área es Minería, todo lo cargado; si no, nada»: correcto hoy, y
+   * equivocado en cuanto se conecte la primera capa de otra área.
+   */
+  const propiedadesDelArea = useCallback(
+    (areaId) =>
+      layerData.features
+        .filter((f) => layerByKey(f.layerKey)?.areaId === areaId)
+        .map((f) => f.properties),
+    [layerData.features],
+  )
 
   /** Llevar el mapa hasta un registro elegido en la tabla. */
   const enfocarRegistro = useCallback((registro) => {
@@ -153,13 +179,11 @@ export default function Component() {
     setShowToggle(true)
   }, [])
 
-  const handleShowCoordinates = () => {
-    if (coordinatesAvailable) {
-      setShowTable(true)
-    } else {
-      alert("No hay coordenadas disponibles para mostrar.")
-    }
-  }
+  // Era un `alert()`: el único diálogo del sistema operativo en toda la
+  // interfaz, y encima bloquea la página hasta cerrarlo. Ahora el botón
+  // sencillamente no aparece cuando no hay coordenadas que enseñar, que es
+  // mejor respuesta que dejar pulsar algo para decir que no se puede.
+  const handleShowCoordinates = () => setShowTable(true)
 
   const handleCloseTable = () => {
     setShowTable(false)
@@ -313,7 +337,7 @@ export default function Component() {
                 <Button
                   variant="outline"
                   onClick={handleShowCoordinates}
-                  className="w-full border text-blue-500 hover:bg-blue-50"
+                  className="w-full border border-slate-200 text-[13px] font-medium text-slate-700 hover:bg-slate-50"
                 >
                   Mostrar coordenadas
                 </Button>
@@ -369,28 +393,20 @@ export default function Component() {
       {showTable && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md m-4">
-            <h2 className="text-2xl font-bold mb-4 text-gray-800">Coordenadas</h2>
-            {/* Eran dos botones con los dos únicos sistemas que había. Ahora son
-                diez —incluidos los orígenes antiguos, donde están inscritos
-                muchos títulos viejos—, y diez botones no caben. El sistema
-                elegido aquí manda también en la exportación a SHP. */}
-            <div className="mb-4">
-              <Label htmlFor="sistema-coordenadas" className="mb-1 block text-sm font-medium">
-                Sistema de coordenadas
-              </Label>
-              <select
-                id="sistema-coordenadas"
-                value={selectedCoordinateSystem}
-                onChange={(event) => setSelectedCoordinateSystem(event.target.value)}
-                className="w-full rounded-md border px-3 py-2 text-sm"
-              >
-                {CRS_LIST.map((crs) => (
-                  <option key={crs.id} value={crs.id}>
-                    {crs.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-500">{crsById(selectedCoordinateSystem).hint}</p>
+            {/* Aquí había una segunda lista desplegable con los diez sistemas,
+                heredada de cuando el panel no tenía la suya. Eran dos mandos
+                para el mismo ajuste, con dos aspectos distintos, y cambiar uno
+                cambiaba el otro sin que se viera. Ahora esto solo dice en qué
+                sistema está la tabla; para cambiarlo se usa el botón del panel,
+                que es el único sitio donde se elige. */}
+            <div className="mb-4 flex items-baseline gap-2">
+              <h2 className="text-xl font-semibold text-slate-900">Coordenadas</h2>
+              <span className="text-[13px] text-slate-500">
+                {crsById(selectedCoordinateSystem).label}
+              </span>
+              <span className="font-mono text-[10px] text-slate-400">
+                EPSG:{selectedCoordinateSystem}
+              </span>
             </div>
             <div className="overflow-auto max-h-[60vh]">
               <Table>
@@ -445,7 +461,7 @@ export default function Component() {
         <AreaFilters
           area={areaById(filterPopover.areaId)}
           anchorRect={filterPopover.rect}
-          properties={filterPopover.areaId === "mineria" ? layerData.properties : []}
+          properties={propiedadesDelArea(filterPopover.areaId)}
           selections={filtroDe(filterPopover.areaId).selections}
           areaRange={filtroDe(filterPopover.areaId).areaRange}
           scope={filterScope}

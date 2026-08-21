@@ -12,6 +12,7 @@ import {
 } from "../../utils/anmLayers"
 import { SEARCH_LAYERS } from "../../utils/mapStyles"
 import { buildMapFilter, buildWhereClause } from "../../utils/layerFilters"
+import { layerByKey } from "../../utils/themeAreas"
 import { bboxOfGeometry } from "../../utils/bboxDownload"
 import { labelElementFor } from "../../utils/mapLabelsGL"
 import { selectVisibleLabels } from "../../utils/labelPlacement"
@@ -42,7 +43,7 @@ const REFRESH_DELAY_MS = 400
  *   porque los cuatro cambian juntos y separarlos solo daba ocasión de que se
  *   descuadraran.
  * @param layerOrder  claves de arriba abajo: la primera se pinta encima de todo.
- * @param filters     {selections, areaRange, scope} — qué filtrar y dónde.
+ * @param filters     {scope, byArea} — dónde filtrar, y el filtro de cada área.
  *   `scope: "viewport"` esconde lo ya cargado, y es instantáneo.
  *   `scope: "layer"` se lo pide al servicio sin recuadro, porque lo que cumple
  *   el filtro puede estar lejísimos de donde se está mirando.
@@ -58,13 +59,14 @@ export const useMapLayersGL = (
 ) => {
   const [isBelowMinZoom, setIsBelowMinZoom] = useState(false)
   const [truncatedLayers, setTruncatedLayers] = useState([])
-  // Los atributos de todo lo que hay cargado ahora mismo. Es lo que llena los
-  // desplegables del filtro: sus opciones se leen de los datos, no de una lista
-  // escrita a mano que se quedaría desfasada en cuanto la ANM cambie una
-  // palabra.
-  const [loadedProperties, setLoadedProperties] = useState([])
-  // Lo mismo, pero con el recuadro de cada figura: es lo que necesita la tabla
-  // de resultados para poder llevar el mapa hasta un registro.
+  // Todo lo que hay cargado ahora mismo: de qué capa viene cada figura, sus
+  // atributos y su recuadro.
+  //
+  // Con eso se hacen las tres cosas que necesita el panel: llenar los
+  // desplegables del filtro con los valores que de verdad están en pantalla,
+  // contar cuántas figuras pasan el filtro, y llevar el mapa hasta una fila de
+  // la tabla. Antes había además una lista de solo atributos; era la misma
+  // información dos veces, y dos veces es una de más.
   const [loadedFeatures, setLoadedFeatures] = useState([])
 
   // Los marcadores de etiqueta vivos, agrupados por capa, para poder quitarlos
@@ -77,8 +79,7 @@ export const useMapLayersGL = (
   // Qué capas tienen datos puestos ahora mismo, para no mandar al worker a
   // vaciar lo que ya está vacío.
   const keysWithDataRef = useRef(new Set())
-  // Los atributos por capa, para reunirlos sin recorrer las fuentes del mapa.
-  const propertiesRef = useRef({})
+  // Las figuras por capa, para reunirlas sin recorrer las fuentes del mapa.
   const featuresRef = useRef({})
   // Punto, recuadro y texto de cada figura: lo que necesita `labelPlacement`
   // para decidir qué etiquetas caben. Se guarda para poder recolocarlas al
@@ -91,6 +92,20 @@ export const useMapLayersGL = (
   // prop, esa función se quedaría viendo el estado del render en que se creó.
   const stateRef = useRef(layerState)
   stateRef.current = layerState
+
+  /**
+   * El filtro que le toca a una capa: el de su área.
+   *
+   * Estaba escrito a mano como «el de Minería», y funcionaba solo porque las
+   * cuatro capas conectadas son de Minería. El día que entrara la primera capa
+   * del SGC o del IGAC, filtrar Geología habría filtrado Minería sin dar ningún
+   * error: la peor clase de fallo, invisible hasta que aparece disfrazado de
+   * otra cosa.
+   */
+  const filtroDeCapa = useCallback((key) => {
+    const areaId = layerByKey(key)?.areaId
+    return filtersRef.current?.byArea?.[areaId] ?? { selections: {}, areaRange: null }
+  }, [])
 
   const isOn = (key) => Boolean(layerState[key]?.on)
   const anyLayerEnabled = ANM_LAYERS.some(({ key }) => isOn(key))
@@ -113,8 +128,28 @@ export const useMapLayersGL = (
    * otro no hacía nada hasta que el usuario moviera el mapa.
    */
   const queryFilterSignature = `${filters?.scope ?? "viewport"}|${
-    filters?.scope === "layer" ? buildWhereClause(filters?.selections, filters?.areaRange) ?? "" : ""
+    filters?.scope === "layer"
+      ? ANM_LAYERS.map(({ key }) => {
+          const { selections, areaRange } = filters?.byArea?.[layerByKey(key)?.areaId] ?? {}
+          return `${key}:${buildWhereClause(selections, areaRange) ?? ""}`
+        }).join(";")
+      : ""
   }`
+
+  /**
+   * ¿Hay alguna capa encendida que se esté consultando entera, sin recuadro?
+   *
+   * Es lo que decide si mover el mapa tiene que volver a consultar. Se calcula
+   * en el render y no dentro de `refresh` porque quien la necesita es el efecto
+   * que engancha el oyente de `moveend`.
+   */
+  const barreCapaEntera =
+    filters?.scope === "layer" &&
+    ANM_LAYERS.some(({ key }) => {
+      if (!isOn(key)) return false
+      const { selections, areaRange } = filters?.byArea?.[layerByKey(key)?.areaId] ?? {}
+      return Boolean(buildWhereClause(selections, areaRange))
+    })
 
   const clearLabels = useCallback((key) => {
     const markers = labelMarkersRef.current[key]
@@ -216,18 +251,24 @@ export const useMapLayersGL = (
     // cargados, y volvían a aparecer con datos viejos al reencenderla.
     ANM_LAYERS.filter(({ key }) => !encendida(key)).forEach(({ key }) => {
       clearLayerData(key)
-      delete propertiesRef.current[key]
       delete featuresRef.current[key]
     })
 
-    const filtro = filtersRef.current ?? {}
-    const where = buildWhereClause(filtro.selections, filtro.areaRange)
-    // Solo tiene sentido barrer la capa entera si hay algo que buscar en ella.
-    // Sin filtro, "toda la capa" serían decenas de miles de polígonos que el
+    const scope = filtersRef.current?.scope ?? "viewport"
+    // El `where` de cada capa sale del filtro de su área, no de uno común.
+    // Solo tiene sentido barrer la capa entera si hay algo que buscar en ella:
+    // sin filtro, "toda la capa" serían decenas de miles de polígonos que el
     // servicio recortaría de todos modos.
-    const barrerCapa = filtro.scope === "layer" && Boolean(where)
+    const whereDe = (key) => {
+      if (scope !== "layer") return null
+      const { selections, areaRange } = filtroDeCapa(key)
+      return buildWhereClause(selections, areaRange)
+    }
+    // ¿Alguna capa encendida se va a consultar completa? Eso decide si el zoom
+    // mínimo aplica: barrer el país no depende de lo que se esté mirando.
+    const barrerAlguna = activeLayers.some(({ key }) => Boolean(whereDe(key)))
 
-    const belowMinZoom = !barrerCapa && map.getZoom() < LAYERS_MIN_ZOOM
+    const belowMinZoom = !barrerAlguna && map.getZoom() < LAYERS_MIN_ZOOM
     setIsBelowMinZoom(belowMinZoom)
 
     if (belowMinZoom || activeLayers.length === 0) {
@@ -236,7 +277,6 @@ export const useMapLayersGL = (
       // se ven como manchas sueltas sin contexto.
       activeLayers.forEach(({ key }) => clearLayerData(key))
       setTruncatedLayers([])
-      setLoadedProperties([])
       setLoadedFeatures([])
       return
     }
@@ -271,18 +311,18 @@ export const useMapLayersGL = (
             layerUrl = tenureLayerUrl(layerNumber)
           }
 
+          const where = whereDe(key)
           const result = await fetchLayerFeatures(
             layerUrl,
-            barrerCapa ? null : box,
+            where ? null : box,
             { signal: controller.signal },
-            barrerCapa ? where : null,
+            where,
           )
           if (isStale() || !mapRef.current) return
 
           mapRef.current.getSource(anmSourceId(key))?.setData(result.featureCollection)
           keysWithDataRef.current.add(key)
           labelCandidatesRef.current[key] = labelCandidatesFor(key, result.featureCollection)
-          propertiesRef.current[key] = result.featureCollection.features.map((f) => f.properties ?? {})
           // El recuadro se calcula una vez, al llegar los datos, y no cada vez
           // que se abre la tabla: recorrer los vértices de dos mil polígonos en
           // el momento de pulsar un botón se nota.
@@ -301,7 +341,6 @@ export const useMapLayersGL = (
       // a quién solo se puede decidir viéndolas juntas.
       redrawLabels()
       setTruncatedLayers(truncated)
-      setLoadedProperties(activeLayers.flatMap(({ key }) => propertiesRef.current[key] ?? []))
       setLoadedFeatures(activeLayers.flatMap(({ key }) => featuresRef.current[key] ?? []))
     } catch (error) {
       // Abortar es lo normal cuando el usuario sigue moviendo el mapa; no es un
@@ -311,7 +350,7 @@ export const useMapLayersGL = (
       setShowErrorBanner(true)
       setError(`Error al actualizar las capas del mapa: ${error.message}`)
     }
-  }, [clearLayerData, labelCandidatesFor, mapRef, redrawLabels, setError, setShowErrorBanner])
+  }, [clearLayerData, filtroDeCapa, labelCandidatesFor, mapRef, redrawLabels, setError, setShowErrorBanner])
 
   const debouncedRefresh = useMemo(() => debounce(() => refresh(), REFRESH_DELAY_MS), [refresh])
 
@@ -375,13 +414,15 @@ export const useMapLayersGL = (
     const map = mapRef.current
     if (!map) return
 
-    // Cuando el filtro se le pidió al servicio, lo que llegó ya cumple: volver a
-    // esconder por encima no cambiaría nada y solo daría trabajo al motor.
-    const expresion =
-      filters?.scope === "layer" ? null : buildMapFilter(filters?.selections, filters?.areaRange)
-
     ANM_LAYERS.forEach(({ key }) => {
       if (!map.getLayer(anmFillLayerId(key))) return
+
+      // Cuando el filtro se le pidió al servicio, lo que llegó ya cumple: volver
+      // a esconder por encima no cambiaría nada y solo daría trabajo al motor.
+      const { selections, areaRange } = filters?.byArea?.[layerByKey(key)?.areaId] ?? {}
+      const expresion =
+        filters?.scope === "layer" ? null : buildMapFilter(selections, areaRange)
+
       map.setFilter(anmFillLayerId(key), expresion)
       map.setFilter(anmLineLayerId(key), expresion)
     })
@@ -403,14 +444,72 @@ export const useMapLayersGL = (
     refresh()
   }, [mapInstance, visibilitySignature, queryFilterSignature, refresh])
 
-  // Y cada vez que cambia el área visible.
+  // Y cada vez que cambia el área visible... salvo cuando no hace falta.
+  //
+  // Con el filtro en "toda la capa" la consulta ignora el recuadro a propósito:
+  // mover el mapa no cambia el resultado. Aun así se relanzaba en cada arrastre,
+  // y con cuatro capas encendidas eso son cuatro consultas nacionales por gesto,
+  // para volver a recibir exactamente lo mismo. Además de la espera, es la clase
+  // de tráfico por la que un servicio empieza a cortar peticiones.
   useEffect(() => {
-    if (!mapInstance) return
+    if (!mapInstance || barreCapaEntera) return
     mapInstance.on("moveend", debouncedRefresh)
     return () => {
       mapInstance.off("moveend", debouncedRefresh)
+      // Y se anula la que estuviera esperando: si no, el temporizador ya en
+      // marcha dispara una consulta más justo después de desengancharse.
+      debouncedRefresh.cancel()
     }
-  }, [mapInstance, debouncedRefresh])
+  }, [mapInstance, debouncedRefresh, barreCapaEntera])
+
+  /**
+   * Las etiquetas se apartan mientras la cámara se mueve sobre terreno 3D.
+   *
+   * Cada etiqueta es un nodo del documento que MapLibre recoloca en cada
+   * fotograma, y **con el terreno puesto cada recolocación consulta además la
+   * altura de ese punto**. Con ciento cincuenta etiquetas eso son ciento
+   * cincuenta consultas de altura por fotograma, y es la razón principal de que
+   * girar en 3D se sienta pesado. En 2D no pasa: mover un nodo es barato, y ver
+   * las etiquetas viajar con el mapa es la respuesta que uno espera.
+   *
+   * Volver a ponerlas va aplazado a propósito. El giro en bucle dispara un
+   * `moveend` por fotograma, así que restaurarlas en cada uno sería peor que no
+   * apartarlas: con el aplazamiento, se quedan fuera mientras gira y vuelven
+   * cuando de verdad se para.
+   */
+  const etiquetasApartadasRef = useRef(false)
+
+  const restaurarEtiquetas = useMemo(
+    () =>
+      debounce(() => {
+        if (!etiquetasApartadasRef.current) return
+        etiquetasApartadasRef.current = false
+        redrawLabels()
+      }, 220),
+    [redrawLabels],
+  )
+
+  useEffect(() => {
+    if (!mapInstance) return
+
+    const alMoverse = () => {
+      // Solo con terreno: es el único caso en que recolocar cuesta caro.
+      if (!mapInstance.getTerrain() || etiquetasApartadasRef.current) return
+      etiquetasApartadasRef.current = true
+      Object.keys(labelMarkersRef.current).forEach((key) => clearLabels(key))
+    }
+
+    mapInstance.on("movestart", alMoverse)
+    mapInstance.on("move", alMoverse)
+    mapInstance.on("moveend", restaurarEtiquetas)
+
+    return () => {
+      mapInstance.off("movestart", alMoverse)
+      mapInstance.off("move", alMoverse)
+      mapInstance.off("moveend", restaurarEtiquetas)
+      restaurarEtiquetas.cancel()
+    }
+  }, [mapInstance, clearLabels, restaurarEtiquetas])
 
   // Recolocar las etiquetas al terminar un zoom, sin esperar a la consulta.
   //
@@ -512,7 +611,6 @@ export const useMapLayersGL = (
     truncatedLayers,
     // Los atributos de lo cargado: con esto el panel arma las opciones del
     // filtro a partir de lo que hay, no de una lista inventada.
-    loadedProperties,
     loadedFeatures,
   }
 }
