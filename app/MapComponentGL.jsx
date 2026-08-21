@@ -20,9 +20,12 @@ import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } 
 import { COMPASS_SIZE_MAX, COMPASS_SIZE_MIN } from "./hooks/map/useGeolocationGL"
 import { basemapById } from "./utils/basemaps"
 import { readPreferences } from "./utils/preferences"
+import { crsById } from "./utils/crs"
+import { ANM_LAYERS } from "./utils/anmLayers"
 import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
 import { DrawToolbar } from "./components/DrawToolbar"
+import { ImageExport } from "./components/ImageExport"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
@@ -31,6 +34,7 @@ import {
   Crosshair,
   Download,
   Loader2,
+  ImageDown,
   Layers,
   Mountain,
   Play,
@@ -110,6 +114,7 @@ export default function MapComponentGL({
 
   const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
   const [basemapPicker, setBasemapPicker] = useState(null)
+  const [exportandoImagen, setExportandoImagen] = useState(false)
 
   // El panel entrega el estado de las capas ya agrupado por clave: encendida,
   // opacidad y colores. Antes llegaban ocho props sueltas que había que volver a
@@ -273,6 +278,10 @@ export default function MapComponentGL({
       // mientras el deslizador ya usaba la constante, así que bajarla no bajaba
       // nada —arrastrando con Ctrl se seguía llegando a 85—.
       maxPitch: PITCH_MAX,
+      // Sin esto, leer el lienzo devuelve una imagen en negro: WebGL descarta
+      // el búfer en cuanto termina de pintar, salvo que se le pida guardarlo.
+      // Es lo que hace posible exportar el mapa como imagen.
+      preserveDrawingBuffer: true,
       // La atribución propia de MapLibre se queda, en versión compacta: las
       // condiciones de uso de OSM la exigen. `false` la quitaría del todo.
       attributionControl: { compact: true },
@@ -514,6 +523,14 @@ export default function MapComponentGL({
           </MapButton>
         )}
 
+        <MapButton
+          onClick={() => setExportandoImagen(true)}
+          icon={ImageDown}
+          title="Guardar el mapa como imagen, sin los controles"
+        >
+          Exportar imagen
+        </MapButton>
+
         {/* Se llamaba «Satélite» y alternaba entre dos fondos. Con cinco, un
             botón que va rotando obliga a pasar por todos para llegar al que se
             quiere, así que ahora abre una lista.
@@ -569,6 +586,16 @@ export default function MapComponentGL({
       <CursorCoordinates map={mapInstance} crsId={coordinateSystem} />
 
       {showRotateHint && <RotateHint onClose={hideRotateHint} />}
+
+      {exportandoImagen && (
+        <ImageExport
+          map={mapInstance}
+          crs={crsById(coordinateSystem)}
+          layerNames={ANM_LAYERS.filter(({ key }) => layerState[key]?.on).map((l) => l.label)}
+          sources={["Agencia Nacional de Minería", basemapById(basemap).source]}
+          onClose={() => setExportandoImagen(false)}
+        />
+      )}
 
       {basemapPicker && (
         <BasemapPicker
