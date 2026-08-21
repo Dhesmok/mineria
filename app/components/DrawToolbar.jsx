@@ -80,6 +80,8 @@ export const DrawToolbar = ({
   onColorChange,
   hasSelection,
   summary,
+  /** Recogido: solo los iconos, sin los nombres ni las medidas. */
+  compact = false,
 }) => {
   // La paleta arranca recogida: quien dibuja ya sabe de qué color va, y lo
   // normal es no tocarla. Desplegada mide más que las tres herramientas juntas.
@@ -100,7 +102,8 @@ export const DrawToolbar = ({
           name={name}
           // Con algo dibujado, el total sustituye a la explicación: ya no hace
           // falta decir qué mide, hace falta decir cuánto va.
-          hint={totalFor(id, summary) ?? what}
+          hint={compact ? null : totalFor(id, summary) ?? what}
+          compact={compact}
           active={mode === id}
           onClick={() => startMode(id)}
         />
@@ -111,7 +114,8 @@ export const DrawToolbar = ({
       <MapMenuItem
         icon={Trash2}
         name={hasSelection ? "Borrar lo seleccionado" : "Borrar todo el dibujo"}
-        hint={hasSelection ? "Solo la figura elegida" : "Las figuras y sus medidas"}
+        hint={compact ? null : hasSelection ? "Solo la figura elegida" : "Las figuras y sus medidas"}
+        compact={compact}
         disabled={!hasDrawings(summary)}
         onClick={deleteSelected}
       />
@@ -149,8 +153,12 @@ export const DrawToolbar = ({
             />
           </button>
 
+          {/* Sobre gris, y metida en su propio recuadro. En blanco, desplegar
+              la paleta parecía que al panel le hubieran salido más filas; con
+              fondo propio se lee como lo que es, una zona que se abre debajo de
+              la fila que la gobierna. */}
           {paletaAbierta && (
-            <div className="px-2.5 pb-1 pt-1">
+            <div className="mx-1 mb-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
               <div className="grid grid-cols-7 gap-1.5">
                 {DRAW_PALETTE.map((swatch) => {
                   const elegido = swatch.toLowerCase() === String(drawingColor).toLowerCase()
@@ -162,7 +170,7 @@ export const DrawToolbar = ({
                       title={swatch}
                       aria-label={`Usar el color ${swatch}`}
                       aria-pressed={elegido}
-                      className="flex h-7 w-7 items-center justify-center rounded-md transition-transform hover:scale-110"
+                      className="flex h-7 w-7 items-center justify-center rounded-md bg-white transition-transform hover:scale-110"
                       style={{
                         backgroundColor: swatch,
                         border: `1.5px solid ${darken(swatch, 0.35)}`,
@@ -176,7 +184,7 @@ export const DrawToolbar = ({
                 })}
               </div>
 
-              <label className="mt-2.5 flex items-center gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-500">
+              <label className="mt-2.5 flex items-center gap-2 border-t border-slate-200 pt-2 text-[11px] text-slate-500">
                 <input
                   type="color"
                   value={drawingColor}

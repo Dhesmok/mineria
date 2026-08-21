@@ -61,9 +61,17 @@ describe("themeAreas", () => {
     AREAS.forEach((area) => expect(typeof area.searchable).toBe("boolean"))
   })
 
-  it("cada área tiene tres trazos de icono", () => {
+  it("cada área trae un icono dibujable y su color", () => {
+    // Antes esto exigía exactamente tres trazos, que no era una propiedad de
+    // nada: solo el número que resultó tener el primer icono. Al cambiar el de
+    // Minería por un pico —cuatro trazos— la prueba falló sin que nada estuviera
+    // mal. Lo que sí importa es que haya trazos y que sean rutas válidas: el
+    // panel los mete tal cual en un `<path d=…>`, y una cadena que no empiece
+    // por un comando de dibujo no pinta nada y no avisa.
     AREAS.forEach((area) => {
-      expect(area.icon).toHaveLength(3)
+      const trazos = area.icon.filter(Boolean)
+      expect(trazos.length).toBeGreaterThan(0)
+      trazos.forEach((d) => expect(d).toMatch(/^[Mm]\s*-?[\d.]/))
       expect(area.color).toMatch(/^#[0-9A-Fa-f]{6}$/)
     })
   })

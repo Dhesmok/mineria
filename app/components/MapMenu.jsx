@@ -90,10 +90,14 @@ export const MapMenuPanel = ({ label, anchorRect, anchorEl, onClose, children, w
  * Lo encendido se marca con el fondo oscuro de los botones del mapa, para que
  * «activo» se vea igual en todas partes.
  */
-export const MapMenuItem = ({ icon: Icon, name, hint, active, badge, ...props }) => (
+export const MapMenuItem = ({ icon: Icon, name, hint, active, badge, compact, ...props }) => (
   <button
     type="button"
     aria-pressed={active}
+    // Recogida, la fila es solo el icono, así que el nombre tiene que seguir
+    // estando en el nombre accesible y en el rótulo emergente: es lo único que
+    // queda para saber qué hace.
+    aria-label={name}
     title={hint ? `${name} — ${hint}` : name}
     {...props}
     className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
@@ -101,7 +105,7 @@ export const MapMenuItem = ({ icon: Icon, name, hint, active, badge, ...props })
     }`}
   >
     {Icon && <Icon className="h-4 w-4 shrink-0" />}
-    <span className="min-w-0 flex-1">
+    <span className={`min-w-0 flex-1 ${compact ? "sr-only" : ""}`}>
       <span className="block text-[13px] font-medium leading-tight">{name}</span>
       {hint && (
         <span

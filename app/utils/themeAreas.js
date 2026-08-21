@@ -35,11 +35,20 @@ export const AREAS = [
     source: "ANM",
     color: "#894444",
     searchable: true,
-    icon: [
-      "M13.8 2.6 21.4 10.2",
-      "M10.6 7.2 3.6 14.2a2.9 2.9 0 0 0 4.1 4.1l7-7",
-      "M17.4 7.4 20.6 4.2",
-    ],
+    /**
+     * Un pico: cabeza curva y mango en diagonal.
+     *
+     * El anterior eran tres trazos diagonales sueltos que se leían como una
+     * espada o un instrumento de laboratorio, según a quién se le preguntara: no
+     * decía «minería» a nadie.
+     *
+     * Se probaron cinco candidatos dibujados **al tamaño real, 14 px**, que es
+     * donde se decide: el `Pickaxe` de lucide y un martillo cruzado con pico se
+     * emborronan a ese tamaño —tienen demasiado detalle—, y una gema o un casco
+     * se leen bien pero hablan de minerales o de seguridad, no de la actividad.
+     * Este aguanta los 14 px con tres trazos.
+     */
+    icon: ["M7 20.5 14.6 8.4", "M4.6 8.6a11 11 0 0 1 15.6 2.2", "M11.4 6.4 17.6 10.2"],
   },
   {
     id: "geologia",
