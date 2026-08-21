@@ -35,6 +35,7 @@ import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReado
 import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
   Box,
+  ChevronLeft,
   Compass,
   Crosshair,
   Download,
@@ -112,6 +113,7 @@ export default function MapComponentGL({
   // El dibujo no es una ventana anclada como las demás: es un panel que se
   // arrastra y se queda puesto mientras se trabaja, así que su estado es aparte.
   const [dibujoAbierto, setDibujoAbierto] = useState(false)
+  const [dibujoCompacto, setDibujoCompacto] = useState(false)
   const [exportandoImagen, setExportandoImagen] = useState(false)
   // La consulta de terreno se declara aquí arriba y no junto a su hook: quien
   // primero la necesita es `useMapLayersGL`, para callar la ficha del polígono
@@ -469,7 +471,7 @@ export default function MapComponentGL({
       >
         <div className="flex flex-col items-end gap-2">
           {is3D && (
-            <FloatingPanel title="Vista 3D" icon={Box}>
+            <FloatingPanel title="Opciones 3D" icon={Box}>
               <div className="space-y-1.5">
                 <SliderRow
                   id="exageracion"
@@ -546,8 +548,26 @@ export default function MapComponentGL({
               icon={PencilRuler}
               collapsible={false}
               onRequestClose={() => setDibujoAbierto(false)}
+              // Recoger deja solo los iconos. Cuando ya se sabe cuál es cuál,
+              // los nombres y las medidas ocupan sitio sobre el mapa sin
+              // aportar nada; y quien todavía no lo sabe, los despliega.
+              headerAction={
+                <button
+                  type="button"
+                  onClick={() => setDibujoCompacto((compacto) => !compacto)}
+                  aria-expanded={!dibujoCompacto}
+                  aria-label={dibujoCompacto ? "Desplegar las herramientas" : "Recoger las herramientas"}
+                  title={dibujoCompacto ? "Desplegar" : "Recoger a solo iconos"}
+                  className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                >
+                  <ChevronLeft
+                    className={`h-3.5 w-3.5 transition-transform ${dibujoCompacto ? "rotate-180" : ""}`}
+                  />
+                </button>
+              }
             >
               <DrawToolbar
+                compact={dibujoCompacto}
                 mode={mode}
                 startMode={startMode}
                 deleteSelected={deleteSelected}
