@@ -27,6 +27,7 @@ import { ANM_LAYERS } from "./utils/anmLayers"
 import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
 import { DrawToolbar } from "./components/DrawToolbar"
+import { MapMenuItem, MapMenuPanel, MapMenuSeparator } from "./components/MapMenu"
 import { ImageExport } from "./components/ImageExport"
 import { TerrainQuery } from "./components/TerrainQuery"
 import { TerrainRasterLegend } from "./components/TerrainRasterLegend"
@@ -40,6 +41,7 @@ import {
   Loader2,
   ImageDown,
   MountainSnow,
+  PencilRuler,
   Triangle,
   Layers,
   Mountain,
@@ -119,7 +121,10 @@ export default function MapComponentGL({
   const [showErrorBanner, setShowErrorBanner] = useState(false)
 
   const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
-  const [basemapPicker, setBasemapPicker] = useState(null)
+  // Qué ventana de la columna está abierta y de qué botón salió. Una sola, y no
+  // un estado por menú: abrir una tiene que cerrar la anterior, y con estados
+  // separados se quedaban dos abiertas, una encima de otra.
+  const [menuAbierto, setMenuAbierto] = useState(null)
   const [exportandoImagen, setExportandoImagen] = useState(false)
   // La consulta de terreno se declara aquí arriba y no junto a su hook: quien
   // primero la necesita es `useMapLayersGL`, para callar la ficha del polígono
@@ -240,6 +245,44 @@ export default function MapComponentGL({
       return siguiente
     })
   }, [setTerrainForQuery])
+
+  /**
+   * Abrir la ventana de un botón, o cerrarla si ya estaba abierta por él.
+   *
+   * Lo segundo importa: sin ello, volver a pulsar el botón la cerraba —por el
+   * clic de fuera— y la abría otra vez en el mismo gesto, así que parecía que no
+   * respondiera.
+   */
+  const abrirMenu = useCallback((id, event) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setMenuAbierto((actual) => (actual?.id === id ? null : { id, rect }))
+  }, [])
+
+  const cerrarMenu = useCallback(() => setMenuAbierto(null), [])
+
+  /**
+   * Qué anuncia cada botón de grupo en su distintivo.
+   *
+   * Agrupar botones tiene un precio: lo que está encendido deja de verse. El
+   * distintivo lo devuelve —«Pendiente», «2 figuras»— para que no haya que abrir
+   * la ventana solo para averiguar en qué estado se quedó el mapa.
+   */
+  const terrenoActivo =
+    terrainMode === "slope"
+      ? "Pendiente"
+      : terrainMode === "aspect"
+        ? "Orientación"
+        : queryingTerrain
+          ? "Consulta"
+          : showHillshade
+            ? "Relieve"
+            : null
+
+  const figurasDibujadas =
+    (drawSummary?.polygons ?? 0) + (drawSummary?.lines ?? 0) + (drawSummary?.points ?? 0)
+  const resumenDibujo = figurasDibujadas
+    ? `${figurasDibujadas} ${figurasDibujadas === 1 ? "figura" : "figuras"}`
+    : null
 
   useEffect(() => {
     if (!mapInstance || !queryingTerrain) return
@@ -543,14 +586,32 @@ export default function MapComponentGL({
           </MapButton>
         )}
 
+        {/* Las herramientas de dibujo. Estaban sueltas sobre el mapa, en una
+            esquina distinta según el tamaño de la pantalla; ahora salen de aquí,
+            que es donde el usuario ya busca lo demás. */}
         <MapButton
-          onClick={toggleHillshade}
-          active={showHillshade}
-          aria-pressed={showHillshade}
-          icon={Mountain}
-          title="Sombrear el relieve sobre el mapa plano"
+          onClick={(event) => abrirMenu("dibujo", event)}
+          active={menuAbierto?.id === "dibujo" || mode.startsWith("draw_")}
+          icon={PencilRuler}
+          badge={resumenDibujo}
+          title="Dibujar y medir polígonos, líneas y puntos"
         >
-          Relieve
+          Dibujo
+        </MapButton>
+
+        {/* Relieve, pendiente, orientación y la consulta de cota eran cuatro
+            botones seguidos que hacen lo mismo: mirar el terreno. Juntos ocupaban
+            casi media columna en un teléfono. El 3D se queda fuera a propósito:
+            es un interruptor que se usa a cada rato y esconderlo tras dos toques
+            sería peor que el problema que se está resolviendo. */}
+        <MapButton
+          onClick={(event) => abrirMenu("terreno", event)}
+          active={menuAbierto?.id === "terreno" || Boolean(terrenoActivo)}
+          icon={Mountain}
+          badge={terrenoActivo}
+          title="Relieve, pendiente, orientación y consulta de cota"
+        >
+          Terreno
         </MapButton>
 
         <MapButton
@@ -561,36 +622,6 @@ export default function MapComponentGL({
           title="Levantar el terreno e inclinar la cámara"
         >
           {is3D ? "Volver a 2D" : "Ver en 3D"}
-        </MapButton>
-
-        <MapButton
-          onClick={() => chooseTerrainMode("slope")}
-          active={terrainMode === "slope"}
-          aria-pressed={terrainMode === "slope"}
-          icon={Triangle}
-          title="Pintar la pendiente del terreno por colores"
-        >
-          Pendiente
-        </MapButton>
-
-        <MapButton
-          onClick={() => chooseTerrainMode("aspect")}
-          active={terrainMode === "aspect"}
-          aria-pressed={terrainMode === "aspect"}
-          icon={Compass}
-          title="Pintar hacia dónde mira cada ladera"
-        >
-          Orientación
-        </MapButton>
-
-        <MapButton
-          onClick={toggleTerrainQuery}
-          active={queryingTerrain}
-          aria-pressed={queryingTerrain}
-          icon={MountainSnow}
-          title="Pulsar en el mapa para leer cota, pendiente y orientación"
-        >
-          Consultar terreno
         </MapButton>
 
         <MapButton
@@ -635,8 +666,8 @@ export default function MapComponentGL({
             encienden y apagan a cada rato. Lo que más se usa queda más cerca
             del pulgar. */}
         <MapButton
-          onClick={(event) => setBasemapPicker(event.currentTarget.getBoundingClientRect())}
-          active={Boolean(basemapPicker)}
+          onClick={(event) => abrirMenu("fondo", event)}
+          active={menuAbierto?.id === "fondo"}
           icon={Layers}
           badge={basemapById(basemap).short}
           title="Elegir el mapa de fondo"
@@ -654,17 +685,6 @@ export default function MapComponentGL({
           Fabio A. Espinosa
         </MapButton>
       </div>
-
-      <DrawToolbar
-        mode={mode}
-        startMode={startMode}
-        deleteSelected={deleteSelected}
-        drawingColor={drawingColor}
-        onColorChange={handleColorChange}
-        hasSelection={selectedIds.length > 0}
-        summary={drawSummary}
-        colors={DRAW_COLORS}
-      />
 
       {/* La caja de escribir coordenadas acompaña a la herramienta de punto: es
           la otra forma de hacer lo mismo. */}
@@ -692,14 +712,66 @@ export default function MapComponentGL({
         />
       )}
 
-      {basemapPicker && (
+      {menuAbierto?.id === "fondo" && (
         <BasemapPicker
           current={basemap}
           showLabels={showLabels}
-          anchorRect={basemapPicker}
+          anchorRect={menuAbierto.rect}
           onChoose={chooseBasemap}
-          onClose={() => setBasemapPicker(null)}
+          onClose={cerrarMenu}
         />
+      )}
+
+      {menuAbierto?.id === "dibujo" && (
+        <DrawToolbar
+          mode={mode}
+          startMode={startMode}
+          deleteSelected={deleteSelected}
+          drawingColor={drawingColor}
+          onColorChange={handleColorChange}
+          hasSelection={selectedIds.length > 0}
+          summary={drawSummary}
+          colors={DRAW_COLORS}
+          anchorRect={menuAbierto.rect}
+          onClose={cerrarMenu}
+        />
+      )}
+
+      {/* Las cuatro formas de mirar el terreno, juntas.
+          Pendiente y orientación se excluyen entre sí —las pinta la misma capa—,
+          así que `chooseTerrainMode` con el modo que ya está puesto lo apaga. */}
+      {menuAbierto?.id === "terreno" && (
+        <MapMenuPanel label="Terreno" anchorRect={menuAbierto.rect} onClose={cerrarMenu}>
+          <MapMenuItem
+            icon={Mountain}
+            name="Relieve"
+            hint="Sombrear los cerros sobre el mapa plano"
+            active={showHillshade}
+            onClick={toggleHillshade}
+          />
+          <MapMenuItem
+            icon={Triangle}
+            name="Pendiente"
+            hint="Pintar la inclinación del terreno por colores"
+            active={terrainMode === "slope"}
+            onClick={() => chooseTerrainMode("slope")}
+          />
+          <MapMenuItem
+            icon={Compass}
+            name="Orientación"
+            hint="Pintar hacia dónde mira cada ladera"
+            active={terrainMode === "aspect"}
+            onClick={() => chooseTerrainMode("aspect")}
+          />
+          <MapMenuSeparator />
+          <MapMenuItem
+            icon={MountainSnow}
+            name="Consultar un punto"
+            hint="Pulsa en el mapa y lee cota, pendiente y orientación"
+            active={queryingTerrain}
+            onClick={toggleTerrainQuery}
+          />
+        </MapMenuPanel>
       )}
 
       {/* Los avisos van apilados en una sola columna centrada abajo. Estaban

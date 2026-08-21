@@ -376,8 +376,17 @@ export default function Component() {
               para un ajuste que se toca una vez. Ahora es un botón que dice cuál
               está puesto; la explicación de cada sistema vive dentro, que es
               donde hace falta. */}
-          <div className="space-y-1.5 border-t pt-3">
-            <Label className="text-sm font-medium">Sistema de coordenadas</Label>
+          {/* Sin filete arriba: separaba de nada —es lo primero del panel— y
+              dejaba una raya suelta bajo el borde de la tarjeta.
+
+              Y el rótulo, con la letra de las barras de área (Minería,
+              Geología…): estaba en 14 px redonda, mientras que todos los demás
+              encabezados del panel son de 11 versalitas. Era el único de su
+              tamaño en la columna, y por eso se leía como de otra aplicación. */}
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500">
+              Sistema de coordenadas
+            </Label>
             <button
               type="button"
               onClick={(event) => setCrsPopover(event.currentTarget.getBoundingClientRect())}

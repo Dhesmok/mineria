@@ -41,6 +41,35 @@ export const anchorToViewport = (anchorRect, size, viewport) => {
 }
 
 /**
+ * Lo mismo, pero para las ventanas que abre la columna de controles del mapa.
+ *
+ * Esa columna vive pegada al borde derecho, así que sus ventanas se abren **al
+ * lado, hacia la izquierda**, y no debajo: debajo se saldrían por abajo en
+ * cuanto el botón esté en la mitad inferior, que es donde están casi todos.
+ * Se alinean por su borde inferior con el del botón, que es lo que hace que la
+ * ventana parezca salir de él.
+ *
+ * @param {DOMRect|Object|null} anchorRect el recuadro del botón que la abre
+ * @param {Object} size {width, height} de la ventana, en píxeles
+ * @param {Object} viewport {width, height} de la pantalla
+ * @returns {{top: number, left: number}} en píxeles, listos para `style`
+ */
+export const anchorToSide = (anchorRect, size, viewport) => {
+  const anchoVentana = size?.width ?? 0
+  const altoVentana = size?.height ?? 0
+  const anchoPantalla = viewport?.width ?? 0
+  const altoPantalla = viewport?.height ?? 0
+
+  const aLaIzquierda = (anchorRect?.left ?? 0) - GAP - anchoVentana
+  const left = Math.max(MARGIN, Math.min(aLaIzquierda, anchoPantalla - anchoVentana - MARGIN))
+
+  const alineadaAbajo = (anchorRect?.bottom ?? 0) - altoVentana
+  const top = Math.max(MARGIN, Math.min(alineadaAbajo, altoPantalla - altoVentana - MARGIN))
+
+  return { top, left }
+}
+
+/**
  * El ancho real que va a tener una ventana declarada como
  * `min(preferido, pantalla − 2·margen)`, que es como están escritas las tres.
  *
