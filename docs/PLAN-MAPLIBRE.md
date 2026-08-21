@@ -209,6 +209,34 @@ herramienta.
       se lean sobre el mapa claro, y la lectura del rumbo dentro de la rosa.
 - [x] Los botones del mapa comparten tipografía, color y forma con el panel.
 
+## Fase 13 — La auditoría, aplicada
+
+Todo lo que salió de `docs/AUDITORIA.md`, hecho.
+
+- [x] **Red de seguridad**: ESLint con `no-undef`, un límite de errores de React
+      que evita la pantalla en blanco, y comprobaciones automáticas en cada
+      pull request.
+- [x] El filtro que llega al mapa es el del área de cada capa, no el de Minería
+      para todas.
+- [x] «Toda la capa» deja de rebarrer el país en cada arrastre del mapa.
+- [x] El 3D avisa cuando el modelo de elevación no llega, y vuelve a 2D.
+- [x] **3D más rápido**: las etiquetas se apartan mientras la cámara se mueve
+      sobre terreno, entrar en 3D ya no enciende el relieve, y la inclinación
+      máxima baja de 85° a 72°.
+- [x] El visor recuerda las preferencias entre visitas.
+- [x] Barra de dibujo nueva: dice qué mide cada herramienta y cuánto llevas.
+- [x] `MapComponentGL` baja de 1.103 a menos de 800 líneas.
+- [x] **Responsive**: el panel es una hoja inferior en el teléfono, los
+      controles se quedan con el icono, y nada baja de 44 px en táctil.
+- [x] **Exportar imagen**, sin controles, eligiendo qué entra y con pie
+      automático de capas, sistema, fecha y fuentes.
+- [x] **Derivados del modelo de elevación**: consulta puntual de cota, pendiente
+      y orientación, y las dos capas de color con su leyenda y su aviso de
+      precisión.
+- [x] Fuera el último `alert()` y la segunda lista de sistemas de coordenadas.
+- [ ] La curvatura queda fuera a propósito: con celdas de 30 m es sobre todo
+      ruido, y un número que parece dato y no lo es hace más daño que no darlo.
+
 ## Fase 12 — Espacio, textos y etiquetas
 
 - [x] Fuera el título «Títulos y Solicitudes»: el panel ya no es solo de la ANM.
@@ -1102,3 +1130,48 @@ había que comprobar.
 
 **Comprobado**: 240 pruebas unitarias (9 nuevas para la colocación de etiquetas)
 y 30 comprobaciones en navegador para esta tanda, con capturas.
+
+### Fase 13, la auditoría aplicada — 2026-08-21
+
+Doce hallazgos y siete propuestas de `docs/AUDITORIA.md`, hechos. Lo que merece
+quedar escrito no es la lista —esa está arriba— sino lo que se aprendió.
+
+**Cuatro fallos que ninguna prueba habría visto, y cómo salieron.**
+
+1. `metersPerPixel` usaba 156.543, la cifra de los mapas de teselas de 256 px.
+   MapLibre define su zoom con teselas de 512, así que a un mismo zoom su escala
+   es la mitad. La barra de escala de la imagen exportada decía «1 km» sobre un
+   tramo de 500 m, y la capa de pendiente daba 30° donde el terreno tenía 50.
+   Salió al pintar un terreno sintético de pendiente conocida y ver que los
+   colores no cuadraban.
+2. Las preferencias rompían la hidratación de Next: el servidor no tiene
+   almacenamiento del navegador, así que pintaba los valores de fábrica mientras
+   el navegador pintaba los guardados, y React tiraba la página entera.
+3. `maxPitch` seguía fijo en 85 mientras el deslizador ya usaba `PITCH_MAX`, de
+   modo que bajar la constante no bajaba nada: con Ctrl se seguía llegando a 85.
+4. `window.matchMedia` no existe en jsdom, y una línea sin comprobarlo tumbó
+   catorce pruebas de golpe.
+
+Los cuatro comparten forma: **el código se lee bien y hace otra cosa**. Es la
+misma familia que el worker de MapLibre y el color de las figuras, y la razón de
+que en este proyecto toda tanda termine con un navegador abierto.
+
+**Lo que el límite de errores ya se ganó.** Al conectar la consulta de terreno,
+su estado quedó declarado después del hook que lo lee, y eso da «Cannot access
+before initialization». Antes habría sido una pantalla en blanco sin más pista;
+ahora salió una tarjeta con la traza y el arreglo llevó un minuto.
+
+**Sobre lo que se pinta del terreno.** Pendiente y orientación no se le piden a
+nadie: se derivan del modelo de elevación en el propio navegador, muestreando la
+pantalla en una rejilla de 8 px. La rejilla es de pantalla y no de terreno para
+que el coste no dependa del zoom. Solo se dibujan con el mapa plano, porque la
+imagen se coloca sobre el rectángulo que se ve y con la cámara inclinada ese
+rectángulo no es un rectángulo en el terreno: la capa saldría estirada señalando
+pendientes donde no las hay. Y llevan pegado, donde se ve, el aviso de que con un
+modelo global de 30 m esto sirve para leer terreno y descartar zonas, no para
+diseño de bancos ni cálculos de estabilidad.
+
+**Comprobado**: 310 pruebas unitarias y cuatro suites de navegador nuevas —
+teléfono, exportación de imagen, consulta de terreno y capas derivadas—, estas
+dos últimas sobre superficies sintéticas de pendiente conocida, porque el proxy
+de la máquina de desarrollo bloquea las teselas de elevación reales.

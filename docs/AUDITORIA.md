@@ -3,6 +3,13 @@
 Repaso completo de la estructura buscando fallos de hoy, deudas que van a doler
 mañana, y por dónde conviene crecer. Escrito después de la Fase 12.
 
+> **Estado: aplicada.** Los doce hallazgos y las siete propuestas se
+> implementaron en la Fase 13; ver `PLAN-MAPLIBRE.md`. Lo único que se dejó
+> fuera, y a propósito, es la curvatura: con celdas de 30 m es sobre todo ruido.
+> El documento se conserva como está —con los problemas en presente— porque su
+> valor no es la lista de tareas sino el razonamiento de por qué cada cosa
+> importaba y qué la delató.
+
 Cada hallazgo lleva la evidencia con la que se encontró. Los que no se
 comprobaron de verdad van marcados como sospecha, no como hecho.
 
