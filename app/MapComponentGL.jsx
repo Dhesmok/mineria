@@ -11,35 +11,40 @@ import {
   EXAGGERATION_MIN,
   PITCH_MAX,
 } from "./hooks/map/useTerrainGL"
+import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
 import { useAreaDownloadGL } from "./hooks/map/useAreaDownloadGL"
 import { useGeolocationGL } from "./hooks/map/useGeolocationGL"
 import { useExpedientSearchGL } from "./hooks/map/useExpedientSearchGL"
 import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } from "./utils/mapStyles"
-import { axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
-import { parseCoordinateInput } from "./utils/coordinateInput"
 import { COMPASS_SIZE_MAX, COMPASS_SIZE_MIN } from "./hooks/map/useGeolocationGL"
-import { basemapById, DEFAULT_BASEMAP } from "./utils/basemaps"
+import { basemapById } from "./utils/basemaps"
+import { readPreferences } from "./utils/preferences"
+import { crsById } from "./utils/crs"
+import { ANM_LAYERS } from "./utils/anmLayers"
 import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
+import { DrawToolbar } from "./components/DrawToolbar"
+import { ImageExport } from "./components/ImageExport"
+import { TerrainQuery } from "./components/TerrainQuery"
+import { TerrainRasterLegend } from "./components/TerrainRasterLegend"
+import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
+import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
   Box,
   Compass,
   Crosshair,
   Download,
   Loader2,
+  ImageDown,
+  MountainSnow,
+  Triangle,
   Layers,
-  MapPin,
   Mountain,
-  Pentagon,
   Play,
-  Rotate3d,
   Square,
-  Spline,
-  Trash2,
   User,
-  X,
 } from "lucide-react"
 
 /**
@@ -71,154 +76,13 @@ import {
 // corre solo antes de cada `npm run dev` y de cada `npm run build`.
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
 
-/**
- * Lectura de la posición del cursor.
- *
- * Va en su propio componente porque el ratón dispara eventos decenas de veces
- * por segundo: así se vuelve a pintar solo este recuadro y no el visor entero.
- *
- * Se expresa en el sistema de coordenadas que esté elegido en el panel, no
- * siempre en grados: si alguien está trabajando en Origen Nacional, leer la
- * posición del ratón en grados le obliga a convertir de cabeza cada vez.
- */
-const CursorCoordinates = ({ map, crsId }) => {
-  const [position, setPosition] = useState(null)
-
-  useEffect(() => {
-    if (!map) return
-
-    // `wrap()` devuelve la longitud al rango -180..180. Sin esto, arrastrar el
-    // mapa dando la vuelta al mundo muestra longitudes como -434°.
-    const handleMove = (event) => setPosition(event.lngLat.wrap())
-    const handleOut = () => setPosition(null)
-
-    map.on("mousemove", handleMove)
-    map.on("mouseout", handleOut)
-
-    return () => {
-      map.off("mousemove", handleMove)
-      map.off("mouseout", handleOut)
-    }
-  }, [map])
-
-  // En pantallas táctiles no hay cursor y nunca llega un mousemove; el recuadro
-  // simplemente no aparece, en vez de quedarse mostrando ceros.
-  if (!position) return null
-
-  const ejes = axisLabels(crsId)
-  const [x, y] = fromGeographic([position.lng, position.lat], crsId)
-
-  return (
-    // Centrada abajo. Estuvo en las dos esquinas inferiores y las dos acabaron
-    // ocupadas: la derecha por los botones y la izquierda por la escala. En el
-    // centro no compite con nada y es donde la vista ya está mirando.
-    <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-slate-200 bg-white/95 px-3 py-1.5 font-mono text-xs tabular-nums text-slate-700 shadow-sm">
-      {ejes.first} {formatCoordinate(y, crsId)} · {ejes.second} {formatCoordinate(x, crsId)}
-    </div>
-  )
-}
 
 /**
- * Escribir una coordenada para marcarla.
+ * Los colores con que se puede dibujar. El primero es el de partida.
  *
- * Vivía en el panel lateral, siempre a la vista, y ahí estorbaba: es algo que se
- * usa de vez en cuando y ocupaba sitio permanente. Ahora sale aquí abajo, en el
- * centro, y solo mientras está activa la herramienta de punto. Así ese botón
- * sirve para las dos formas de marcar un punto —con el ratón sobre el mapa o
- * escribiendo la coordenada—, que son la misma tarea.
- *
- * Dos casillas y no una sola: separar la ordenada de la abscisa evita la
- * ambigüedad de la coma que obligaba a adivinar dónde partía el par. Cada
- * casilla se sigue leyendo con el mismo intérprete, así que dentro de una se
- * puede escribir con coma decimal o en grados, minutos y segundos.
+ * Vive aquí y no en `DrawToolbar` porque quien decide con qué se dibuja es el
+ * hook de dibujo; la barra solo los enseña.
  */
-const CoordinateEntry = ({ crsId, onGo }) => {
-  const [first, setFirst] = useState("")
-  const [second, setSecond] = useState("")
-  const [message, setMessage] = useState(null)
-
-  const ejes = axisLabels(crsId)
-  const crs = crsById(crsId)
-  const ejemplo = crs.projected ? ["2247195", "4713441"] : ["6,2308", "-75,5906"]
-
-  const go = () => {
-    const resultado = parseCoordinateInput(`${first} ${second}`, crsId)
-
-    if (resultado.error) {
-      setMessage({ tone: "error", text: resultado.error })
-      return
-    }
-
-    onGo(resultado.lon, resultado.lat)
-    // Fuera de Colombia no es un error —puede ser a propósito—, pero casi
-    // siempre significa haber intercambiado los dos números.
-    setMessage(
-      resultado.outsideColombia
-        ? { tone: "warning", text: "Ese punto queda fuera de Colombia. Revisa el orden y el sistema." }
-        : null,
-    )
-    setFirst("")
-    setSecond("")
-  }
-
-  const alPulsarEnter = (event) => {
-    if (event.key === "Enter") go()
-  }
-
-  return (
-    <div className="absolute bottom-16 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur">
-      <div className="flex items-end gap-2">
-        {[
-          { label: ejes.first, value: first, set: setFirst, hint: ejemplo[0] },
-          { label: ejes.second, value: second, set: setSecond, hint: ejemplo[1] },
-        ].map((campo) => (
-          <label key={campo.label} className="flex flex-col gap-1">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-              {campo.label}
-            </span>
-            <input
-              value={campo.value}
-              onChange={(event) => {
-                campo.set(event.target.value)
-                setMessage(null)
-              }}
-              onKeyDown={alPulsarEnter}
-              placeholder={campo.hint}
-              aria-label={campo.label}
-              autoComplete="off"
-              className="h-8 w-28 rounded-md border border-slate-200 px-2 font-mono text-[13px] text-slate-900 outline-none focus:border-slate-400"
-            />
-          </label>
-        ))}
-
-        <button
-          type="button"
-          onClick={go}
-          className="h-8 rounded-md bg-slate-900 px-4 text-[13px] font-medium text-white transition-colors hover:bg-slate-700"
-        >
-          Ir
-        </button>
-      </div>
-
-      <p className="mt-1.5 text-[10px] leading-tight text-slate-500">
-        {crs.label}
-        {!crs.projected && " · también entiende grados, minutos y segundos"}
-      </p>
-
-      {message && (
-        <p
-          className={`mt-1 text-[11px] leading-tight ${
-            message.tone === "error" ? "text-red-500" : "text-amber-600"
-          }`}
-        >
-          {message.text}
-        </p>
-      )}
-    </div>
-  )
-}
-
-/** Los colores con que se puede dibujar. El primero es el de partida. */
 const DRAW_COLORS = [
   "#f357a1",
   "#ef4444",
@@ -230,194 +94,6 @@ const DRAW_COLORS = [
   "#ffffff",
 ]
 
-/**
- * Barra de dibujo.
- *
- * Sustituye a las dos barras del visor Leaflet —la de dibujo y la de medición—,
- * que hacían lo mismo: ambas dibujaban. Aquí toda figura muestra su medida al
- * cerrarla, así que una sola barra basta.
- *
- * La paleta va aquí dentro y no en un botón aparte. Antes era un botón "Color"
- * suelto arriba del mapa que abría un desplegable: estaba siempre a la vista,
- * incluso cuando no había nada que colorear, y no se entendía sobre qué actuaba.
- * Ahora aparece solo cuando hay algo que colorear —mientras se dibuja, o con una
- * figura seleccionada— y dice a qué se va a aplicar.
- */
-const DrawToolbar = ({
-  mode,
-  startMode,
-  deleteSelected,
-  drawingColor,
-  onColorChange,
-  hasSelection,
-}) => {
-  const tools = [
-    { id: "draw_polygon", label: "Dibujar polígono y medir su área", Icon: Pentagon },
-    { id: "draw_line_string", label: "Dibujar línea y medir su longitud", Icon: Spline },
-    { id: "draw_point", label: "Marcar puntos y ver sus coordenadas", Icon: MapPin },
-  ]
-
-  const drawing = mode.startsWith("draw_")
-  const showPalette = drawing || hasSelection
-
-  return (
-    <>
-      <div className="absolute top-32 right-4 z-10 flex flex-col gap-1 rounded-md bg-white p-1 shadow-md">
-        {tools.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => startMode(id)}
-            title={`${label}. Pulsa otra vez (o Escape) para salir.`}
-            aria-label={label}
-            // El modo activo se resalta: sin eso no hay forma de saber que el
-            // siguiente clic en el mapa va a empezar una figura.
-            aria-pressed={mode === id}
-            className={`flex h-8 w-8 items-center justify-center rounded ${
-              mode === id ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            <Icon className="h-4 w-4" />
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={deleteSelected}
-          title="Borrar la figura seleccionada, o todo el dibujo si no hay ninguna"
-          aria-label="Borrar figura"
-          className="flex h-8 w-8 items-center justify-center rounded text-gray-700 hover:bg-red-50 hover:text-red-600"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-
-      {showPalette && (
-        <div className="absolute top-32 right-16 z-10 rounded-md bg-white px-2 py-1.5 shadow-md">
-          <p className="mb-1 text-[10px] leading-tight text-gray-500">
-            {hasSelection ? "Color de lo seleccionado" : "Color del dibujo"}
-          </p>
-          <div className="flex gap-1.5">
-            {DRAW_COLORS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => onColorChange(color)}
-                aria-label={`Usar el color ${color}`}
-                aria-pressed={drawingColor === color}
-                className={`h-6 w-6 rounded-full transition-transform hover:scale-110 ${
-                  drawingColor === color
-                    ? "ring-2 ring-gray-800 ring-offset-1"
-                    : "ring-1 ring-gray-300"
-                }`}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </>
-  )
-}
-
-/**
- * Botón de la columna de controles del mapa.
- *
- * Existe porque esos botones venían del componente genérico de la aplicación y
- * el panel de capas se rediseñó aparte: convivían dos tipografías, dos tamaños
- * y dos grises en la misma pantalla. Este reproduce el lenguaje del panel —13
- * píxeles, colores slate, esquinas de 8— para que el visor entero se lea como
- * una sola cosa.
- */
-const MapButton = ({ active, className = "", children, ...props }) => (
-  <button
-    type="button"
-    {...props}
-    className={`flex h-9 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium shadow-sm transition-colors ${
-      active
-        ? "border-slate-300 bg-slate-900 text-white hover:bg-slate-700"
-        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-    } ${className}`}
-  >
-    {children}
-  </button>
-)
-
-/**
- * Una fila de ajuste: nombre, barra y valor, todo en un renglón.
- *
- * Va en horizontal y no con la etiqueta encima porque estos ajustes viven en un
- * panel flotante sobre el mapa, y en vertical ocupaban tanto que la columna de
- * botones acababa montándose sobre el panel lateral. Se vio en una captura: las
- * comprobaciones sobre el estado del mapa daban todas por buenas.
- */
-const SliderRow = ({ id, label, title, value, display, min, max, step, onChange }) => (
-  <div className="flex items-center gap-2">
-    {/* El aviso de que la exageración no cambia ningún dato vivía en un párrafo
-        bajo la barra y era el renglón más alto del panel. Se lee una vez y
-        estorba siempre, así que ahora va en el título de la etiqueta. */}
-    <label
-      htmlFor={id}
-      title={title}
-      className="w-20 shrink-0 text-[11px] leading-tight text-gray-700"
-    >
-      {label}
-    </label>
-    <input
-      id={id}
-      type="range"
-      min={min}
-      max={max}
-      step={step}
-      value={value}
-      onChange={(event) => onChange(parseFloat(event.target.value))}
-      className="min-w-0 flex-1"
-    />
-    <span className="w-11 shrink-0 text-right text-[11px] tabular-nums text-gray-600">
-      {display}
-    </span>
-  </div>
-)
-
-/**
- * Aviso de cómo se gira el mapa con el ratón.
- *
- * En el celular el 3D se maneja solo: dos dedos y ya. En el navegador hay que
- * saber que se arrastra con Ctrl, y eso no está escrito en ninguna parte, así
- * que la primera vez que alguien entra en 3D se queda con un mapa inclinado que
- * no sabe girar. El aviso sale una vez por visita y se va solo.
- *
- * Era una píldora negra de 14 px, la única pieza oscura y redonda de toda la
- * pantalla: se leía como un error del sistema y no como una ayuda. Ahora usa el
- * mismo lenguaje que los botones del mapa —blanco, borde slate, 13 px, esquinas
- * de 8— y solo la tecla va resaltada, que es el único dato que hay que retener.
- */
-const RotateHint = ({ onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 9000)
-    return () => clearTimeout(timer)
-  }, [onClose])
-
-  return (
-    <div className="pointer-events-auto absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-2 text-[13px] text-slate-700 shadow-lg">
-      <Rotate3d className="h-4 w-4 shrink-0 text-slate-400" />
-      <span>
-        Mantén{" "}
-        <kbd className="rounded border border-slate-300 bg-slate-100 px-1.5 py-px font-sans text-[11px] font-semibold text-slate-700">
-          Ctrl
-        </kbd>{" "}
-        y arrastra para girar e inclinar la escena
-      </span>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Cerrar el aviso"
-        className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  )
-}
 
 export default function MapComponentGL({
   onMapInitialized,
@@ -429,6 +105,7 @@ export default function MapComponentGL({
   coordinateSystem,
   filters,
   onLayerData,
+  panelOpen = false,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
@@ -442,11 +119,18 @@ export default function MapComponentGL({
 
   const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
   const [basemapPicker, setBasemapPicker] = useState(null)
+  const [exportandoImagen, setExportandoImagen] = useState(false)
+  // La consulta de terreno se declara aquí arriba y no junto a su hook: quien
+  // primero la necesita es `useMapLayersGL`, para callar la ficha del polígono
+  // mientras está encendida. Declarada más abajo, leerla desde ahí daba
+  // «Cannot access before initialization» y el visor no se pintaba.
+  const [queryingTerrain, setQueryingTerrain] = useState(false)
+  const [terrainResult, setTerrainResult] = useState(null)
 
   // El panel entrega el estado de las capas ya agrupado por clave: encendida,
   // opacidad y colores. Antes llegaban ocho props sueltas que había que volver a
   // juntar aquí con dos useMemo.
-  const { showZoomInHint, truncatedLayers, loadedProperties, loadedFeatures } = useMapLayersGL(
+  const { showZoomInHint, truncatedLayers, loadedFeatures } = useMapLayersGL(
     mapRef,
     mapInstance,
     layerState,
@@ -454,6 +138,7 @@ export default function MapComponentGL({
     filters,
     setError,
     setShowErrorBanner,
+    !queryingTerrain,
   )
 
   // Lo cargado sube al panel, que es donde viven el filtro y la tabla: las
@@ -462,11 +147,10 @@ export default function MapComponentGL({
   // llamada porque las tres cosas cambian a la vez.
   useEffect(() => {
     onLayerData?.({
-      properties: loadedProperties,
       features: loadedFeatures,
       truncated: truncatedLayers,
     })
-  }, [loadedProperties, loadedFeatures, truncatedLayers, onLayerData])
+  }, [loadedFeatures, truncatedLayers, onLayerData])
 
   const {
     drawingColor,
@@ -479,6 +163,7 @@ export default function MapComponentGL({
     clearDrawings,
     getDrawnFeatures,
     hasArea,
+    summary: drawSummary,
   } = useDrawControlGL(mapRef, mapInstance, coordinateSystem)
 
   // La descarga por área solo necesita saber qué está encendido, no con qué
@@ -525,7 +210,49 @@ export default function MapComponentGL({
     pitch,
     changePitch,
     elevationAt,
+    terrainError,
+    dismissTerrainError,
+    setTerrainForQuery,
+    queryTerrain,
   } = useTerrainGL(mapRef, mapInstance)
+
+  const { terrainMode, chooseTerrainMode, terrainRasterUnavailable } = useTerrainRasterGL(
+    mapRef,
+    mapInstance,
+    { setTerrainForQuery },
+  )
+
+  /**
+   * La consulta puntual al terreno: un modo, no un botón de una sola vez.
+   *
+   * Con la consulta encendida, cada clic en el mapa responde por ese punto y la
+   * ficha del polígono se calla, para que la respuesta no quede tapada.
+   * `terrainResult` es `null` mientras no se ha pulsado nada, y un objeto vacío
+   * cuando se pulsó pero el modelo todavía no tenía dato ahí: son dos cosas
+   * distintas y la tarjeta las dice distinto.
+   */
+  const toggleTerrainQuery = useCallback(() => {
+    setQueryingTerrain((actual) => {
+      const siguiente = !actual
+      setTerrainForQuery(siguiente)
+      setTerrainResult(null)
+      return siguiente
+    })
+  }, [setTerrainForQuery])
+
+  useEffect(() => {
+    if (!mapInstance || !queryingTerrain) return
+
+    const alPulsar = (event) => setTerrainResult(queryTerrain(event.lngLat) ?? {})
+    mapInstance.on("click", alPulsar)
+    // El cursor lo dice: en este modo el mapa se pregunta, no se navega.
+    mapInstance.getCanvas().style.cursor = "crosshair"
+
+    return () => {
+      mapInstance.off("click", alPulsar)
+      mapInstance.getCanvas().style.cursor = ""
+    }
+  }, [mapInstance, queryingTerrain, queryTerrain])
 
   // El aviso de "arrastra con Ctrl" solo tiene sentido con ratón: en una
   // pantalla táctil se gira con dos dedos y ese gesto ya lo conoce todo el
@@ -587,14 +314,26 @@ export default function MapComponentGL({
       // fijo en "osm" desde cuando solo había dos fondos: el visor arrancaba con
       // el callejero mientras el botón anunciaba «Satélite», y no se notaba
       // hasta comparar la atribución de la esquina con lo que decía el botón.
-      style: createBaseStyle(DEFAULT_BASEMAP),
+      //
+      // Y se lee de las preferencias, no del valor de fábrica: si no, quien
+      // dejó puesto el satélite vería un parpadeo del gris de CARTO en cada
+      // recarga antes de que el fondo guardado se aplicara encima.
+      style: createBaseStyle(readPreferences().basemap),
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
       maxZoom: MAX_ZOOM,
       // Por defecto MapLibre no deja pasar de 60° de inclinación. Con terreno
       // real conviene poder acercarse más al horizonte para leer un valle a
       // contraluz, que es justo lo que uno quiere mirar en 3D.
-      maxPitch: 85,
+      //
+      // El número sale de `PITCH_MAX` y no está escrito aquí: estuvo fijo en 85
+      // mientras el deslizador ya usaba la constante, así que bajarla no bajaba
+      // nada —arrastrando con Ctrl se seguía llegando a 85—.
+      maxPitch: PITCH_MAX,
+      // Sin esto, leer el lienzo devuelve una imagen en negro: WebGL descarta
+      // el búfer en cuanto termina de pintar, salvo que se le pida guardarlo.
+      // Es lo que hace posible exportar el mapa como imagen.
+      preserveDrawingBuffer: true,
       // La atribución propia de MapLibre se queda, en versión compacta: las
       // condiciones de uso de OSM la exigen. `false` la quitaría del todo.
       attributionControl: { compact: true },
@@ -673,10 +412,27 @@ export default function MapComponentGL({
       {/* bottom-10 y no bottom-4: en esa esquina va la atribución de
           OpenStreetMap, que las condiciones de uso obligan a mostrar, y el
           último botón se le montaba encima. */}
-      <div className="absolute bottom-10 right-4 z-10 flex flex-col items-end space-y-2">
+      <div
+        // En el teléfono, con la hoja de capas abierta esta columna quedaba
+        // encima de ella: los botones del mapa flotando sobre las filas del
+        // panel, tapando justo la lupa y el filtro. Mientras la hoja está
+        // abierta, la columna se aparta; en escritorio no hay conflicto porque
+        // el panel vive al otro lado.
+        className={`absolute bottom-16 right-2 z-10 flex flex-col items-end space-y-2 md:bottom-10 md:right-4 ${
+          panelOpen ? "hidden md:flex" : "flex"
+        }`}
+      >
         {/* Ajustes de cómo se ve el mapa. Van encima de los botones de acción,
             en la misma columna, y cada uno solo aparece cuando hay algo que
             ajustar: un control que no hace nada visible confunde más que ayuda. */}
+        {terrainMode && (
+          <TerrainRasterLegend mode={terrainMode} unavailable={terrainRasterUnavailable} />
+        )}
+
+        {queryingTerrain && (
+          <TerrainQuery result={terrainResult} onClose={toggleTerrainQuery} />
+        )}
+
         {(is3D || isCompassActive) && (
           <div className="space-y-2">
             {is3D && (
@@ -772,14 +528,12 @@ export default function MapComponentGL({
           <MapButton
             onClick={downloadArea}
             disabled={isDownloading}
+            icon={isDownloading ? Loader2 : Download}
             title="Descargar en un ZIP las capas encendidas dentro del área dibujada"
-            className="!border-emerald-700 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-60"
+            className={`!border-emerald-700 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-60 ${
+              isDownloading ? "[&_svg]:animate-spin" : ""
+            }`}
           >
-            {isDownloading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
             {isDownloading ? "Preparando…" : "Descargar área"}
           </MapButton>
         )}
@@ -788,9 +542,9 @@ export default function MapComponentGL({
           onClick={toggleHillshade}
           active={showHillshade}
           aria-pressed={showHillshade}
+          icon={Mountain}
           title="Sombrear el relieve sobre el mapa plano"
         >
-          <Mountain className="h-4 w-4" />
           Relieve
         </MapButton>
 
@@ -798,19 +552,49 @@ export default function MapComponentGL({
           onClick={toggle3D}
           active={is3D}
           aria-pressed={is3D}
+          icon={Box}
           title="Levantar el terreno e inclinar la cámara"
         >
-          <Box className="h-4 w-4" />
           {is3D ? "Volver a 2D" : "Ver en 3D"}
+        </MapButton>
+
+        <MapButton
+          onClick={() => chooseTerrainMode("slope")}
+          active={terrainMode === "slope"}
+          aria-pressed={terrainMode === "slope"}
+          icon={Triangle}
+          title="Pintar la pendiente del terreno por colores"
+        >
+          Pendiente
+        </MapButton>
+
+        <MapButton
+          onClick={() => chooseTerrainMode("aspect")}
+          active={terrainMode === "aspect"}
+          aria-pressed={terrainMode === "aspect"}
+          icon={Compass}
+          title="Pintar hacia dónde mira cada ladera"
+        >
+          Orientación
+        </MapButton>
+
+        <MapButton
+          onClick={toggleTerrainQuery}
+          active={queryingTerrain}
+          aria-pressed={queryingTerrain}
+          icon={MountainSnow}
+          title="Pulsar en el mapa para leer cota, pendiente y orientación"
+        >
+          Consultar terreno
         </MapButton>
 
         <MapButton
           onClick={handleLocateUser}
           active={hasLocated}
+          icon={Crosshair}
           title="Mostrar tu ubicación con el GPS"
-          className={isLocating ? "animate-pulse" : ""}
+          className={isLocating ? "animate-pulse [&_svg]:animate-spin" : ""}
         >
-          <Crosshair className={`h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
           {isLocating ? "Ubicando…" : hasLocated ? "Ubicación activa" : "Activar GPS"}
         </MapButton>
 
@@ -822,12 +606,20 @@ export default function MapComponentGL({
             onClick={handleToggleCompass360}
             active={isCompassActive}
             aria-pressed={isCompassActive}
+            icon={Compass}
             title="Girar una rosa de los vientos con la orientación del celular"
           >
-            <Compass className="h-4 w-4" />
             {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
           </MapButton>
         )}
+
+        <MapButton
+          onClick={() => setExportandoImagen(true)}
+          icon={ImageDown}
+          title="Guardar el mapa como imagen, sin los controles"
+        >
+          Exportar imagen
+        </MapButton>
 
         {/* Se llamaba «Satélite» y alternaba entre dos fondos. Con cinco, un
             botón que va rotando obliga a pasar por todos para llegar al que se
@@ -840,26 +632,20 @@ export default function MapComponentGL({
         <MapButton
           onClick={(event) => setBasemapPicker(event.currentTarget.getBoundingClientRect())}
           active={Boolean(basemapPicker)}
+          icon={Layers}
+          badge={basemapById(basemap).short}
           title="Elegir el mapa de fondo"
         >
-          <Layers className="h-4 w-4" />
           Mapa base
-          <span
-            className={`ml-0.5 rounded px-1 py-px text-[9px] font-semibold ${
-              basemapPicker ? "bg-white/20" : "bg-slate-100 text-slate-500"
-            }`}
-          >
-            {basemapById(basemap).short}
-          </span>
         </MapButton>
 
         <MapButton
           onClick={() =>
             window.open("https://www.linkedin.com/in/fabio-espinosa/", "_blank", "noopener,noreferrer")
           }
+          icon={User}
           title="Perfil del autor en LinkedIn"
         >
-          <User className="h-4 w-4" />
           Fabio A. Espinosa
         </MapButton>
       </div>
@@ -871,6 +657,8 @@ export default function MapComponentGL({
         drawingColor={drawingColor}
         onColorChange={handleColorChange}
         hasSelection={selectedIds.length > 0}
+        summary={drawSummary}
+        colors={DRAW_COLORS}
       />
 
       {/* La caja de escribir coordenadas acompaña a la herramienta de punto: es
@@ -889,6 +677,16 @@ export default function MapComponentGL({
 
       {showRotateHint && <RotateHint onClose={hideRotateHint} />}
 
+      {exportandoImagen && (
+        <ImageExport
+          map={mapInstance}
+          crs={crsById(coordinateSystem)}
+          layerNames={ANM_LAYERS.filter(({ key }) => layerState[key]?.on).map((l) => l.label)}
+          sources={["Agencia Nacional de Minería", basemapById(basemap).source]}
+          onClose={() => setExportandoImagen(false)}
+        />
+      )}
+
       {basemapPicker && (
         <BasemapPicker
           current={basemap}
@@ -899,21 +697,32 @@ export default function MapComponentGL({
         />
       )}
 
-      {showZoomInHint && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 bg-white/95 text-gray-700 text-sm px-4 py-2 rounded-full shadow-md">
-          Acerca el mapa para ver las capas de títulos y solicitudes
-        </div>
-      )}
+      {/* Los avisos van apilados en una sola columna centrada abajo. Estaban
+          sueltos en dos alturas fijas, y cuando salían los dos a la vez, uno se
+          montaba sobre la lectura del cursor. */}
+      <div className="pointer-events-none absolute bottom-32 left-1/2 z-10 flex w-[min(30rem,calc(100%-2rem))] -translate-x-1/2 flex-col items-center gap-2 md:bottom-24">
+        {terrainError && (
+          <div className="pointer-events-auto">
+            <MapNotice tone="warning" icon={Mountain} onClose={dismissTerrainError}>
+              {terrainError}
+            </MapNotice>
+          </div>
+        )}
 
-      {/* ArcGIS recorta la respuesta sin decirlo. Sin este aviso, el usuario
-          creería estar viendo todos los títulos del área y podría sacar
-          conclusiones sobre una zona a partir de datos incompletos. */}
-      {truncatedLayers.length > 0 && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-10 rounded-full bg-amber-100/95 px-4 py-2 text-sm text-amber-900 shadow-md">
-          Hay más polígonos de los que caben en una consulta ({truncatedLayers.join(", ")}). Acerca
-          el mapa para verlos todos.
-        </div>
-      )}
+        {showZoomInHint && (
+          <MapNotice icon={Layers}>Acerca el mapa para ver las capas de títulos y solicitudes</MapNotice>
+        )}
+
+        {/* ArcGIS recorta la respuesta sin decirlo. Sin este aviso, el usuario
+            creería estar viendo todos los títulos del área y podría sacar
+            conclusiones sobre una zona a partir de datos incompletos. */}
+        {truncatedLayers.length > 0 && (
+          <MapNotice tone="warning">
+            Hay más polígonos de los que caben en una consulta ({truncatedLayers.join(", ")}). Acerca
+            el mapa para verlos todos.
+          </MapNotice>
+        )}
+      </div>
 
       {error && showErrorBanner && (
         <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 z-10 flex items-center justify-between gap-2">

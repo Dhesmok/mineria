@@ -3,7 +3,8 @@
 import { useEffect, useRef } from "react"
 import { Check, X } from "lucide-react"
 
-import { CRS_LIST, crsById } from "../utils/crs"
+import { CRS_LIST } from "../utils/crs"
+import { anchorToViewport, popoverWidth } from "../utils/popoverPosition"
 
 /**
  * Elegir el sistema de coordenadas.
@@ -33,16 +34,19 @@ export const CrsPicker = ({ current, onChoose, onClose, anchorRect }) => {
     }
   }, [onClose])
 
-  const top = Math.min(anchorRect?.bottom ?? 0, window.innerHeight - 440) + 6
-  const left = Math.min(anchorRect?.left ?? 0, window.innerWidth - 320)
+  const { top, left } = anchorToViewport(
+    anchorRect,
+    { width: popoverWidth(320, window.innerWidth), height: Math.min(440, window.innerHeight * 0.7) },
+    { width: window.innerWidth, height: window.innerHeight },
+  )
 
   return (
     <div
       ref={panelRef}
       role="dialog"
       aria-label="Elegir el sistema de coordenadas"
-      style={{ top: Math.max(12, top), left: Math.max(12, left) }}
-      className="fixed z-50 max-h-[70vh] w-[20rem] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
+      style={{ top, left }}
+      className="fixed z-50 max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
     >
       <div className="sticky top-0 flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5">
         <span className="text-[13px] font-semibold text-slate-900">Sistema de coordenadas</span>

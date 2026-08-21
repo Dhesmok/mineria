@@ -1,4 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+
+import { readPreferences, writePreferences } from "../../utils/preferences"
+import {
+  COMPASS_SIZE_DEFAULT,
+  COMPASS_SIZE_MAX,
+  COMPASS_SIZE_MIN,
+} from "../../utils/compassSize"
 import { Marker, Popup } from "maplibre-gl"
 
 /**
@@ -25,10 +32,12 @@ import { Marker, Popup } from "maplibre-gl"
  * Es ajustable porque 250 px es mucho en un celular —tapaba media pantalla— y
  * poco en un monitor grande. El punto azul, en cambio, mide siempre lo mismo:
  * es una posición, no un dibujo que haya que leer.
+ *
+ * Los límites viven en `utils/compassSize.js` y se reexportan desde aquí: las
+ * preferencias guardadas tienen que validar contra ellos, y este hook lee las
+ * preferencias, así que importarse el uno al otro sería un ciclo.
  */
-export const COMPASS_SIZE_DEFAULT = 250
-export const COMPASS_SIZE_MIN = 120
-export const COMPASS_SIZE_MAX = 420
+export { COMPASS_SIZE_DEFAULT, COMPASS_SIZE_MIN, COMPASS_SIZE_MAX }
 const DOT_SIZE = 44
 
 /**
@@ -183,7 +192,9 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
   const [isLocating, setIsLocating] = useState(false)
   const [hasLocated, setHasLocated] = useState(false)
   const [isCompassActive, setIsCompassActive] = useState(false)
-  const [compassSize, setCompassSize] = useState(COMPASS_SIZE_DEFAULT)
+  // El tamaño de la rosa se recuerda: 250 px es mucho en un celular y poco en un
+  // monitor grande, y quien lo ajusta lo ajusta una vez.
+  const [compassSize, setCompassSize] = useState(() => readPreferences().compassSize)
 
   const markerRef = useRef(null)
   const markerElRef = useRef(null)
@@ -308,6 +319,7 @@ export const useGeolocationGL = (mapRef, setError, setShowErrorBanner) => {
     (value) => {
       compassSizeRef.current = value
       setCompassSize(value)
+      writePreferences({ compassSize: value })
       if (!isCompassActive || !markerElRef.current) return
       ensureMarkerElement(true)
       if (headingRef.current !== null) updateNeedle(headingRef.current)

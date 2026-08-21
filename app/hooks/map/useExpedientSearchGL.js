@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react"
 import { LngLatBounds, Marker, Popup } from "maplibre-gl"
 
-import { createPopupContent, extractRings, formatDegrees, getFeatureLabel } from "../../utils/mapUtils"
+import { createPopupContent, extractRings, formatDegrees } from "../../utils/mapUtils"
 import { createLabelElement } from "../../utils/mapLabelsGL"
 import { fetchArcgisJson } from "../../utils/arcgis"
 import { emptyFeatureCollection } from "../../utils/anmLayers"

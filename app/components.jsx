@@ -4,18 +4,18 @@ import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "rea
 import dynamic from "next/dynamic"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
-import { ChevronLeft, ChevronDown, Download, RefreshCw, ChevronRight, Globe2 } from "lucide-react"
+import { ChevronLeft, ChevronDown, Download, RefreshCw, Globe2 } from "lucide-react"
 import ExportComponent from "./ExportComponent"
-import { CRS_LIST, axisLabels, crsById, formatCoordinate, fromGeographic } from "./utils/crs"
-import { areaById, DEFAULT_ORDER, initialLayerState } from "./utils/themeAreas"
+import { axisLabels, crsById, formatCoordinate, fromGeographic, SOURCE_CRS } from "./utils/crs"
+import { areaById, DEFAULT_ORDER, initialLayerState, layerByKey } from "./utils/themeAreas"
 import { LayerPanel } from "./components/LayerPanel"
 import { AreaFilters } from "./components/AreaFilters"
 import { AttributeTable } from "./components/AttributeTable"
 import { CrsPicker } from "./components/CrsPicker"
 import { ExpedientSearch } from "./components/ExpedientSearch"
 import { matchesFilters } from "./utils/layerFilters"
+import { readPreferences, writePreferences } from "./utils/preferences"
 
 // `ssr: false` es obligatorio: MapLibre necesita el objeto `window` y una
 // tarjeta gráfica, y ninguno de los dos existe cuando Next genera la página en
@@ -37,13 +37,14 @@ export default function Component() {
   const [transformedCoordinates, setTransformedCoordinates] = useState([])
   const [showToggle, setShowToggle] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
-  const [selectedCoordinateSystem, setSelectedCoordinateSystem] = useState("4686")
+  const [selectedCoordinateSystem, setSelectedCoordinateSystem] = useState(SOURCE_CRS)
   const [expedientCode, setExpedientCode] = useState("")
   const [searchTrigger, setSearchTrigger] = useState(0)
   const [coordinatesAvailable, setCoordinatesAvailable] = useState(false)
   const [geoJsonData, setGeoJsonData] = useState(null)
   const mapRef = useRef(null)
-  const [mapInitialized, setMapInitialized] = useState(false)
+  // Solo se guarda el «ya está listo»; el mapa en sí vive en mapRef.
+  const [, setMapInitialized] = useState(false)
   // Estado de las capas: encendida, opacidad y colores, todo por clave. Antes
   // eran ocho estados sueltos —uno por interruptor y otro por deslizador—, que
   // con trece capas y su color serían treinta y nueve.
@@ -61,7 +62,7 @@ export default function Component() {
   const [filterScope, setFilterScope] = useState("viewport")
   // Lo que el mapa tiene cargado: atributos para armar el filtro, figuras con su
   // recuadro para la tabla, y qué capas recortó el servicio.
-  const [layerData, setLayerData] = useState({ properties: [], features: [], truncated: [] })
+  const [layerData, setLayerData] = useState({ features: [], truncated: [] })
 
   // Qué ventana flotante está abierta y a qué botón se ancla.
   const [filterPopover, setFilterPopover] = useState(null)
@@ -69,14 +70,77 @@ export default function Component() {
   const [crsPopover, setCrsPopover] = useState(null)
   const [showAttributeTable, setShowAttributeTable] = useState(false)
 
+  /**
+   * Las preferencias guardadas se aplican **después de montar**, no al crear el
+   * estado.
+   *
+   * Es contraintuitivo y tiene una razón concreta: Next genera esta página en el
+   * servidor, donde no existe el almacenamiento del navegador. Si el estado
+   * inicial se leyera de ahí, el servidor pintaría los valores de fábrica y el
+   * navegador los guardados, y React se encuentra dos árboles distintos: el
+   * error de hidratación tira la página entera y la vuelve a pintar. Se vio en
+   * el navegador; en el código no se nota.
+   */
+  const [prefsCargadas, setPrefsCargadas] = useState(false)
+
+  /**
+   * En un teléfono la hoja arranca recogida.
+   *
+   * Abierta ocupa más de la mitad de la pantalla, y lo primero que alguien
+   * quiere ver al abrir un visor es el mapa. En escritorio no aplica: ahí el
+   * panel es una columna al lado y no tapa nada.
+   *
+   * Se decide después de montar y no en el estado inicial, por lo mismo que las
+   * preferencias: el servidor no sabe el ancho de la pantalla, y pintar algo
+   * distinto de lo que pinta el navegador tira la página entera.
+   */
+  useEffect(() => {
+    // `matchMedia` no existe en todos los entornos —jsdom, por ejemplo, donde
+    // corren las pruebas—, y sin la comprobación esto lanzaba y se llevaba por
+    // delante el montaje entero del panel.
+    if (window.matchMedia?.("(max-width: 767px)")?.matches) setShowSidebar(false)
+  }, [])
+
+  useEffect(() => {
+    const prefs = readPreferences()
+    setSelectedCoordinateSystem(prefs.crs)
+    setLayers(prefs.layers)
+    setLayerOrder(prefs.layerOrder)
+    setPrefsCargadas(true)
+  }, [])
+
+  // Guardar es un efecto y no una llamada dentro de cada manejador: así no hay
+  // que acordarse de hacerlo en los cinco sitios donde se cambia una capa, y no
+  // se puede olvidar en el sexto.
+  //
+  // El guardia de `prefsCargadas` no sobra: sin él, el primer render escribiría
+  // los valores de fábrica encima de lo que el usuario tenía guardado, antes de
+  // que el efecto de arriba llegara a leerlo.
+  useEffect(() => {
+    if (prefsCargadas) writePreferences({ layers })
+  }, [layers, prefsCargadas])
+
+  useEffect(() => {
+    if (prefsCargadas) writePreferences({ layerOrder })
+  }, [layerOrder, prefsCargadas])
+
+  useEffect(() => {
+    if (prefsCargadas) writePreferences({ crs: selectedCoordinateSystem })
+  }, [selectedCoordinateSystem, prefsCargadas])
+
   const filtroDe = useCallback(
     (areaId) => areaFilters[areaId] ?? { selections: {}, areaRange: null },
     [areaFilters],
   )
 
+  // Lo que viaja al mapa: el alcance, que es común, y el filtro de cada área.
+  //
+  // Antes viajaba además una copia del de Minería, aplanada, y era esa copia la
+  // que el mapa usaba para todas las capas. Funcionaba solo porque las cuatro
+  // capas conectadas son de Minería.
   const filters = useMemo(
-    () => ({ ...filtroDe("mineria"), scope: filterScope, byArea: areaFilters }),
-    [areaFilters, filterScope, filtroDe],
+    () => ({ scope: filterScope, byArea: areaFilters }),
+    [areaFilters, filterScope],
   )
 
   const areaHasFilter = useCallback(
@@ -101,10 +165,31 @@ export default function Component() {
    * "toda la capa" hay resultados que ni siquiera están en pantalla, y llegar a
    * ellos por la tabla es justamente la gracia.
    */
-  const registrosVisibles = useMemo(() => {
-    const { selections, areaRange } = filtroDe("mineria")
-    return layerData.features.filter((f) => matchesFilters(f.properties, selections, areaRange))
-  }, [layerData.features, filtroDe])
+  const registrosVisibles = useMemo(
+    () =>
+      layerData.features.filter((f) => {
+        // Cada figura se juzga con el filtro de su propia área, no con el de
+        // Minería para todas.
+        const { selections, areaRange } = filtroDe(layerByKey(f.layerKey)?.areaId)
+        return matchesFilters(f.properties, selections, areaRange)
+      }),
+    [layerData.features, filtroDe],
+  )
+
+  /**
+   * Los atributos de lo cargado que pertenece a un área.
+   *
+   * Es con lo que la ventana de filtros arma sus opciones. Estaba escrito como
+   * «si el área es Minería, todo lo cargado; si no, nada»: correcto hoy, y
+   * equivocado en cuanto se conecte la primera capa de otra área.
+   */
+  const propiedadesDelArea = useCallback(
+    (areaId) =>
+      layerData.features
+        .filter((f) => layerByKey(f.layerKey)?.areaId === areaId)
+        .map((f) => f.properties),
+    [layerData.features],
+  )
 
   /** Llevar el mapa hasta un registro elegido en la tabla. */
   const enfocarRegistro = useCallback((registro) => {
@@ -153,13 +238,11 @@ export default function Component() {
     setShowToggle(true)
   }, [])
 
-  const handleShowCoordinates = () => {
-    if (coordinatesAvailable) {
-      setShowTable(true)
-    } else {
-      alert("No hay coordenadas disponibles para mostrar.")
-    }
-  }
+  // Era un `alert()`: el único diálogo del sistema operativo en toda la
+  // interfaz, y encima bloquea la página hasta cerrarlo. Ahora el botón
+  // sencillamente no aparece cuando no hay coordenadas que enseñar, que es
+  // mejor respuesta que dejar pulsar algo para decir que no se puede.
+  const handleShowCoordinates = () => setShowTable(true)
 
   const handleCloseTable = () => {
     setShowTable(false)
@@ -243,15 +326,31 @@ export default function Component() {
           que nombra a una sola de las cuatro áreas confunde más de lo que
           orienta. Sin él, el panel arranca 44 px más arriba. */}
       <div
-        className={`absolute top-4 left-4 z-10 flex max-h-[calc(100vh-5rem)] items-start transition-transform duration-300 ease-out ${
-          showSidebar ? "translate-x-0" : "-translate-x-[calc(100%-0.5rem)]"
+        // **Dos disposiciones, una sola marca.**
+        //
+        // En pantalla ancha el panel es una columna a la izquierda con su
+        // pestaña al costado, y se esconde deslizándose hacia la izquierda. En
+        // un teléfono eso no cabe: 350 px de columna sobre una pantalla de 390
+        // tapan el mapa entero. Ahí el panel pasa a ser una hoja que sube desde
+        // abajo con la pestaña arriba, que es el gesto que ya usan todas las
+        // aplicaciones de mapas y no hay que explicar.
+        //
+        // Se resuelve con clases por tamaño y no con JavaScript a propósito: un
+        // `window.innerWidth` leído al montar no coincide con lo que pintó el
+        // servidor, y eso tira la página entera para volver a pintarla —ya pasó
+        // con las preferencias—.
+        //
+        // La cuenta del desplazamiento horizontal no es evidente: el bloque mide
+        // el panel (350) más la pestaña (24) = 374, y arranca a 16 del borde.
+        // Para que el panel salga entero hay que correrlo 366, o sea 100 % menos
+        // media unidad. Con «100 % menos la pestaña» —que es lo que parece—
+        // quedaba una franja de 16 px asomando, y eso solo se vio en una
+        // captura.
+        className={`fixed inset-x-0 bottom-0 z-10 flex max-h-[75vh] flex-col-reverse transition-transform duration-300 ease-out md:absolute md:inset-x-auto md:bottom-auto md:left-4 md:top-4 md:max-h-[calc(100vh-5rem)] md:flex-row md:items-start ${
+          showSidebar
+            ? "translate-y-0 md:translate-x-0"
+            : "translate-y-[calc(100%-2.75rem)] md:translate-y-0 md:-translate-x-[calc(100%-0.5rem)]"
         }`}
-        // La cuenta del desplazamiento, que no es evidente: el bloque mide el
-        // panel (350) más la pestaña (24) = 374, y arranca a 16 del borde. Para
-        // que el panel salga entero de la pantalla hay que correrlo 366, o sea
-        // 100 % menos media unidad. Con «100 % menos la pestaña» —que es lo que
-        // parece— quedaba una franja de 16 px del panel asomando por la
-        // izquierda, y no se veía leyendo el código: se vio en una captura.
       >
       <div
         // El alto máximo con desplazamiento interno no es un adorno: el panel
@@ -261,7 +360,7 @@ export default function Component() {
         // un tope, el panel se desplaza por dentro en vez de invadir la
         // pantalla. Los 5rem de abajo son para la escala y la lectura del
         // cursor, que viven en esa esquina.
-        className="flex max-h-[calc(100vh-5rem)] w-[350px] flex-col overflow-y-auto overflow-x-hidden rounded-xl bg-white shadow-lg"
+        className="flex max-h-[75vh] w-full flex-col overflow-y-auto overflow-x-hidden rounded-t-xl bg-white shadow-lg md:max-h-[calc(100vh-5rem)] md:w-[350px] md:rounded-xl"
       >
         <div className="p-4 space-y-4">
           {/* El buscador de expedientes se mudó a la lupa del área de Minería.
@@ -313,7 +412,7 @@ export default function Component() {
                 <Button
                   variant="outline"
                   onClick={handleShowCoordinates}
-                  className="w-full border text-blue-500 hover:bg-blue-50"
+                  className="w-full border border-slate-200 text-[13px] font-medium text-slate-700 hover:bg-slate-50"
                 >
                   Mostrar coordenadas
                 </Button>
@@ -338,17 +437,25 @@ export default function Component() {
       </div>
 
         {/* La pestaña. Va fuera de la caja que se desplaza por dentro, para que
-            no se vaya con el contenido al recorrer la lista de capas. */}
+            no se vaya con el contenido al recorrer la lista de capas.
+
+            En el teléfono es una barra ancha encima de la hoja, con el asa que
+            todo el mundo reconoce; en escritorio, una lengüeta al costado. */}
         <button
           type="button"
           onClick={() => setShowSidebar((visible) => !visible)}
           aria-expanded={showSidebar}
           aria-label={showSidebar ? "Ocultar panel" : "Mostrar panel"}
           title={showSidebar ? "Ocultar panel" : "Mostrar panel"}
-          className="mt-3 flex h-14 w-6 items-center justify-center rounded-r-lg border-l border-slate-100 bg-white text-slate-400 shadow-lg transition-colors hover:bg-slate-50 hover:text-slate-700"
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-t-xl bg-white text-slate-400 shadow-[0_-2px_8px_rgba(15,23,42,0.08)] transition-colors hover:bg-slate-50 hover:text-slate-700 md:mt-3 md:h-14 md:w-6 md:rounded-l-none md:rounded-r-lg md:border-l md:border-slate-100 md:shadow-lg"
         >
+          {/* El asa: solo en táctil, donde es la señal de «esto se arrastra». */}
+          <span className="h-1 w-9 rounded-full bg-slate-300 md:hidden" />
+          <span className="text-[13px] font-medium text-slate-600 md:hidden">Capas y filtros</span>
           <ChevronLeft
-            className={`h-4 w-4 transition-transform duration-300 ${showSidebar ? "" : "rotate-180"}`}
+            className={`hidden h-4 w-4 transition-transform duration-300 md:block ${
+              showSidebar ? "" : "rotate-180"
+            }`}
           />
         </button>
       </div>
@@ -364,33 +471,26 @@ export default function Component() {
           coordinateSystem={selectedCoordinateSystem}
           filters={filters}
           onLayerData={setLayerData}
+          panelOpen={showSidebar}
         />
       </div>
       {showTable && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md m-4">
-            <h2 className="text-2xl font-bold mb-4 text-gray-800">Coordenadas</h2>
-            {/* Eran dos botones con los dos únicos sistemas que había. Ahora son
-                diez —incluidos los orígenes antiguos, donde están inscritos
-                muchos títulos viejos—, y diez botones no caben. El sistema
-                elegido aquí manda también en la exportación a SHP. */}
-            <div className="mb-4">
-              <Label htmlFor="sistema-coordenadas" className="mb-1 block text-sm font-medium">
-                Sistema de coordenadas
-              </Label>
-              <select
-                id="sistema-coordenadas"
-                value={selectedCoordinateSystem}
-                onChange={(event) => setSelectedCoordinateSystem(event.target.value)}
-                className="w-full rounded-md border px-3 py-2 text-sm"
-              >
-                {CRS_LIST.map((crs) => (
-                  <option key={crs.id} value={crs.id}>
-                    {crs.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-500">{crsById(selectedCoordinateSystem).hint}</p>
+            {/* Aquí había una segunda lista desplegable con los diez sistemas,
+                heredada de cuando el panel no tenía la suya. Eran dos mandos
+                para el mismo ajuste, con dos aspectos distintos, y cambiar uno
+                cambiaba el otro sin que se viera. Ahora esto solo dice en qué
+                sistema está la tabla; para cambiarlo se usa el botón del panel,
+                que es el único sitio donde se elige. */}
+            <div className="mb-4 flex items-baseline gap-2">
+              <h2 className="text-xl font-semibold text-slate-900">Coordenadas</h2>
+              <span className="text-[13px] text-slate-500">
+                {crsById(selectedCoordinateSystem).label}
+              </span>
+              <span className="font-mono text-[10px] text-slate-400">
+                EPSG:{selectedCoordinateSystem}
+              </span>
             </div>
             <div className="overflow-auto max-h-[60vh]">
               <Table>
@@ -445,7 +545,7 @@ export default function Component() {
         <AreaFilters
           area={areaById(filterPopover.areaId)}
           anchorRect={filterPopover.rect}
-          properties={filterPopover.areaId === "mineria" ? layerData.properties : []}
+          properties={propiedadesDelArea(filterPopover.areaId)}
           selections={filtroDe(filterPopover.areaId).selections}
           areaRange={filtroDe(filterPopover.areaId).areaRange}
           scope={filterScope}

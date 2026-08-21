@@ -1,0 +1,35 @@
+# Comprobaciones automáticas al abrir o actualizar un cambio.
+#
+# Existe porque hasta ahora nadie corría las pruebas al abrir un pull request:
+# dependía de acordarse. Son los tres mandos que ya se usan a mano —lint,
+# pruebas y compilación—, en ese orden: el lint es el más rápido y es el que
+# atrapa la clase de error que una vez dejó la pantalla en blanco.
+name: Comprobaciones
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  comprobar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` y no `npm install`: instala exactamente lo que dice
+      # package-lock.json, sin actualizar nada por su cuenta.
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm test
+
+      # La compilación va la última porque es la más lenta, y porque un fallo
+      # de lint o de pruebas ya dice dónde mirar.
+      - run: npm run build

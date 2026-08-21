@@ -65,6 +65,9 @@ const hasCoordinates = (geometry) => {
   return true
 }
 
+/** Lo dibujado, en números: es lo que resume la barra de dibujo. */
+const EMPTY_SUMMARY = { polygons: 0, areaM2: 0, lines: 0, lengthM: 0, points: 0 }
+
 /** Qué dice la etiqueta y dónde se ancla, según el tipo de figura. */
 const measurementOf = (feature, crsId) => {
   const geometry = feature?.geometry
@@ -120,6 +123,7 @@ export const useDrawControlGL = (mapRef, mapInstance, crsId = SOURCE_CRS) => {
   // que no tiene sentido sin un área. Se actualiza al crear y borrar, no en cada
   // cuadro de render.
   const [hasArea, setHasArea] = useState(false)
+  const [summary, setSummary] = useState(EMPTY_SUMMARY)
 
   const drawRef = useRef(null)
   // Una etiqueta por figura, indexada por su id, para poder actualizarlas y
@@ -196,15 +200,44 @@ export const useDrawControlGL = (mapRef, mapInstance, crsId = SOURCE_CRS) => {
   }, [])
 
   /** Recalcula si hay algún polígono dibujado. */
+  /**
+   * El recuento y los totales de lo dibujado.
+   *
+   * La medida de cada figura sale sobre ella, en el mapa, y eso está bien para
+   * una; con tres polígonos y dos líneas no hay forma de saber cuánto suma todo
+   * sin ir leyéndolas una a una. Esto es lo que enseña la barra de dibujo.
+   *
+   * Se calcula en los eventos de crear, cambiar y borrar, **no en `draw.render`**:
+   * ese último se dispara en cada cuadro mientras se arrastra un vértice, y
+   * publicar estado a esa velocidad repintaría el visor entero sesenta veces por
+   * segundo. Mientras se arrastra, el número de la figura sí se actualiza en
+   * vivo —esa etiqueta no pasa por React—; el total se pone al día al soltar.
+   */
   const refreshHasArea = useCallback(() => {
     const draw = drawRef.current
     if (!draw) {
       setHasArea(false)
+      setSummary(EMPTY_SUMMARY)
       return
     }
-    setHasArea(
-      draw.getAll().features.some((feature) => feature?.geometry?.type === "Polygon"),
-    )
+
+    const features = draw.getAll().features.filter((f) => hasCoordinates(f?.geometry))
+    const resumen = { ...EMPTY_SUMMARY }
+
+    features.forEach(({ geometry }) => {
+      if (geometry.type === "Polygon") {
+        resumen.polygons += 1
+        resumen.areaM2 += areaInSquareMeters(geometry)
+      } else if (geometry.type === "LineString") {
+        resumen.lines += 1
+        resumen.lengthM += lengthInMeters(geometry)
+      } else if (geometry.type === "Point") {
+        resumen.points += 1
+      }
+    })
+
+    setHasArea(resumen.polygons > 0)
+    setSummary(resumen)
   }, [])
 
   useEffect(() => {
@@ -427,6 +460,7 @@ export const useDrawControlGL = (mapRef, mapInstance, crsId = SOURCE_CRS) => {
   }, [])
 
   return {
+    summary,
     drawingColor,
     handleColorChange,
     mode,

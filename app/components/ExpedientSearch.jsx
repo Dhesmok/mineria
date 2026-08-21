@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Loader2, Search, X } from "lucide-react"
 
 import { fetchArcgisJson } from "../utils/arcgis"
@@ -10,6 +10,7 @@ import {
   TITLE_LAYER_NAME,
   tenureLayerUrl,
 } from "../utils/tenureLayers"
+import { anchorToViewport, popoverWidth } from "../utils/popoverPosition"
 import { debounce } from "@/lib/utils"
 
 /**
@@ -121,7 +122,11 @@ export const ExpedientSearch = ({
     }
   }, [])
 
-  const debounced = useCallback(debounce((query) => fetchSuggestions(query), 300), [fetchSuggestions])
+  // useMemo y no useCallback: lo que se guarda es la función aplazada que
+  // devuelve `debounce`, no una función escrita aquí. Y se cancela al
+  // desmontar, o una consulta ya programada llegaría a un panel que ya no está.
+  const debounced = useMemo(() => debounce((query) => fetchSuggestions(query), 300), [fetchSuggestions])
+  useEffect(() => () => debounced.cancel(), [debounced])
 
   useEffect(() => {
     if (skipNextFetchRef.current) {
@@ -188,16 +193,19 @@ export const ExpedientSearch = ({
     }
   }
 
-  const top = Math.min(anchorRect?.bottom ?? 0, window.innerHeight - 320) + 6
-  const left = Math.min(anchorRect?.left ?? 0, window.innerWidth - 300)
+  const { top, left } = anchorToViewport(
+    anchorRect,
+    { width: popoverWidth(304, window.innerWidth), height: 320 },
+    { width: window.innerWidth, height: window.innerHeight },
+  )
 
   return (
     <div
       ref={panelRef}
       role="dialog"
       aria-label="Buscar expediente"
-      style={{ top: Math.max(12, top), left: Math.max(12, left) }}
-      className="fixed z-50 w-[19rem] rounded-xl border border-slate-200 bg-white shadow-xl"
+      style={{ top, left }}
+      className="fixed z-50 w-[min(19rem,calc(100vw-1.5rem))] rounded-xl border border-slate-200 bg-white shadow-xl"
     >
       {/* Misma cabecera que la ventana de filtros —punto del color del área,
           título en negrita, X a la derecha—: las dos salen del mismo encabezado
@@ -230,6 +238,7 @@ export const ExpedientSearch = ({
             autoComplete="off"
             aria-autocomplete="list"
             aria-expanded={suggestions.length > 0}
+            aria-controls="sugerencias-expediente"
             className="h-9 w-full rounded-md border border-slate-200 pl-8 pr-8 text-[13px] text-slate-900 outline-none focus:border-slate-400"
           />
           {loading && (
@@ -239,6 +248,7 @@ export const ExpedientSearch = ({
 
         {suggestions.length > 0 && (
           <ul
+            id="sugerencias-expediente"
             role="listbox"
             aria-label="Expedientes sugeridos"
             className="mt-1.5 max-h-52 overflow-auto rounded-md border border-slate-200"

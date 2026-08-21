@@ -85,6 +85,49 @@ const TERRAIN_SOURCE = {
     '<a href="https://registry.opendata.aws/terrain-tiles/">Terrain Tiles</a> (AWS Open Data)',
 }
 
+/**
+ * La capa de las derivadas del terreno: pendiente u orientación.
+ *
+ * Se declara desde el arranque, como todo lo demás, aunque nazca vacía: no se
+ * piden a ningún servicio, se calculan en el navegador a partir del modelo de
+ * elevación y se entregan como una imagen sobre el rectángulo que se está
+ * viendo. Ver `utils/terrainRaster.js`. Es una sola capa porque las dos no
+ * pueden estar encendidas a la vez: superpuestas no se lee ninguna.
+ *
+ * Un píxel transparente de 1×1 como imagen de partida: una fuente de tipo
+ * `image` exige una imagen y unas coordenadas al declararla, y esta es la forma
+ * de decir «todavía nada» sin pedir un archivo a nadie.
+ */
+export const DERIVATIVE_SOURCE_ID = "terrain-derivative"
+export const DERIVATIVE_LAYER_ID = "terrain-derivative-layer"
+
+const TRANSPARENT_PIXEL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+const DERIVATIVE_SOURCE = {
+  type: "image",
+  url: TRANSPARENT_PIXEL,
+  coordinates: [
+    [-180, 85],
+    [180, 85],
+    [180, -85],
+    [-180, -85],
+  ],
+}
+
+const derivativeLayer = () => ({
+  id: DERIVATIVE_LAYER_ID,
+  type: "raster",
+  source: DERIVATIVE_SOURCE_ID,
+  layout: { visibility: "none" },
+  paint: {
+    // Sin difuminado: cada celda de la rejilla es una medida, y suavizar entre
+    // celdas inventaría valores intermedios que no se calcularon.
+    "raster-resampling": "nearest",
+    "raster-fade-duration": 0,
+  },
+})
+
 /** Identificador de la capa de sombreado. */
 export const HILLSHADE_LAYER_ID = "hillshade"
 
@@ -132,11 +175,13 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
   sources: {
     ...BASEMAP_SOURCES,
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
+    [DERIVATIVE_SOURCE_ID]: DERIVATIVE_SOURCE,
     ...anmSources(),
   },
   layers: [
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
+    derivativeLayer(),
     ...anmLayers(),
     ...searchLayers(),
   ],

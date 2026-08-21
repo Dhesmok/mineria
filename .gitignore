@@ -12,3 +12,11 @@ screenshot_result.png
 # en cada dev y cada build. No se versionan para que no queden desfasadas
 # respecto a la versión de maplibre-gl instalada.
 public/maplibre/
+
+# Lo regenera `next dev` y `next build` en cada arranque, y cada uno escribe una
+# dirección de documentación distinta: versionado, el archivo va y viene entre
+# dos versiones según cuál se haya corrido el último, y ensucia el estado del
+# repositorio sin que nadie lo haya tocado. El propio archivo dice que no debe
+# editarse. No versionarlo no rompe nada: `next build` lo crea antes de
+# comprobar los tipos, que es el único momento en que hace falta.
+next-env.d.ts
