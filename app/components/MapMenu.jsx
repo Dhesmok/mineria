@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 
+import { useDismiss } from "../hooks/useDismiss"
 import { anchorToSide } from "../utils/popoverPosition"
 
 /**
@@ -31,27 +32,11 @@ const ALTO_MAXIMO = "calc(100vh - 1.5rem)"
  *
  * Se cierra al pulsar fuera o con Escape, como las demás de la aplicación.
  */
-export const MapMenuPanel = ({ label, anchorRect, onClose, children, width = 260 }) => {
+export const MapMenuPanel = ({ label, anchorRect, anchorEl, onClose, children, width = 260 }) => {
   const panelRef = useRef(null)
   const [medida, setMedida] = useState(null)
 
-  useEffect(() => {
-    const fuera = (event) => {
-      if (!panelRef.current?.contains(event.target)) onClose()
-    }
-    const escape = (event) => {
-      if (event.key === "Escape") onClose()
-    }
-
-    // En la fase de captura y en `mousedown`: si se esperara al clic, el botón
-    // que abrió la ventana recibiría el suyo y la volvería a abrir enseguida.
-    document.addEventListener("mousedown", fuera, true)
-    document.addEventListener("keydown", escape)
-    return () => {
-      document.removeEventListener("mousedown", fuera, true)
-      document.removeEventListener("keydown", escape)
-    }
-  }, [onClose])
+  useDismiss(panelRef, anchorEl, onClose)
 
   const medir = useCallback(() => {
     const nodo = panelRef.current

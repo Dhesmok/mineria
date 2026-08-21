@@ -155,7 +155,7 @@ describe("panel de capas por áreas", () => {
     expect(screen.getByText("Minería")).toBeInTheDocument()
     expect(screen.getByText("Geología")).toBeInTheDocument()
     expect(screen.getByText("Hidrocarburos")).toBeInTheDocument()
-    expect(screen.getByText("Catastro")).toBeInTheDocument()
+    expect(screen.getByText("Cartografía")).toBeInTheDocument()
     // Las cuatro de la ANM están conectadas; el contador lo dice.
     expect(screen.getByText("0/4")).toBeInTheDocument()
   })
@@ -191,7 +191,7 @@ describe("panel de capas por áreas", () => {
 
     expect(screen.getByRole("button", { name: /Buscar en Minería/ })).toBeEnabled()
     expect(screen.getByRole("button", { name: /Buscar en Geología/ })).toBeDisabled()
-    expect(screen.getByRole("button", { name: /Buscar en Catastro/ })).toBeDisabled()
+    expect(screen.getByRole("button", { name: /Buscar en Cartografía/ })).toBeDisabled()
   })
 
   it("en Activas solo salen las capas encendidas, en orden", async () => {
@@ -241,7 +241,7 @@ describe("panel de capas por áreas", () => {
   it("no deja tocar el color de una capa sin servicio", async () => {
     const user = userEvent.setup()
     render(<Component />)
-    await openArea(user, "Catastro")
+    await openArea(user, "Cartografía")
     expect(screen.getByRole("button", { name: "Cambiar el color de Predios" })).toBeDisabled()
   })
 })

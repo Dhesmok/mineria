@@ -389,7 +389,10 @@ export default function Component() {
             </Label>
             <button
               type="button"
-              onClick={(event) => setCrsPopover(event.currentTarget.getBoundingClientRect())}
+              onClick={(event) => {
+                const el = event.currentTarget
+                setCrsPopover((actual) => (actual ? null : el))
+              }}
               // El mismo gris que las barras de Minería, Geología y las demás: en
               // blanco parecía de otra familia, justo encima de ellas.
               className="flex h-9 w-full items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-left transition-colors hover:bg-slate-100"
@@ -413,8 +416,8 @@ export default function Component() {
             onColor={cambiarColor}
             onReorder={setLayerOrder}
             areaHasFilter={areaHasFilter}
-            onOpenFilters={(areaId, rect) => setFilterPopover({ areaId, rect })}
-            onOpenSearch={(areaId, rect) => setSearchPopover({ areaId, rect })}
+            onOpenFilters={(areaId, el) => setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))}
+            onOpenSearch={(areaId, el) => setSearchPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))}
           />
 
           {showToggle && (
@@ -555,7 +558,8 @@ export default function Component() {
       {filterPopover && (
         <AreaFilters
           area={areaById(filterPopover.areaId)}
-          anchorRect={filterPopover.rect}
+          anchorRect={filterPopover.el.getBoundingClientRect()}
+          anchorEl={filterPopover.el}
           properties={propiedadesDelArea(filterPopover.areaId)}
           selections={filtroDe(filterPopover.areaId).selections}
           areaRange={filtroDe(filterPopover.areaId).areaRange}
@@ -574,7 +578,8 @@ export default function Component() {
 
       {searchPopover && (
         <ExpedientSearch
-          anchorRect={searchPopover.rect}
+          anchorRect={searchPopover.el.getBoundingClientRect()}
+          anchorEl={searchPopover.el}
           areaColor={areaById(searchPopover.areaId).color}
           initialCode={expedientCode}
           onSearch={buscarExpediente}
@@ -585,7 +590,8 @@ export default function Component() {
       {crsPopover && (
         <CrsPicker
           current={selectedCoordinateSystem}
-          anchorRect={crsPopover}
+          anchorRect={crsPopover.getBoundingClientRect()}
+          anchorEl={crsPopover}
           onChoose={setSelectedCoordinateSystem}
           onClose={() => setCrsPopover(null)}
         />

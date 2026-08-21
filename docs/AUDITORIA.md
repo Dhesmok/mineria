@@ -197,6 +197,20 @@ Cuatro medidas, de más a menos rentable:
    nada. Y va ligado a la decisión pendiente del DEM para las descargas, así que
    conviene resolver las dos a la vez.
 
+   **La restricción ya está decidida, y acota la lista: tiene que ser gratuito y
+   aguantar descarga masiva.** El visor es para toda Colombia, así que cualquier
+   proveedor con cupo por clave o con cobro por encima de cierto tráfico queda
+   fuera, por muy rápido que sea. Eso descarta de entrada las opciones de pago
+   por uso y deja el terreno de los datos abiertos: el bucket actual, los
+   modelos globales publicados como datos abiertos, y lo que publique el IGAC
+   para Colombia, que sería además la fuente con autoridad para las descargas.
+   La medición pendiente es entre esos, no entre todos.
+
+   Y la medición hay que hacerla **desde Colombia**: lo que se mide es cuánto
+   tarda el dato en llegar hasta donde está el usuario, y desde este entorno de
+   desarrollo ese número no significa nada. Aquí, además, el proxy bloquea el
+   servidor de elevación.
+
 Y, se haga lo que se haga con la velocidad, **avisar cuando el modelo no carga**
 (fallo 3 de arriba).
 

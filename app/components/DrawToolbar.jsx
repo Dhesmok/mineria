@@ -1,9 +1,12 @@
 "use client"
 
-import { MapPin, Pentagon, Spline, Trash2 } from "lucide-react"
+import { useState } from "react"
+import { Check, MapPin, Palette, Pentagon, Spline, Trash2 } from "lucide-react"
 
+import { darken, readableInk } from "../utils/colors"
+import { DRAW_PALETTE } from "../utils/drawStyles"
 import { formatArea, formatDistance } from "../utils/mapUtils"
-import { MapMenuItem, MapMenuPanel, MapMenuSeparator } from "./MapMenu"
+import { MapMenuItem, MapMenuSeparator } from "./MapMenu"
 
 /**
  * Las herramientas de dibujo y lo que llevan medido.
@@ -18,13 +21,14 @@ import { MapMenuItem, MapMenuPanel, MapMenuSeparator } from "./MapMenu"
  * 3. **El color vive dentro.** Salía como una tarjeta suelta al lado, y parecía
  *    de otra cosa.
  *
- * **Antes flotaba suelta sobre el mapa** —arriba a la izquierda en el teléfono,
- * a la derecha en el escritorio—, con su propio mando para recogerse y
- * desplegarse. Ahora es la ventana del botón «Dibujo» de la columna de
- * controles: el mismo contenido, pero sin ocupar sitio en el mapa mientras no se
- * usa, y sin un segundo mecanismo de recoger que hacía lo mismo que cerrar la
- * ventana. Las herramientas se enseñan siempre con su explicación, porque dentro
- * de la ventana el espacio ya no es el problema que era.
+ * **Es el contenido de un panel flotante, no una ventana anclada.** Se probó de
+ * las dos maneras: anclada al botón se cerraba al primer clic en el mapa —que es
+ * justo el clic con el que se empieza a dibujar—, así que había que reabrirla
+ * para cambiar de herramienta o de color. Flotante se queda puesta mientras se
+ * trabaja y se aparta arrastrándola.
+ *
+ * Este componente no se ocupa de dónde se coloca ni de cómo se cierra: de eso se
+ * encarga `FloatingPanel`, que es quien lo envuelve.
  */
 
 const TOOLS = [
@@ -76,18 +80,19 @@ export const DrawToolbar = ({
   onColorChange,
   hasSelection,
   summary,
-  colors,
-  anchorRect,
-  onClose,
 }) => {
+  // La paleta arranca recogida: quien dibuja ya sabe de qué color va, y lo
+  // normal es no tocarla. Desplegada mide más que las tres herramientas juntas.
+  const [paletaAbierta, setPaletaAbierta] = useState(false)
+
   const dibujando = mode.startsWith("draw_")
-  // La paleta solo cuando hay a qué aplicarla: con una herramienta en la mano o
-  // con algo seleccionado. Suelta, invitaba a elegir un color que no pintaba
+  // El color solo cuando hay a qué aplicarlo: con una herramienta en la mano o
+  // con algo seleccionado. Suelto, invitaba a elegir un color que no pintaba
   // nada.
-  const mostrarPaleta = dibujando || hasSelection
+  const puedeColorear = dibujando || hasSelection
 
   return (
-    <MapMenuPanel label="Dibujo y medidas" anchorRect={anchorRect} onClose={onClose}>
+    <div className="-mx-1">
       {TOOLS.map(({ id, Icon, name, what }) => (
         <MapMenuItem
           key={id}
@@ -111,34 +116,80 @@ export const DrawToolbar = ({
         onClick={deleteSelected}
       />
 
-      {mostrarPaleta && (
+      {puedeColorear && (
         <>
           <MapMenuSeparator />
-          <div className="px-2.5 pb-1.5 pt-1">
-            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-              {hasSelection ? "Color de lo seleccionado" : "Color del dibujo"}
-            </p>
-            {/* Los ocho en un renglón: a 24 px el blanco se caía a una segunda
-                fila él solo, y una fila con un único punto parece un error. */}
-            <div className="flex gap-1.5">
-              {colors.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => onColorChange(color)}
-                  aria-label={`Usar el color ${color}`}
-                  aria-pressed={color === drawingColor}
-                  title={color}
-                  className={`h-5 w-5 shrink-0 rounded-full border border-slate-200 transition-transform hover:scale-110 ${
-                    color === drawingColor ? "ring-2 ring-slate-900 ring-offset-1" : ""
-                  }`}
-                  style={{ backgroundColor: color }}
+          {/* La misma paleta que las capas y la misma rueda del sistema debajo.
+              Antes eran ocho colores sueltos escritos aquí, distintos de los del
+              panel: dos juegos de color en la misma pantalla para lo mismo. Con
+              la paleta compartida, un polígono dibujado y una capa pueden llevar
+              exactamente el mismo color, que es lo que hace falta para comparar
+              un área propia contra un título. */}
+          <button
+            type="button"
+            onClick={() => setPaletaAbierta((abierta) => !abierta)}
+            aria-expanded={paletaAbierta}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <Palette className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-medium leading-tight">
+                {hasSelection ? "Color de lo seleccionado" : "Color del dibujo"}
+              </span>
+              <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">
+                {paletaAbierta ? "Pulsa para recoger" : "Pulsa para cambiarlo"}
+              </span>
+            </span>
+            <span
+              className="h-5 w-5 shrink-0 rounded-full"
+              style={{
+                backgroundColor: drawingColor,
+                border: `1.5px solid ${darken(drawingColor, 0.35)}`,
+              }}
+            />
+          </button>
+
+          {paletaAbierta && (
+            <div className="px-2.5 pb-1 pt-1">
+              <div className="grid grid-cols-7 gap-1.5">
+                {DRAW_PALETTE.map((swatch) => {
+                  const elegido = swatch.toLowerCase() === String(drawingColor).toLowerCase()
+                  return (
+                    <button
+                      key={swatch}
+                      type="button"
+                      onClick={() => onColorChange(swatch)}
+                      title={swatch}
+                      aria-label={`Usar el color ${swatch}`}
+                      aria-pressed={elegido}
+                      className="flex h-7 w-7 items-center justify-center rounded-md transition-transform hover:scale-110"
+                      style={{
+                        backgroundColor: swatch,
+                        border: `1.5px solid ${darken(swatch, 0.35)}`,
+                      }}
+                    >
+                      {elegido && (
+                        <Check className="h-4 w-4" style={{ color: readableInk(swatch) }} />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <label className="mt-2.5 flex items-center gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-500">
+                <input
+                  type="color"
+                  value={drawingColor}
+                  onChange={(event) => onColorChange(event.target.value)}
+                  className="h-7 w-9 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
+                  aria-label="Elegir un color exacto"
                 />
-              ))}
+                Otro color
+              </label>
             </div>
-          </div>
+          )}
         </>
       )}
-    </MapMenuPanel>
+    </div>
   )
 }

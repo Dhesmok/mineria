@@ -25,8 +25,14 @@ import { MapMenuPanel } from "./MapMenu"
  * La ventana, su posición y su cierre son los de `MapMenuPanel`, como las de los
  * demás botones del mapa; aquí solo viven las filas, que sí son distintas.
  */
-export const BasemapPicker = ({ current, showLabels, onChoose, onClose, anchorRect }) => (
-  <MapMenuPanel label="Mapa base" anchorRect={anchorRect} onClose={onClose} width={288}>
+export const BasemapPicker = ({ current, showLabels, onChoose, onClose, anchorRect, anchorEl }) => (
+  <MapMenuPanel
+    label="Mapa base"
+    anchorRect={anchorRect}
+    anchorEl={anchorEl}
+    onClose={onClose}
+    width={288}
+  >
     {BASEMAPS.map((basemap) => {
       const elegido = basemap.id === current
       const conNombres = elegido ? showLabels : true
