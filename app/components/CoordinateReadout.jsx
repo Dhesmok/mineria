@@ -109,7 +109,7 @@ export const CoordinateEntry = ({ crsId, onGo }) => {
   }
 
   return (
-    <div className="absolute bottom-16 left-1/2 z-10 -translate-x-1/2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur">
+    <div className="absolute bottom-24 left-1/2 z-10 w-[min(24rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-lg border border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur md:bottom-16 md:w-auto">
       <div className="flex items-end gap-2">
         {[
           { label: ejes.first, value: first, set: setFirst, hint: ejemplo[0] },

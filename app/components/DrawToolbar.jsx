@@ -80,7 +80,9 @@ export const DrawToolbar = ({
   const algoDibujado = summary && (summary.polygons || summary.lines || summary.points)
 
   return (
-    <div className="absolute right-4 top-32 z-10 w-fit overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    // En el teléfono se va a la izquierda: a la derecha choca con los controles de
+    // zoom de MapLibre, que en pantalla estrecha quedan casi encima.
+    <div className="absolute left-2 top-28 z-10 w-fit overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:left-auto md:right-4 md:top-32">
       <div className="flex flex-col">
         {TOOLS.map(({ id, Icon, name, what }) => {
           const activa = mode === id
@@ -94,7 +96,7 @@ export const DrawToolbar = ({
               aria-pressed={activa}
               aria-label={`${name}: ${what.toLowerCase()}`}
               title={`${name} — ${what}. Pulsa otra vez (o Escape) para salir.`}
-              className={`flex items-center gap-2.5 px-2.5 py-2 text-left transition-colors ${
+              className={`flex min-h-[44px] items-center gap-2.5 px-2.5 py-2 text-left transition-colors md:min-h-0 ${
                 activa ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"
               }`}
             >
@@ -124,7 +126,7 @@ export const DrawToolbar = ({
           disabled={!algoDibujado}
           title="Borrar la figura seleccionada, o todo el dibujo si no hay ninguna"
           aria-label="Borrar figura"
-          className="flex items-center gap-2.5 border-t border-slate-100 px-2.5 py-2 text-left text-slate-700 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
+          className="flex min-h-[44px] items-center gap-2.5 border-t border-slate-100 px-2.5 py-2 text-left text-slate-700 md:min-h-0 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
         >
           <Trash2 className="h-4 w-4 shrink-0" />
           {open && (
@@ -167,7 +169,7 @@ export const DrawToolbar = ({
         aria-expanded={open}
         aria-label={open ? "Recoger las herramientas de dibujo" : "Desplegar las herramientas de dibujo"}
         title={open ? "Recoger" : "Ver qué mide cada herramienta"}
-        className="flex w-full items-center justify-center border-t border-slate-100 bg-slate-50 py-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+        className="flex w-full items-center justify-center border-t border-slate-100 bg-slate-50 py-2 md:py-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
       >
         <ChevronRight className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

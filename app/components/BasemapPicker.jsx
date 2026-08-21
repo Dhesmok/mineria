@@ -54,7 +54,7 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose, anchorRe
       role="dialog"
       aria-label="Elegir el mapa de fondo"
       style={{ top, right }}
-      className="fixed z-50 w-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
+      className="fixed z-50 w-[min(18rem,calc(100vw-1.5rem))] rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
     >
       <p className="px-2.5 pb-1.5 pt-2 text-[10px] font-medium uppercase tracking-wide text-slate-500">
         Mapa base

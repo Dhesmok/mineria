@@ -96,6 +96,7 @@ export default function MapComponentGL({
   coordinateSystem,
   filters,
   onLayerData,
+  panelOpen = false,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
@@ -350,7 +351,16 @@ export default function MapComponentGL({
       {/* bottom-10 y no bottom-4: en esa esquina va la atribución de
           OpenStreetMap, que las condiciones de uso obligan a mostrar, y el
           último botón se le montaba encima. */}
-      <div className="absolute bottom-10 right-4 z-10 flex flex-col items-end space-y-2">
+      <div
+        // En el teléfono, con la hoja de capas abierta esta columna quedaba
+        // encima de ella: los botones del mapa flotando sobre las filas del
+        // panel, tapando justo la lupa y el filtro. Mientras la hoja está
+        // abierta, la columna se aparta; en escritorio no hay conflicto porque
+        // el panel vive al otro lado.
+        className={`absolute bottom-16 right-2 z-10 flex flex-col items-end space-y-2 md:bottom-10 md:right-4 ${
+          panelOpen ? "hidden md:flex" : "flex"
+        }`}
+      >
         {/* Ajustes de cómo se ve el mapa. Van encima de los botones de acción,
             en la misma columna, y cada uno solo aparece cuando hay algo que
             ajustar: un control que no hace nada visible confunde más que ayuda. */}
@@ -449,14 +459,12 @@ export default function MapComponentGL({
           <MapButton
             onClick={downloadArea}
             disabled={isDownloading}
+            icon={isDownloading ? Loader2 : Download}
             title="Descargar en un ZIP las capas encendidas dentro del área dibujada"
-            className="!border-emerald-700 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-60"
+            className={`!border-emerald-700 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-60 ${
+              isDownloading ? "[&_svg]:animate-spin" : ""
+            }`}
           >
-            {isDownloading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
             {isDownloading ? "Preparando…" : "Descargar área"}
           </MapButton>
         )}
@@ -465,9 +473,9 @@ export default function MapComponentGL({
           onClick={toggleHillshade}
           active={showHillshade}
           aria-pressed={showHillshade}
+          icon={Mountain}
           title="Sombrear el relieve sobre el mapa plano"
         >
-          <Mountain className="h-4 w-4" />
           Relieve
         </MapButton>
 
@@ -475,19 +483,19 @@ export default function MapComponentGL({
           onClick={toggle3D}
           active={is3D}
           aria-pressed={is3D}
+          icon={Box}
           title="Levantar el terreno e inclinar la cámara"
         >
-          <Box className="h-4 w-4" />
           {is3D ? "Volver a 2D" : "Ver en 3D"}
         </MapButton>
 
         <MapButton
           onClick={handleLocateUser}
           active={hasLocated}
+          icon={Crosshair}
           title="Mostrar tu ubicación con el GPS"
-          className={isLocating ? "animate-pulse" : ""}
+          className={isLocating ? "animate-pulse [&_svg]:animate-spin" : ""}
         >
-          <Crosshair className={`h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
           {isLocating ? "Ubicando…" : hasLocated ? "Ubicación activa" : "Activar GPS"}
         </MapButton>
 
@@ -499,9 +507,9 @@ export default function MapComponentGL({
             onClick={handleToggleCompass360}
             active={isCompassActive}
             aria-pressed={isCompassActive}
+            icon={Compass}
             title="Girar una rosa de los vientos con la orientación del celular"
           >
-            <Compass className="h-4 w-4" />
             {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
           </MapButton>
         )}
@@ -517,26 +525,20 @@ export default function MapComponentGL({
         <MapButton
           onClick={(event) => setBasemapPicker(event.currentTarget.getBoundingClientRect())}
           active={Boolean(basemapPicker)}
+          icon={Layers}
+          badge={basemapById(basemap).short}
           title="Elegir el mapa de fondo"
         >
-          <Layers className="h-4 w-4" />
           Mapa base
-          <span
-            className={`ml-0.5 rounded px-1 py-px text-[9px] font-semibold ${
-              basemapPicker ? "bg-white/20" : "bg-slate-100 text-slate-500"
-            }`}
-          >
-            {basemapById(basemap).short}
-          </span>
         </MapButton>
 
         <MapButton
           onClick={() =>
             window.open("https://www.linkedin.com/in/fabio-espinosa/", "_blank", "noopener,noreferrer")
           }
+          icon={User}
           title="Perfil del autor en LinkedIn"
         >
-          <User className="h-4 w-4" />
           Fabio A. Espinosa
         </MapButton>
       </div>
@@ -581,7 +583,7 @@ export default function MapComponentGL({
       {/* Los avisos van apilados en una sola columna centrada abajo. Estaban
           sueltos en dos alturas fijas, y cuando salían los dos a la vez, uno se
           montaba sobre la lectura del cursor. */}
-      <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 flex w-[min(30rem,calc(100%-2rem))] -translate-x-1/2 flex-col items-center gap-2">
+      <div className="pointer-events-none absolute bottom-32 left-1/2 z-10 flex w-[min(30rem,calc(100%-2rem))] -translate-x-1/2 flex-col items-center gap-2 md:bottom-24">
         {terrainError && (
           <div className="pointer-events-auto">
             <MapNotice tone="warning" icon={Mountain} onClose={dismissTerrainError}>

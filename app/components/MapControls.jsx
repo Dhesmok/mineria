@@ -19,18 +19,39 @@ import { Rotate3d, X } from "lucide-react"
  * y dos grises en la misma pantalla. Este reproduce el lenguaje del panel —13
  * píxeles, colores slate, esquinas de 8— para que el visor entero se lea como
  * una sola cosa.
+ *
+ * **En pantalla estrecha se queda solo con el icono.** Los cinco botones con su
+ * texto miden más que un teléfono de ancho, así que en la columna vertical
+ * acababan tapando el mapa entero. El texto sigue estando en `title` y en el
+ * nombre accesible, que es lo que necesitan un lector de pantalla y quien deja
+ * el dedo encima.
+ *
+ * El blanco de pulsación no baja de 44 px de alto en táctil: por debajo de eso
+ * un dedo falla más veces de las que acierta.
  */
-export const MapButton = ({ active, className = "", children, ...props }) => (
+export const MapButton = ({ active, icon: Icon, badge, className = "", children, ...props }) => (
   <button
     type="button"
+    title={typeof children === "string" ? children : undefined}
+    aria-label={typeof children === "string" ? children : undefined}
     {...props}
-    className={`flex h-9 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium shadow-sm transition-colors ${
+    className={`flex h-11 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium shadow-sm transition-colors md:h-9 ${
       active
         ? "border-slate-300 bg-slate-900 text-white hover:bg-slate-700"
         : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
     } ${className}`}
   >
-    {children}
+    {Icon && <Icon className="h-4 w-4 shrink-0" />}
+    <span className="hidden whitespace-nowrap md:inline">{children}</span>
+    {badge && (
+      <span
+        className={`ml-0.5 hidden rounded px-1 py-px text-[9px] font-semibold md:inline ${
+          active ? "bg-white/20" : "bg-slate-100 text-slate-500"
+        }`}
+      >
+        {badge}
+      </span>
+    )}
   </button>
 )
 

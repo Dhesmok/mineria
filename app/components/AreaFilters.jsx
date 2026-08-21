@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react"
 import { Table2, X } from "lucide-react"
 
+import { anchorToViewport, popoverWidth } from "../utils/popoverPosition"
 import {
   FILTER_FIELDS,
   collectFilterOptions,
@@ -73,16 +74,23 @@ export const AreaFilters = ({
 
   const camposConOpciones = FILTER_FIELDS.filter((campo) => (values[campo.key] ?? []).length > 1)
 
-  const top = Math.min(anchorRect?.bottom ?? 0, window.innerHeight - 420) + 6
-  const left = Math.min(anchorRect?.left ?? 0, window.innerWidth - 300)
+  // El ancho de aquí abajo tiene que ser el mismo que el de la clase: colocar la
+  // ventana contando con un ancho que no es el que el navegador va a usar es
+  // exactamente el fallo que hacía que en un teléfono se saliera por la derecha.
+  const ancho = popoverWidth(304, window.innerWidth)
+  const { top, left } = anchorToViewport(
+    anchorRect,
+    { width: ancho, height: Math.min(420, window.innerHeight * 0.7) },
+    { width: window.innerWidth, height: window.innerHeight },
+  )
 
   return (
     <div
       ref={panelRef}
       role="dialog"
       aria-label={`Filtros de ${area.name}`}
-      style={{ top: Math.max(12, top), left: Math.max(12, left) }}
-      className="fixed z-50 max-h-[70vh] w-[19rem] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
+      style={{ top, left }}
+      className="fixed z-50 max-h-[70vh] w-[min(19rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
     >
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5">
         <span

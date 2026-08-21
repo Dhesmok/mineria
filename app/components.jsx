@@ -83,6 +83,21 @@ export default function Component() {
    */
   const [prefsCargadas, setPrefsCargadas] = useState(false)
 
+  /**
+   * En un teléfono la hoja arranca recogida.
+   *
+   * Abierta ocupa más de la mitad de la pantalla, y lo primero que alguien
+   * quiere ver al abrir un visor es el mapa. En escritorio no aplica: ahí el
+   * panel es una columna al lado y no tapa nada.
+   *
+   * Se decide después de montar y no en el estado inicial, por lo mismo que las
+   * preferencias: el servidor no sabe el ancho de la pantalla, y pintar algo
+   * distinto de lo que pinta el navegador tira la página entera.
+   */
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 767px)").matches) setShowSidebar(false)
+  }, [])
+
   useEffect(() => {
     const prefs = readPreferences()
     setSelectedCoordinateSystem(prefs.crs)
@@ -308,15 +323,31 @@ export default function Component() {
           que nombra a una sola de las cuatro áreas confunde más de lo que
           orienta. Sin él, el panel arranca 44 px más arriba. */}
       <div
-        className={`absolute top-4 left-4 z-10 flex max-h-[calc(100vh-5rem)] items-start transition-transform duration-300 ease-out ${
-          showSidebar ? "translate-x-0" : "-translate-x-[calc(100%-0.5rem)]"
+        // **Dos disposiciones, una sola marca.**
+        //
+        // En pantalla ancha el panel es una columna a la izquierda con su
+        // pestaña al costado, y se esconde deslizándose hacia la izquierda. En
+        // un teléfono eso no cabe: 350 px de columna sobre una pantalla de 390
+        // tapan el mapa entero. Ahí el panel pasa a ser una hoja que sube desde
+        // abajo con la pestaña arriba, que es el gesto que ya usan todas las
+        // aplicaciones de mapas y no hay que explicar.
+        //
+        // Se resuelve con clases por tamaño y no con JavaScript a propósito: un
+        // `window.innerWidth` leído al montar no coincide con lo que pintó el
+        // servidor, y eso tira la página entera para volver a pintarla —ya pasó
+        // con las preferencias—.
+        //
+        // La cuenta del desplazamiento horizontal no es evidente: el bloque mide
+        // el panel (350) más la pestaña (24) = 374, y arranca a 16 del borde.
+        // Para que el panel salga entero hay que correrlo 366, o sea 100 % menos
+        // media unidad. Con «100 % menos la pestaña» —que es lo que parece—
+        // quedaba una franja de 16 px asomando, y eso solo se vio en una
+        // captura.
+        className={`fixed inset-x-0 bottom-0 z-10 flex max-h-[75vh] flex-col-reverse transition-transform duration-300 ease-out md:absolute md:inset-x-auto md:bottom-auto md:left-4 md:top-4 md:max-h-[calc(100vh-5rem)] md:flex-row md:items-start ${
+          showSidebar
+            ? "translate-y-0 md:translate-x-0"
+            : "translate-y-[calc(100%-2.75rem)] md:translate-y-0 md:-translate-x-[calc(100%-0.5rem)]"
         }`}
-        // La cuenta del desplazamiento, que no es evidente: el bloque mide el
-        // panel (350) más la pestaña (24) = 374, y arranca a 16 del borde. Para
-        // que el panel salga entero de la pantalla hay que correrlo 366, o sea
-        // 100 % menos media unidad. Con «100 % menos la pestaña» —que es lo que
-        // parece— quedaba una franja de 16 px del panel asomando por la
-        // izquierda, y no se veía leyendo el código: se vio en una captura.
       >
       <div
         // El alto máximo con desplazamiento interno no es un adorno: el panel
@@ -326,7 +357,7 @@ export default function Component() {
         // un tope, el panel se desplaza por dentro en vez de invadir la
         // pantalla. Los 5rem de abajo son para la escala y la lectura del
         // cursor, que viven en esa esquina.
-        className="flex max-h-[calc(100vh-5rem)] w-[350px] flex-col overflow-y-auto overflow-x-hidden rounded-xl bg-white shadow-lg"
+        className="flex max-h-[75vh] w-full flex-col overflow-y-auto overflow-x-hidden rounded-t-xl bg-white shadow-lg md:max-h-[calc(100vh-5rem)] md:w-[350px] md:rounded-xl"
       >
         <div className="p-4 space-y-4">
           {/* El buscador de expedientes se mudó a la lupa del área de Minería.
@@ -403,17 +434,25 @@ export default function Component() {
       </div>
 
         {/* La pestaña. Va fuera de la caja que se desplaza por dentro, para que
-            no se vaya con el contenido al recorrer la lista de capas. */}
+            no se vaya con el contenido al recorrer la lista de capas.
+
+            En el teléfono es una barra ancha encima de la hoja, con el asa que
+            todo el mundo reconoce; en escritorio, una lengüeta al costado. */}
         <button
           type="button"
           onClick={() => setShowSidebar((visible) => !visible)}
           aria-expanded={showSidebar}
           aria-label={showSidebar ? "Ocultar panel" : "Mostrar panel"}
           title={showSidebar ? "Ocultar panel" : "Mostrar panel"}
-          className="mt-3 flex h-14 w-6 items-center justify-center rounded-r-lg border-l border-slate-100 bg-white text-slate-400 shadow-lg transition-colors hover:bg-slate-50 hover:text-slate-700"
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-t-xl bg-white text-slate-400 shadow-[0_-2px_8px_rgba(15,23,42,0.08)] transition-colors hover:bg-slate-50 hover:text-slate-700 md:mt-3 md:h-14 md:w-6 md:rounded-l-none md:rounded-r-lg md:border-l md:border-slate-100 md:shadow-lg"
         >
+          {/* El asa: solo en táctil, donde es la señal de «esto se arrastra». */}
+          <span className="h-1 w-9 rounded-full bg-slate-300 md:hidden" />
+          <span className="text-[13px] font-medium text-slate-600 md:hidden">Capas y filtros</span>
           <ChevronLeft
-            className={`h-4 w-4 transition-transform duration-300 ${showSidebar ? "" : "rotate-180"}`}
+            className={`hidden h-4 w-4 transition-transform duration-300 md:block ${
+              showSidebar ? "" : "rotate-180"
+            }`}
           />
         </button>
       </div>
@@ -429,6 +468,7 @@ export default function Component() {
           coordinateSystem={selectedCoordinateSystem}
           filters={filters}
           onLayerData={setLayerData}
+          panelOpen={showSidebar}
         />
       </div>
       {showTable && (

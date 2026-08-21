@@ -113,7 +113,7 @@ export const FloatingPanel = ({ title, icon: Icon, children, onRequestClose }) =
   return (
     <div
       style={posicion}
-      className="w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
+      className="w-[min(16rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
     >
       <div
         {...asa}

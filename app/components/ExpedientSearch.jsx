@@ -10,6 +10,7 @@ import {
   TITLE_LAYER_NAME,
   tenureLayerUrl,
 } from "../utils/tenureLayers"
+import { anchorToViewport, popoverWidth } from "../utils/popoverPosition"
 import { debounce } from "@/lib/utils"
 
 /**
@@ -192,16 +193,19 @@ export const ExpedientSearch = ({
     }
   }
 
-  const top = Math.min(anchorRect?.bottom ?? 0, window.innerHeight - 320) + 6
-  const left = Math.min(anchorRect?.left ?? 0, window.innerWidth - 300)
+  const { top, left } = anchorToViewport(
+    anchorRect,
+    { width: popoverWidth(304, window.innerWidth), height: 320 },
+    { width: window.innerWidth, height: window.innerHeight },
+  )
 
   return (
     <div
       ref={panelRef}
       role="dialog"
       aria-label="Buscar expediente"
-      style={{ top: Math.max(12, top), left: Math.max(12, left) }}
-      className="fixed z-50 w-[19rem] rounded-xl border border-slate-200 bg-white shadow-xl"
+      style={{ top, left }}
+      className="fixed z-50 w-[min(19rem,calc(100vw-1.5rem))] rounded-xl border border-slate-200 bg-white shadow-xl"
     >
       {/* Misma cabecera que la ventana de filtros —punto del color del área,
           título en negrita, X a la derecha—: las dos salen del mismo encabezado
