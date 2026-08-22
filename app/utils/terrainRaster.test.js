@@ -4,6 +4,7 @@ import {
   aspectColorFor,
   derivativeGridFrom,
   derivativePixels,
+  resolutionNote,
   SLOPE_ALPHA,
   SLOPE_LEGEND,
   SLOPE_MIN_ZOOM,
@@ -147,6 +148,34 @@ describe("orientación", () => {
 
   it("sin dato, transparente", () => {
     expect(aspectColorFor(NaN)).toEqual([0, 0, 0, 0])
+  })
+})
+
+describe("resolutionNote", () => {
+  it("distingue interpolar de resumir", () => {
+    // Es la distinción que motivó la ventana de información. Con celdas más
+    // finas que el modelo, lo de en medio es invento suave; con celdas más
+    // gruesas, cada una junta varias medidas. Decir «celdas 19 m» a secas se lee
+    // como «este mapa tiene 19 m de detalle», que es lo contrario.
+    expect(resolutionNote(19).interpolated).toBe(true)
+    expect(resolutionNote(76).interpolated).toBe(false)
+  })
+
+  it("la ventana de medida son dos celdas, no una", () => {
+    // El número que de verdad importa al leer una pendiente: el método mira las
+    // vecinas, así que el valor de una celda promedia dos anchos de terreno.
+    expect(resolutionNote(19).window).toBe(38)
+    expect(resolutionNote(152).window).toBe(304)
+  })
+
+  it("redondea, porque nadie lee 19,04 m", () => {
+    expect(resolutionNote(19.04).cell).toBe(19)
+  })
+
+  it("sin celda no hay nota que dar", () => {
+    expect(resolutionNote(null)).toBeNull()
+    expect(resolutionNote(0)).toBeNull()
+    expect(resolutionNote(NaN)).toBeNull()
   })
 })
 
