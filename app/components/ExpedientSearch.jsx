@@ -12,6 +12,7 @@ import {
 } from "../utils/tenureLayers"
 import { anchorToViewport, popoverWidth } from "../utils/popoverPosition"
 import { debounce } from "@/lib/utils"
+import { likePrefixPattern } from "../utils/sqlText"
 
 /**
  * Buscar un expediente de la ANM.
@@ -77,8 +78,16 @@ export const ExpedientSearch = ({
     setLoading(true)
     setError(null)
     try {
-      const limpio = query.trim().toUpperCase().replace(/'/g, "''")
-      const where = `(UPPER(TENURE_ID) LIKE '${limpio}%' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${limpio}%')`
+      // `%` y `_` son comodines dentro de un LIKE, no caracteres normales:
+      // teclear «%%%» cumplía el mínimo de tres y barría el dataset nacional.
+      // `likePrefixPattern` los quita y devuelve null si no queda bastante.
+      const patron = likePrefixPattern(query, MIN_SUGGESTION_LENGTH)
+      if (!patron) {
+        setSuggestions([])
+        setLoading(false)
+        return
+      }
+      const where = `(UPPER(TENURE_ID) LIKE '${patron}' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${patron}')`
       const consulta = `query?where=${encodeURIComponent(where)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`
 
       // Los números de las capas de tenencia se descubren, igual que en el mapa.

@@ -3,12 +3,24 @@
 Repaso completo de la estructura buscando fallos de hoy, deudas que van a doler
 mañana, y por dónde conviene crecer. Escrito después de la Fase 12.
 
-> **Estado: aplicada.** Los doce hallazgos y las siete propuestas se
-> implementaron en la Fase 13; ver `PLAN-MAPLIBRE.md`. Lo único que se dejó
-> fuera, y a propósito, es la curvatura: con celdas de 30 m es sobre todo ruido.
-> El documento se conserva como está —con los problemas en presente— porque su
+> **Estado: aplicada, con dos salvedades.** Los doce hallazgos y las siete
+> propuestas se implementaron en la Fase 13; ver `PLAN-MAPLIBRE.md`. El
+> documento se conserva como está —con los problemas en presente— porque su
 > valor no es la lista de tareas sino el razonamiento de por qué cada cosa
 > importaba y qué la delató.
+>
+> Lo que **no** está cerrado, y conviene saberlo antes de leer:
+>
+> - **La curvatura se dejó fuera a propósito**: con celdas de 30 m es sobre todo
+>   ruido.
+> - **La propuesta A —«que el 3D sea rápido»— no está conseguida.** Sus medidas
+>   1, 2 y 3 se aplicaron; la 4, el proveedor de elevación, sigue abierta. Y las
+>   capas de pendiente y orientación que salieron de la propuesta E son hoy **lo
+>   más lento del visor**: bloquean el navegador unos diez segundos. Ver la
+>   corrección dentro de la sección E.
+>
+> Un banner que dijera «aplicada» a secas sobre un documento con eso dentro sería
+> peor que no tener banner.
 
 Cada hallazgo lleva la evidencia con la que se encontró. Los que no se
 comprobaron de verdad van marcados como sospecha, no como hecho.
@@ -274,9 +286,38 @@ que plantear con más cuidado.
 
 **Lo que se puede hacer bien.** Pendiente y orientación se calculan a partir de
 las mismas teselas de elevación que ya se descargan, con la ventana de 3×3 de
-toda la vida. Se puede hacer en la tarjeta gráfica, sobre las teselas que ya
-están en memoria, y sale prácticamente gratis: se pinta como una capa más, con
+toda la vida. ~~Se puede hacer en la tarjeta gráfica, sobre las teselas que ya
+están en memoria, y sale prácticamente gratis~~: se pinta como una capa más, con
 su leyenda y su rampa de color.
+
+> ### ⚠️ Corrección — 2026-08-22
+>
+> **Ese «prácticamente gratis» era falso, y esta frase dirigió mal la
+> implementación.** Iba sin marcar como sospecha, en un documento cuya
+> introducción promete que lo no comprobado se marca; se leyó como un hecho y
+> sirvió de permiso para no medir.
+>
+> No se hizo en la tarjeta gráfica: se hizo en el procesador, con una consulta de
+> altura por cada nodo de una rejilla de pantalla. **Medido: 20.453 nodos y unos
+> diez segundos de bucle bloqueante**, y eso sustituyendo la consulta de altura
+> por una función falsa que casi no hace nada. De esos diez segundos, un tercio
+> se va solo en convertir píxeles a coordenadas: con el terreno puesto, esa
+> conversión lanza un rayo contra la superficie 3D por cada punto.
+>
+> El usuario lo describió como «se bloquea tanto que después de unos minutos se
+> visualiza pero se buguea». Lo de los minutos tiene su propia explicación: cada
+> lote de teselas de elevación que termina de llegar dispara otra pasada entera,
+> y con el bucket de S3 sin red de distribución esas teselas llegan a cuentagotas.
+>
+> Lo que habría que hacer, en orden de rentabilidad: quitar las 20.453
+> conversiones de coordenadas —con el mapa plano, que es el único caso en que
+> esta capa se dibuja, las cuatro esquinas definen una transformación afín y el
+> resto se interpola—; trocear el trabajo entre fotogramas para que el navegador
+> no se bloquee; dejar de rehacerlo con cada lote de teselas; y, si hiciera falta,
+> subir la rejilla de 8 a 12 píxeles, que es lo único con contrapartida visible.
+>
+> **La lección para futuras auditorías de este proyecto:** una estimación de
+> rendimiento sin medición es una sospecha, y hay que escribirla como tal.
 
 **Lo que hay que decir en voz alta.** Estos resultados dependen por completo de
 la resolución y la calidad del modelo. Con un modelo global de 30 m, la pendiente

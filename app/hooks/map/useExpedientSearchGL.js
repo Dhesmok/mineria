@@ -6,6 +6,7 @@ import { createLabelElement } from "../../utils/mapLabelsGL"
 import { fetchArcgisJson } from "../../utils/arcgis"
 import { emptyFeatureCollection } from "../../utils/anmLayers"
 import { SEARCH_LAYERS, SEARCH_SOURCES } from "../../utils/mapStyles"
+import { escapeSqlText } from "../../utils/sqlText"
 import {
   findTenureLayerNumbers,
   REQUEST_LAYER_NAME,
@@ -134,7 +135,7 @@ export const useExpedientSearchGL = (
     const map = mapRef.current
     if (!map || !expedientCode) return
 
-    const normalizedCode = expedientCode.trim().toUpperCase().replace(/'/g, "''")
+    const normalizedCode = escapeSqlText(expedientCode.trim().toUpperCase())
 
     // Una búsqueda invalida a la anterior. Sin esto, pulsar "Aplicar" varias
     // veces dejaba dibujado el resultado de una consulta que llegó tarde.
