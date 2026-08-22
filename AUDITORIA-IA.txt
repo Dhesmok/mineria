@@ -125,3 +125,63 @@ Ejecuta lint -> tests -> build en orden correcto. No requiere cambios.
 # Paso 5: Resto según necesidad
 
 # FIN DEL INFORME
+
+# ============================================================
+# VERIFICACIÓN Y RESPUESTA — 2026-08-22
+# Añadido por Claude (Claude Code). El informe de arriba se deja
+# intacto; esto es lo que se comprobó y lo que se hizo con él.
+# ============================================================
+
+# TODOS los archivos que cita el informe existen. No hay nada inventado.
+# Se verificó punto por punto contra el código de la rama main.
+
+APLICADO
+  [2] Dependencias. El informe sospechaba tres pares duplicados y dejaba el
+      grep pendiente. Hecho: eran OCHO paquetes declarados que el código no
+      importa en ninguna parte —tokml, geojson2shp, epsg-to-proj, proj4-list,
+      shapefile, shpjs, @shadcn/ui y shadcn-ui—. Arrastraban 136 paquetes.
+      Al quitarlos, las alertas de seguridad pasaron de 23 a 12, y las
+      críticas de 4 a 1.
+      Nota: el KML no lo generaba tokml, se construye a mano en
+      utils/exportUtils.js; el SHP lo hace @mapbox/shp-write, que se conserva.
+      Comprobado en el navegador que KML y SHP siguen descargando bien.
+
+  [5] [6] Archivos obsoletos. Borrados verify.py y test_perf.js, y también
+      benchmark.js, que al informe se le pasó. No eran solo ruido: los dos
+      últimos llevaban los índices de capa de la ANM escritos fijos (1,2,3,4),
+      que es la trampa nº1 documentada en CLAUDE.md.
+
+PENDIENTE, PERO NO COMO LO PROPONE EL INFORME
+  [1] NO es una inyección: las comillas sí se escapan. Lo que hay es que % y _
+      funcionan como comodines, y teclear "%%%" pasa el mínimo de tres
+      caracteres y barre el dataset nacional. Es un problema de CARGA, no de
+      seguridad.
+      *** NO APLICAR la corrección que propone. *** El replace(/%/g, "\\%") no
+      funciona: en SQL la barra invertida no es escape por defecto, hace falta
+      una cláusula ESCAPE. Tal cual, rompería las búsquedas normales.
+
+  [4] Cierto que falta next.config.js, pero el informe lo llama "no
+      bloqueante". Es al revés: ahí van las cabeceras de seguridad de un sitio
+      público, y hoy el visor sale sin ninguna. Sube de prioridad, no baja.
+
+  [3] Cierto, pero poco rentable: el proyecto es JavaScript casi por completo
+      y "strict" solo afecta a cuatro archivos .ts/.tsx.
+
+DESCARTADO
+  [8] "Comentarios excesivos". *** NO APLICAR. *** Los comentarios largos son
+      una convención deliberada, escrita en CLAUDE.md: explican POR QUÉ y
+      documentan el fallo que motivó cada decisión, porque el dueño del
+      proyecto no programa. Resumirlos a dos líneas borraría justo lo que hace
+      legible este repositorio. El informe no leyó el CLAUDE.md.
+
+LO QUE EL INFORME NO VIO
+  - El visor pide teselas a servidores internos de Google, fuera de su API
+    publicada. Es el mayor riesgo no técnico del proyecto.
+  - No hay archivo de licencia.
+  - Todo depende de un solo proveedor de datos (ANM), sin plan para cuando se
+    caiga o cambie sus campos.
+  - Las capas de pendiente y orientación bloquean el navegador unos diez
+    segundos. Una auditoría que solo lee archivos no puede encontrar esto: hay
+    que abrir el visor y usarlo.
+
+# FIN DE LA VERIFICACIÓN
