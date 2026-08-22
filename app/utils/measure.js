@@ -24,8 +24,15 @@ const CTM12 =
   "+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000000 +y_0=2000000 " +
   "+ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
 
-/** [lon, lat] geográficas → [este, norte] en metros. */
-const toCtm12 = ([lon, lat]) => proj4(WGS84, CTM12, [lon, lat])
+/**
+ * [lon, lat] geográficas → [este, norte] en metros.
+ *
+ * Se exporta para que el perfil longitudinal mida sus distancias con esta misma
+ * proyección. Si midiera de otra forma, la longitud del perfil y la que enseña
+ * la herramienta de medir para esa misma línea no coincidirían, y esa
+ * discrepancia se lee como un error del visor —con razón—.
+ */
+export const toCtm12 = ([lon, lat]) => proj4(WGS84, CTM12, [lon, lat])
 
 /**
  * Área de un anillo por la fórmula del agrimensor (shoelace).
