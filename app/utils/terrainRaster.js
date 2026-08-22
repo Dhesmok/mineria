@@ -25,6 +25,7 @@
  */
 
 import { DEM_MIN_ZOOM } from "./demTiles"
+import { DEM_RESOLUTION_M } from "./terrainAnalysis"
 
 /**
  * Zoom del mapa por debajo del cual la capa no se dibuja.
@@ -397,6 +398,37 @@ export const rasterPixels = (values, colorFor = slopeColorFor) => {
 
 /** Atajo para la pendiente, que es el uso más común. */
 export const slopePixels = (slopes) => rasterPixels(slopes, slopeColorFor)
+
+/**
+ * Los números con los que explicar de dónde sale lo que se está viendo.
+ *
+ * **Por qué hace falta explicarlo.** El modelo mide la altura cada ~30 m, pero la
+ * capa se dibuja sobre celdas de otro tamaño —19 m si estás cerca, 76 si estás
+ * lejos—. Enseñar «celdas 19 m» a secas se lee como «este mapa tiene 19 m de
+ * detalle», y no los tiene: las celdas de en medio están interpoladas, no
+ * medidas. Al revés pasa lo contrario: con celdas de 76 m cada una resume varias
+ * medidas del modelo.
+ *
+ * Y hay un tercer número, que es el que de verdad importa al leer una pendiente:
+ * el método mira las celdas vecinas, así que el valor de una celda es el promedio
+ * de unos **dos** anchos de celda de terreno. Con celdas de 19 m eso son 38, que
+ * casualmente es casi la resolución real del modelo — o sea que a ese zoom la
+ * capa no está inventando finura, aunque la rejilla parezca más fina de lo que
+ * el dato da.
+ *
+ * @param {number} cellSizeMeters lado de la celda que se está dibujando
+ * @returns {{cell: number, window: number, source: number, interpolated: boolean}|null}
+ */
+export const resolutionNote = (cellSizeMeters) => {
+  if (!Number.isFinite(cellSizeMeters) || cellSizeMeters <= 0) return null
+
+  return {
+    cell: Math.round(cellSizeMeters),
+    window: Math.round(cellSizeMeters * 2),
+    source: DEM_RESOLUTION_M,
+    interpolated: cellSizeMeters < DEM_RESOLUTION_M,
+  }
+}
 
 /**
  * ¿Tiene sentido dibujar la capa con este zoom y esta inclinación?
