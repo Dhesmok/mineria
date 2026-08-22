@@ -52,6 +52,15 @@ export const FloatingPanel = ({
   collapsible = true,
   /** Botón extra a la izquierda de la equis, para lo que necesite cada panel. */
   headerAction = null,
+  /**
+   * Recogido: el panel se estrecha hasta lo que ocupe su contenido.
+   *
+   * Hace falta que lo sepa **el panel** y no solo su contenido. La primera
+   * versión dejó de dibujar los textos pero mantuvo el ancho fijo de 16rem, así
+   * que quedaban los iconos en una columna y medio panel vacío al lado. Se
+   * comprobó midiendo el alto —que sí encogía— y dando por hecho lo demás.
+   */
+  compact = false,
 }) => {
   const [collapsed, setCollapsed] = useState(false)
   /** Dónde está, en píxeles de ventana. `null` hasta que se mide el hueco. */
@@ -200,16 +209,20 @@ export const FloatingPanel = ({
           role="dialog"
           aria-label={title}
           style={estilo}
-          className="z-30 flex max-h-[calc(100vh-1rem)] w-[min(16rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg"
+          className={`z-30 flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg ${
+            compact ? "w-fit" : "w-[min(16rem,calc(100vw-1.5rem))]"
+          }`}
         >
           <div
             {...asa}
             className={`${asa.className} flex shrink-0 items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-2 py-1.5`}
           >
             <GripHorizontal className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <span className="flex-1 select-none text-[11px] font-medium text-slate-600">
-              {title}
-            </span>
+            {!compact && (
+              <span className="flex-1 select-none text-[11px] font-medium text-slate-600">
+                {title}
+              </span>
+            )}
             {headerAction}
             <button
               type="button"

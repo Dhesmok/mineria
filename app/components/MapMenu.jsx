@@ -105,19 +105,26 @@ export const MapMenuItem = ({ icon: Icon, name, hint, active, badge, compact, ..
     }`}
   >
     {Icon && <Icon className="h-4 w-4 shrink-0" />}
-    <span className={`min-w-0 flex-1 ${compact ? "sr-only" : ""}`}>
-      <span className="block text-[13px] font-medium leading-tight">{name}</span>
-      {hint && (
-        <span
-          className={`mt-0.5 block text-[11px] leading-tight ${
-            active ? "text-white/70" : "text-slate-500"
-          }`}
-        >
-          {hint}
-        </span>
-      )}
-    </span>
-    {badge && (
+    {/* Recogida no se esconde el texto, se deja de dibujar. Escondido con
+        `sr-only` seguía habiendo un hueco entre el icono y el borde, y sobre
+        todo seguía habiendo un `flex-1` que estiraba la fila: el panel se
+        quedaba igual de ancho con los iconos solos y un vacío al lado. El nombre
+        no se pierde, vive en `aria-label` y en el rótulo emergente. */}
+    {!compact && (
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-medium leading-tight">{name}</span>
+        {hint && (
+          <span
+            className={`mt-0.5 block text-[11px] leading-tight ${
+              active ? "text-white/70" : "text-slate-500"
+            }`}
+          >
+            {hint}
+          </span>
+        )}
+      </span>
+    )}
+    {!compact && badge && (
       <span
         className={`shrink-0 rounded px-1.5 py-px text-[10px] font-semibold ${
           active ? "bg-white/20" : "bg-slate-100 text-slate-500"
