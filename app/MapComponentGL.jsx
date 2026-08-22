@@ -547,6 +547,7 @@ export default function MapComponentGL({
               title="Dibujo y medidas"
               icon={PencilRuler}
               collapsible={false}
+              compact={dibujoCompacto}
               onRequestClose={() => setDibujoAbierto(false)}
               // Recoger deja solo los iconos. Cuando ya se sabe cuál es cuál,
               // los nombres y las medidas ocupan sitio sobre el mapa sin
