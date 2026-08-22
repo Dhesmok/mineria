@@ -12,6 +12,7 @@ import {
   PITCH_MAX,
 } from "./hooks/map/useTerrainGL"
 import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
+import { useTerrainProfileGL } from "./hooks/map/useTerrainProfileGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
 import { useAreaDownloadGL } from "./hooks/map/useAreaDownloadGL"
@@ -31,6 +32,7 @@ import { MapMenuItem, MapMenuPanel, MapMenuSeparator } from "./components/MapMen
 import { ImageExport } from "./components/ImageExport"
 import { TerrainQuery } from "./components/TerrainQuery"
 import { TerrainRasterLegend } from "./components/TerrainRasterLegend"
+import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
@@ -43,6 +45,7 @@ import {
   ImageDown,
   MountainSnow,
   PencilRuler,
+  Spline,
   Triangle,
   Layers,
   Mountain,
@@ -211,6 +214,9 @@ export default function MapComponentGL({
     queryTerrain,
   } = useTerrainGL(mapRef, mapInstance)
 
+  const { profileActive, toggleProfile, profile, profileHover, onProfileHover } =
+    useTerrainProfileGL(mapRef, mapInstance, { elevationAt, setTerrainForQuery, startMode })
+
   const { terrainMode, chooseTerrainMode, terrainRasterUnavailable } = useTerrainRasterGL(
     mapRef,
     mapInstance,
@@ -265,9 +271,11 @@ export default function MapComponentGL({
         ? "Orientación"
         : queryingTerrain
           ? "Consulta"
-          : showHillshade
-            ? "Relieve"
-            : null
+          : profileActive
+            ? "Perfil"
+            : showHillshade
+              ? "Relieve"
+              : null
 
   const figurasDibujadas =
     (drawSummary?.polygons ?? 0) + (drawSummary?.lines ?? 0) + (drawSummary?.points ?? 0)
@@ -804,7 +812,38 @@ export default function MapComponentGL({
             active={queryingTerrain}
             onClick={toggleTerrainQuery}
           />
+          {/* Esta cierra la ventana al elegirla, a diferencia de las demás. No
+              es un capricho: deja el mapa en modo dibujo, y la ventana se queda
+              encima de donde hay que trazar la línea. Además se cerraría con
+              Escape, que en modo dibujo **también cancela el trazo** — así que
+              el usuario que la cerrara de esa forma se quedaría con el perfil
+              encendido y sin poder dibujar, sin entender por qué. */}
+          <MapMenuItem
+            icon={Spline}
+            name="Perfil longitudinal"
+            hint="Dibuja una línea y mira el corte del terreno"
+            active={profileActive}
+            onClick={() => {
+              toggleProfile()
+              cerrarMenu()
+            }}
+          />
         </MapMenuPanel>
+      )}
+
+      {/* El perfil ocupa el ancho de la pantalla, no la columna de la derecha:
+          es una gráfica de distancia, y en una columna de 256 px un recorrido de
+          tres kilómetros no se lee. Va abajo, sobre la barra de escala, y deja
+          libre el lado izquierdo por si el panel de capas está abierto. */}
+      {profileActive && (
+        <div className="pointer-events-none absolute bottom-16 left-2 right-2 z-20 md:bottom-10 md:left-auto md:right-4 md:w-[min(46rem,calc(100%-26rem))]">
+          <TerrainProfile
+            profile={profile}
+            hovered={profileHover}
+            onHover={onProfileHover}
+            onClose={toggleProfile}
+          />
+        </div>
       )}
 
       {/* Los avisos van apilados en una sola columna centrada abajo. Estaban
@@ -932,6 +971,18 @@ export default function MapComponentGL({
         /* La medida de una figura dibujada se distingue de las etiquetas de
            expediente: fondo oscuro en vez de texto con contorno, porque es un
            dato calculado y no un rótulo del mapa. */
+        /* El punto del mapa que sigue al puntero de la gráfica del perfil.
+           Con halo blanco por lo mismo que los vértices dibujados: sobre una
+           imagen de satélite, un punto de color sin halo desaparece. */
+        .profile-cursor {
+          width: 14px;
+          height: 14px;
+          border-radius: 9999px;
+          background: #3D5A80;
+          border: 3px solid #ffffff;
+          box-shadow: 0 1px 4px rgba(15, 23, 42, 0.45);
+          pointer-events: none;
+        }
         .map-label.draw-measure div {
           background: rgba(17, 24, 39, 0.85);
           color: #ffffff;
