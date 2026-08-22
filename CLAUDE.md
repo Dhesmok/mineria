@@ -32,10 +32,20 @@ proyecto es "dibuja un cuadro y sal con los archivos", no ser otro visor.
 - Next.js 14 (App Router) + React 18
 - Tailwind + shadcn/ui (Radix)
 - **MapLibre GL JS** + `@mapbox/mapbox-gl-draw`
-- `proj4` + `epsg-to-proj` para reproyección
-- `@turf/turf` para geometría
-- `jszip`, `file-saver`, `@mapbox/shp-write`, `geojson2shp`, `tokml` para exportar
+- `proj4` para reproyección, con las definiciones a mano en `utils/crs.js`
+- `@turf/turf` para geometría, `polylabel` para colocar etiquetas
+- `jszip`, `file-saver` y `@mapbox/shp-write` para exportar. **El KML se
+  construye a mano** en `utils/exportUtils.js`; no hay librería de por medio
+- `@esri/arcgis-to-geojson-utils` para traducir lo que responde ArcGIS
 - Jest + Testing Library
+
+Esta lista incluía cinco paquetes que el código no importaba en ninguna parte
+—`epsg-to-proj`, `geojson2shp`, `tokml`, `shapefile`, `shpjs`—, más `@shadcn/ui`
+y `shadcn-ui`, que es una herramienta de línea de comandos y no una librería.
+Los ocho se quitaron: arrastraban 136 paquetes y once de las veintitrés alertas
+de seguridad que tenía el proyecto. **Si añades algo aquí, que sea porque un
+`import` lo usa**; una lista de dependencias que no coincide con el código
+manda a quien la lee —persona o modelo— a buscar en el sitio equivocado.
 
 **Leaflet ya no está.** La migración terminó (ver `docs/PLAN-MAPLIBRE.md`). Si
 encuentras un comentario que menciona Leaflet es historia, no una dependencia:

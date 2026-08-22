@@ -317,6 +317,13 @@ cambiaron, decisiones que tomaste y por qué.)_
   son ruido, pero borrarlos no es parte de la Fase 0 y no estorban a la
   migración.
 
+  > **Al día de hoy:** los tres archivos se borraron. No eran solo ruido —los
+  > dos primeros llevaban los índices de capa de la ANM escritos fijos (1, 2, 3,
+  > 4), que es exactamente la trampa nº 1 del `CLAUDE.md`, y `verify.py` pulsaba
+  > un botón «Aplicar» que ya no existe—. Un ejemplo equivocado en la raíz del
+  > repositorio es peor que ningún ejemplo. `.Jules/palette.md` sí se conserva:
+  > es el registro de aprendizajes de otro agente y no le estorba a nadie.
+
 ### Fase 1 — 2026-08-20
 
 **Cómo comparar.** `npm run dev` y se abren dos pestañas: `/` es el visor
