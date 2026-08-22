@@ -74,6 +74,9 @@ app/
     anmLayers.js          Consulta de capas ANM por bbox
     bboxDownload.js       Armado del ZIP y su README
     measure.js            Áreas y distancias en CTM-12
+    demTiles.js           Qué teselas del modelo de elevación hacen falta y dónde va cada una
+    demTileLoader.js      Bajarlas, decodificarlas a alturas y recordarlas
+    terrainRaster.js      Horn sobre el mosaico → los píxeles de la capa
     mapUtils.js, mapLabelsGL.js, drawStyles.js
 components/ui/            shadcn
 scripts/
@@ -135,15 +138,39 @@ montar un proxy en una API route de Next.
    exageración**, no la real. Con exageración 1,5 un cerro de 1.880 m reporta
    2.820. Usa siempre el helper `elevationAt()` de `useTerrainGL`, que divide.
 
+   Y **no le preguntes alturas a MapLibre en bucle**. Con el terreno puesto,
+   cada `unproject` lanza un rayo contra la malla del relieve: veinte mil
+   consultas eran diez segundos y medio de navegador congelado, y repetirlas
+   cada vez que llegaban teselas tumbaba la pestaña. Para cualquier cosa que
+   necesite muchas alturas —una capa derivada, un recorte de DEM— usa
+   `demTiles.js` + `demTileLoader.js`, que bajan las teselas del modelo y las
+   dejan en un `Float32Array`. Para un puñado de puntos, `elevationAt()` está
+   bien: el perfil longitudinal son 300 y no se nota.
+
 9. **Dentro del bloque de CSS de `MapComponentGL` no pueden ir comillas
    invertidas**, ni siquiera en un comentario: ese CSS vive en una plantilla de
    texto delimitada por ese mismo carácter y una sola la cierra antes de
    tiempo. El compilador falla sin decir dónde ni por qué.
 
-10. **Verificar con datos no basta; hay que mirar la pantalla.** Dos bugs de
-    esta migración (el color de las figuras y el worker de arriba) pasaban todas
-    las comprobaciones sobre los datos y solo se vieron en una captura de
-    pantalla. Cuando algo es visual, compruébalo visualmente.
+10. **Verificar con datos no basta; hay que mirar la pantalla.** Cinco bugs de
+    este proyecto —el color de las figuras, el worker de arriba, la ficha del
+    móvil, el ancho del panel plegado y el desfase de zoom de abajo— pasaban
+    todas las comprobaciones sobre los datos y solo se vieron en una captura.
+    Cuando algo es visual, compruébalo visualmente. Y **mide la magnitud de la
+    que dudas, no la de al lado**: dos de esos cinco se colaron por medir el
+    alto y dar por bueno el ancho.
+
+11. **MapLibre cuenta el zoom con teselas de 512 px; las del modelo de elevación
+    son de 256.** Su nivel 12 es el 13 de esas teselas. Al pedirlas a mano hay
+    que sumar uno (`demZoomFor()` lo hace y explica por qué). Sin el desfase no
+    falla nada visible: la capa sale bien colocada y con los colores correctos,
+    solo que a la mitad de la resolución que la pantalla podía enseñar.
+
+12. **Antes de sumar una dependencia, mira si ya existe.** El proyecto arrastró
+    ocho paquetes que ningún `import` usaba. Pero al revés también cuenta:
+    `maplibre-contour` (MIT) ya resuelve bajar y decodificar teselas terrarium
+    en un *worker* y servirlas por `addProtocol`; si algún día la capa de
+    pendiente pasa a teselas, es el sitio por donde empezar a mirar.
 
 ## Convenciones
 

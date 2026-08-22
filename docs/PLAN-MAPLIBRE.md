@@ -8,7 +8,7 @@ Hechos también los ajustes de uso (Fase 8), el panel por áreas (Fase 9) y los 
 lectura (Fase 10). Pendiente: recorte de DEM (Fase 5, fuente ya decidida), las
 entidades nuevas (Fase 6, faltan sus direcciones) y filtrar por departamento y
 municipio (Fase 8, falta sondear qué campos traen los servicios).
-**Última actualización:** 2026-08-21
+**Última actualización:** 2026-08-22
 
 ---
 
@@ -1182,3 +1182,101 @@ diseño de bancos ni cálculos de estabilidad.
 teléfono, exportación de imagen, consulta de terreno y capas derivadas—, estas
 dos últimas sobre superficies sintéticas de pendiente conocida, porque el proxy
 de la máquina de desarrollo bloquea las teselas de elevación reales.
+
+### Pendiente y orientación, rehechas — 2026-08-22
+
+**El punto de partida fue una corrección.** La capa de pendiente se había
+descrito aquí como lenta —«diez segundos»—, y no era eso: **el navegador se
+caía**. La diferencia importa porque apunta a otro sitio. Diez segundos son un
+cálculo caro; una pestaña muerta es un bucle sin freno.
+
+**Los dos problemas, separados.**
+
+*El cuelgue.* `redraw()` estaba enganchado al evento `sourcedata` del modelo de
+elevación, sin tope. Las teselas vienen de un bucket de S3 sin red de
+distribución y llegan a goteo durante uno o dos minutos, así que cada lote
+encolaba otra pasada completa. Se encolaban más de las que daba tiempo a
+terminar. (El perfil longitudinal, escrito después, sí tiene el tope y hasta cita
+esta capa como el ejemplo de qué no hacer; la capa nunca recibió el arreglo.)
+
+*El coste.* La pasada le preguntaba la altura al motor de mapa punto por punto
+sobre una rejilla de pantalla: ~20.450 `unproject` más otros tantos
+`queryTerrainElevation`. Y `unproject`, con el terreno puesto, no es una fórmula:
+lanza un rayo contra la malla del relieve. Medido, 10.400 ms por pasada, 3.400 de
+ellos solo en `unproject`.
+
+**Qué se hizo, y por qué así.** Lo mismo que hace QGIS: abrir el trozo de modelo
+que hace falta y leerlo de un arreglo en memoria. Las teselas del modelo son PNG
+en una dirección pública que MapLibre ya bajó para el relieve —o sea que están en
+la caché del navegador—, la altura viene empaquetada en los canales de color, y
+pegarlas en un `Float32Array` deja exactamente la misma tira de números que tiene
+abierta un SIG. Cero llamadas al motor de mapa. Módulos nuevos: `demTiles.js` (la
+matemática de qué teselas y dónde va cada una) y `demTileLoader.js` (bajarlas,
+decodificarlas y recordarlas).
+
+**El bucle sin freno no se acotó: desapareció.** Ya no hay nada que esperar de
+MapLibre, así que no hay a qué reaccionar. Se pide lo que hace falta, se espera y
+se pinta una vez.
+
+**Dos hallazgos de medir en vez de suponer.**
+
+De los ~7 ms que costaba Horn sobre una tesela de 256×256, 6,4 eran las dos
+llamadas a `atan`/`atan2` por celda y 0,5 la aritmética. Pero la pendiente no se
+pinta en grados: se pinta en cinco tramos, y como la tangente crece siempre,
+«¿pasa de 15°?» es *exactamente* «¿la magnitud del gradiente pasa de tan 15°?».
+Comparar contra cinco constantes da el mismo color sin `atan`. **No es una
+aproximación, y hay una prueba que lo comprueba celda a celda contra la vía
+larga.** La orientación conserva `atan2` a propósito: la alternativa son ocho
+comparaciones de signo que ahorran ~60 ms y son fáciles de equivocar sin que se
+note —pintarían las laderas del norte de color de sur—.
+
+Y el `ImageData` se le entrega a MapLibre ya decodificado. Antes se hacía
+`canvas.toDataURL()`, que vuelve a comprimir a PNG y a pasar a texto en base64
+dos millones de píxeles, y de paso obligaba a abrirle un hueco a `data:` en la
+política de seguridad.
+
+**Lo medido, en el navegador.** De 10.400 ms de hilo bloqueado a **172 ms de
+tarea más larga**; la capa aparece en ~900 ms desde el clic, y la página sigue
+dibujando fotogramas mientras tanto. Con el tiempo bien medido: el registro de
+«tareas largas» del propio navegador, que es lo que separa «se congeló» de «la
+tarjeta gráfica de esta prueba es de software».
+
+**Un bug que solo se vio en la pantalla, otra vez.** MapLibre cuenta el zoom con
+teselas de 512 px y las del modelo son de 256, así que el nivel de teselas va
+desfasado en uno. Sin el desfase la capa salía **bien colocada y con los colores
+correctos**, solo que dibujada a la mitad de la resolución que la pantalla podía
+enseñar. No lo encontró ninguna prueba sobre datos: se vio midiendo en una
+captura dónde caían las franjas de una rampa de pendiente conocida. Es el quinto
+caso de la misma familia.
+
+**Lo que se ganó además de la velocidad.** La rejilla es ahora la del modelo y no
+la de la pantalla, así que la pendiente de una ladera es la misma a cualquier
+zoom —antes la misma ladera daba 22° a un zoom y 19° a otro, y eso era un error,
+no un detalle—. La capa ya no necesita el terreno puesto, así que responde sin
+esperar a que cargue el relieve. La leyenda dice de qué tamaño es la celda, que
+es lo que separa este dato de una mancha de colores. Y hay aviso de progreso
+mientras se bajan las teselas.
+
+**Lo que sigue pendiente, y es la fase siguiente.** Sigue siendo *una sola
+imagen* sobre el rectángulo visible: al mover el mapa se rehace entera, y con la
+cámara inclinada no se dibuja —no porque saldría torcida, que ya no es cierto,
+sino porque inclinada se ve hasta el horizonte y cubrir eso obligaría a celdas de
+kilómetros—. Lo que lo arregla es servirla **por teselas**, con `addProtocol` y el
+cálculo en un *worker*: cada tesela se calcula una vez y se guarda, MapLibre pide
+solo las que se ven, y la capa funciona en 3D. Hay precedente publicado y en
+producción —`maplibre-contour`, de Michael Barry, MIT— que hace justo eso para
+curvas de nivel a partir de estas mismas teselas terrarium.
+
+**Comprobado**: 399 pruebas unitarias (39 nuevas) y una suite de navegador de 18
+comprobaciones sobre una escalera sintética de cinco rampas de pendiente conocida
+—2°, 10°, 22°, 37° y 60°—, que tienen que salir en las cinco franjas de la
+leyenda y en orden. El proxy de esta máquina bloquea las teselas de elevación
+reales, y aquí eso es una ventaja: sobre terreno real solo se puede comprobar que
+«parece razonable».
+
+**Lo que no se puede afirmar desde aquí.** Esta máquina dibuja con WebGL por
+software. Al mover el mapa quedan huecos de un par de segundos entre fotogramas
+con el hilo de la página libre, que son de subir la imagen a la tarjeta gráfica;
+moviendo el mapa con la capa apagada el hueco es de 1,6 s, así que la mayor parte
+no es de la capa. En una tarjeta de verdad esto debería desaparecer, pero es una
+predicción, no una medida: hay que mirarlo en el equipo real.

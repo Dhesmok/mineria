@@ -75,9 +75,21 @@ export const BASE_LAYERS = BASEMAP_LAYERS
  */
 export const TERRAIN_SOURCE_ID = "terrain"
 
+/**
+ * La dirección de las teselas, aparte de la fuente.
+ *
+ * Se exporta porque la capa de pendiente ya no le pregunta las alturas a
+ * MapLibre: baja estas mismas teselas por su cuenta y las decodifica. Que las dos
+ * vías salgan de la misma constante no es cosmética — con dos listas distintas,
+ * el día que cambie el proveedor una de las dos se queda atrás y el visor
+ * enseñaría un relieve y una pendiente de modelos diferentes.
+ */
+export const TERRAIN_TILE_TEMPLATE =
+  "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+
 const TERRAIN_SOURCE = {
   type: "raster-dem",
-  tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+  tiles: [TERRAIN_TILE_TEMPLATE],
   encoding: "terrarium",
   tileSize: 256,
   maxzoom: 15,
