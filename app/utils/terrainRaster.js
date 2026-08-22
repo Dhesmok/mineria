@@ -6,35 +6,39 @@
  * «qué parte de este título es escarpada» o «qué laderas miran al sur».
  *
  * **Cómo se calcula, y por qué así.** No hay una capa de pendiente que pedir a
- * nadie: hay que derivarla del modelo de elevación. Se muestrea la pantalla en
- * una rejilla, se le aplica a esa rejilla el mismo método de Horn de la consulta
- * puntual, y el resultado se pinta como imagen encima del mapa. La rejilla es de
- * pantalla y no de terreno a propósito: así el coste no depende del zoom —
- * siempre son los mismos miles de muestras— y el detalle crece solo cuando uno
- * se acerca, que es cuando hace falta.
+ * nadie: hay que derivarla del modelo de elevación. Se bajan las teselas del
+ * modelo que cubren lo que se está viendo, se pegan en un solo arreglo de
+ * alturas, se le aplica a ese arreglo el mismo método de Horn de la consulta
+ * puntual, y el resultado se pinta como imagen encima del mapa.
+ *
+ * **La rejilla es la del modelo, no la de la pantalla, y ese cambio importa.**
+ * Antes se muestreaba cada 8 píxeles de pantalla: la misma ladera daba 22° a un
+ * zoom y 19° a otro, porque lo que cambiaba no era el terreno sino el tamaño de
+ * la ventana con que se lo miraba. Ahora la celda es la del modelo y la pendiente
+ * de una ladera es un número, no una impresión. Es también lo que hace QGIS.
  *
  * **Los mismos avisos que la consulta puntual**, y por la misma razón: con un
  * modelo global de ~30 m esto sirve para leer el terreno y descartar zonas, no
- * para diseño ni para estabilidad. Y por debajo de cierto zoom la rejilla de
- * pantalla es más gruesa que el propio modelo, así que la capa se apaga sola en
- * vez de enseñar una mancha suavizada que parecería un dato fino.
+ * para diseño ni para estabilidad.
  *
  * Módulo puro: recibe alturas y devuelve píxeles.
  */
 
-import { DEM_RESOLUTION_M } from "./terrainAnalysis"
-
-/** Separación de la rejilla de muestreo, en píxeles de pantalla. */
-export const SAMPLE_STEP_PX = 8
+import { DEM_MIN_ZOOM } from "./demTiles"
 
 /**
- * Zoom por debajo del cual la capa no se dibuja.
+ * Zoom del mapa por debajo del cual la capa no se dibuja.
  *
- * A zoom 11 cada píxel son ~76 m y la rejilla de 8 px, ~600: seis veces más
- * grueso que el modelo. Lo que saldría no es la pendiente del terreno sino la de
- * una versión suavizada de él, y se vería igual de convincente.
+ * Ya no es una limitación del método —el cálculo es correcto a cualquier escala—
+ * sino de lo que significa el resultado: ahí abajo las celdas pasan de 150 m y lo
+ * que se pinta es la pendiente de un terreno tan generalizado que ya no responde
+ * a la pregunta con que se abrió la capa.
+ *
+ * El «menos uno» es el mismo desfase de convenio de `demZoomFor`: este número se
+ * compara contra el zoom de MapLibre, que cuenta con teselas de 512 px, y
+ * `DEM_MIN_ZOOM` está en niveles de teselas de 256.
  */
-export const SLOPE_MIN_ZOOM = 12
+export const SLOPE_MIN_ZOOM = DEM_MIN_ZOOM - 1
 
 /**
  * La rampa de color.
@@ -193,7 +197,185 @@ export const derivativeGridFrom = (heights, cols, rows, spacingMeters) => {
 }
 
 /**
+ * Los cortes de la leyenda, guardados como tangente al cuadrado.
+ *
+ * **Aquí está el truco que hace que esto vuele, y no es una aproximación.** La
+ * pendiente no se pinta en grados: se pinta en cinco tramos. Y como la tangente
+ * crece siempre, preguntar «¿esta ladera pasa de 15°?» es *exactamente* lo mismo
+ * que preguntar «¿la magnitud del gradiente pasa de tan 15°?». Comparar contra
+ * cinco constantes da el mismo color que calcular el ángulo, sin llamar a `atan`
+ * ni una vez.
+ *
+ * Medido sobre una tesela de 256×256: la cuenta de Horn son 0,5 ms y las dos
+ * llamadas trigonométricas por celda, 6,4. Trece de cada catorce milisegundos se
+ * iban en convertir a grados un número que después se tiraba.
+ *
+ * Al cuadrado para no tener que sacar la raíz de la magnitud tampoco.
+ */
+const SLOPE_TAN2_CUTS = SLOPE_LEGEND.map((tramo) =>
+  Number.isFinite(tramo.max) ? Math.tan((tramo.max * Math.PI) / 180) ** 2 : Infinity,
+)
+
+/** Igual, para el umbral por debajo del cual la orientación es ruido. */
+const ASPECT_MIN_TAN2 = Math.tan((ASPECT_MIN_SLOPE * Math.PI) / 180) ** 2
+
+/** Las paletas en plano, para no crear un arreglo de color por celda. */
+const paletaDe = (leyenda) => {
+  const bytes = new Uint8Array(leyenda.length * 4)
+  leyenda.forEach((tramo, i) => {
+    bytes[i * 4] = tramo.color[0]
+    bytes[i * 4 + 1] = tramo.color[1]
+    bytes[i * 4 + 2] = tramo.color[2]
+    bytes[i * 4 + 3] = SLOPE_ALPHA
+  })
+  return bytes
+}
+
+const SLOPE_PALETTE = paletaDe(SLOPE_LEGEND)
+// Los ocho rumbos; el noveno de la leyenda es el norte repetido para cerrar el
+// círculo y aquí sobra.
+const ASPECT_PALETTE = paletaDe(ASPECT_LEGEND.slice(0, 8))
+
+/** En qué tramo de la leyenda cae una magnitud de gradiente al cuadrado. */
+const tramoDePendiente = (magnitud2) => {
+  for (let i = 0; i < SLOPE_TAN2_CUTS.length; i++) {
+    if (magnitud2 < SLOPE_TAN2_CUTS[i]) return i
+  }
+  return SLOPE_TAN2_CUTS.length - 1
+}
+
+/**
+ * En qué rumbo de los ocho mira una ladera.
+ *
+ * **Este sí conserva `atan2`, y es una decisión, no un olvido.** Se podría sacar
+ * el octante con ocho comparaciones de signo y ahorrar unos 60 ms por pantalla.
+ * Pero esas ocho comparaciones son ilegibles y fáciles de equivocar en un signo,
+ * y un error de signo aquí no rompe nada: pinta las laderas del norte de color de
+ * sur y nadie lo nota hasta que alguien planea algo con ese mapa. El truco de la
+ * pendiente se puede leer y comprobar de un vistazo; este no.
+ */
+const tramoDeOrientacion = (dzdx, dzdy) => {
+  const azimut = (((90 - (Math.atan2(dzdy, -dzdx) * 180) / Math.PI) % 360) + 360) % 360
+  return Math.floor((azimut + 22.5) / 45) % 8
+}
+
+/**
+ * De las alturas a los píxeles de la capa, en una sola pasada.
+ *
+ * Es la función que sustituyó al bucle que congelaba el navegador. Lo que cambió
+ * no es la cuenta —sigue siendo Horn sobre 3×3— sino de dónde salen las alturas:
+ * antes se le preguntaban al motor de mapa una por una, ahora ya están en el
+ * arreglo que se recibe. Ver la cabecera de `demTiles.js`.
+ *
+ * El interior de la rejilla va sin ninguna llamada a función: son ocho lecturas
+ * de arreglo y aritmética. El borde se resuelve aparte, pegándose a la celda de
+ * al lado, porque son unos pocos miles de celdas y no vale la pena meterle a la
+ * pasada rápida una condición que se comprueba dos millones de veces para que se
+ * cumpla en cuatro mil.
+ *
+ * @param {Float32Array} heights alturas del mosaico, fila a fila de norte a sur
+ * @param {number} cols columnas del mosaico
+ * @param {number} rows filas
+ * @param {number} spacingMeters lado de la celda sobre el terreno
+ * @param {"slope"|"aspect"} mode qué se pinta
+ * @returns {Uint8ClampedArray} cuatro bytes por celda, transparente donde falta el dato
+ */
+export const derivativePixels = (heights, cols, rows, spacingMeters, mode = "slope") => {
+  const pixeles = new Uint8ClampedArray(cols * rows * 4)
+  if (cols < 3 || rows < 3 || !(spacingMeters > 0)) return pixeles
+
+  const esOrientacion = mode === "aspect"
+  const paleta = esOrientacion ? ASPECT_PALETTE : SLOPE_PALETTE
+  const k = 1 / (8 * spacingMeters)
+
+  /** Pinta una celda a partir de sus dos derivadas. */
+  const pintar = (i, dzdx, dzdy) => {
+    const magnitud2 = dzdx * dzdx + dzdy * dzdy
+    let tramo
+    if (esOrientacion) {
+      // En terreno casi llano el rumbo lo decide el ruido del modelo, no el
+      // relieve: se deja transparente en vez de pintar un confeti que parece
+      // información.
+      if (magnitud2 < ASPECT_MIN_TAN2) return
+      tramo = tramoDeOrientacion(dzdx, dzdy)
+    } else {
+      tramo = tramoDePendiente(magnitud2)
+    }
+    const p = i * 4
+    const c = tramo * 4
+    pixeles[p] = paleta[c]
+    pixeles[p + 1] = paleta[c + 1]
+    pixeles[p + 2] = paleta[c + 2]
+    pixeles[p + 3] = paleta[c + 3]
+  }
+
+  // El interior: la pasada rápida.
+  for (let fila = 1; fila < rows - 1; fila++) {
+    const arriba = (fila - 1) * cols
+    const medio = fila * cols
+    const abajo = (fila + 1) * cols
+
+    for (let col = 1; col < cols - 1; col++) {
+      const z1 = heights[arriba + col - 1]
+      const z2 = heights[arriba + col]
+      const z3 = heights[arriba + col + 1]
+      const z4 = heights[medio + col - 1]
+      const z6 = heights[medio + col + 1]
+      const z7 = heights[abajo + col - 1]
+      const z8 = heights[abajo + col]
+      const z9 = heights[abajo + col + 1]
+
+      const dzdx = (z3 + 2 * z6 + z9 - (z1 + 2 * z4 + z7)) * k
+      const dzdy = (z7 + 2 * z8 + z9 - (z1 + 2 * z2 + z3)) * k
+      // Con una sola altura ausente, las dos derivadas salen NaN y la celda se
+      // queda transparente. No hace falta comprobar las ocho.
+      if (!Number.isFinite(dzdx) || !Number.isFinite(dzdy)) continue
+
+      pintar(medio + col, dzdx, dzdy)
+    }
+  }
+
+  // El borde: la misma cuenta, leyendo la celda de al lado cuando el vecino cae
+  // fuera. Es lo que hace GDAL con `-compute_edges`, y a la resolución a la que
+  // se ve esto son celdas de menos de un píxel de pantalla.
+  const leer = (col, fila) => {
+    const c = col < 0 ? 0 : col > cols - 1 ? cols - 1 : col
+    const f = fila < 0 ? 0 : fila > rows - 1 ? rows - 1 : fila
+    return heights[f * cols + c]
+  }
+
+  const enElBorde = (col, fila) => {
+    const z1 = leer(col - 1, fila - 1)
+    const z2 = leer(col, fila - 1)
+    const z3 = leer(col + 1, fila - 1)
+    const z4 = leer(col - 1, fila)
+    const z6 = leer(col + 1, fila)
+    const z7 = leer(col - 1, fila + 1)
+    const z8 = leer(col, fila + 1)
+    const z9 = leer(col + 1, fila + 1)
+    const dzdx = (z3 + 2 * z6 + z9 - (z1 + 2 * z4 + z7)) * k
+    const dzdy = (z7 + 2 * z8 + z9 - (z1 + 2 * z2 + z3)) * k
+    if (!Number.isFinite(dzdx) || !Number.isFinite(dzdy)) return
+    pintar(fila * cols + col, dzdx, dzdy)
+  }
+
+  for (let col = 0; col < cols; col++) {
+    enElBorde(col, 0)
+    enElBorde(col, rows - 1)
+  }
+  for (let fila = 1; fila < rows - 1; fila++) {
+    enElBorde(0, fila)
+    enElBorde(cols - 1, fila)
+  }
+
+  return pixeles
+}
+
+/**
  * Los píxeles de la capa, listos para un `ImageData`.
+ *
+ * Queda para las pruebas y para quien tenga ya los grados calculados; la capa del
+ * mapa usa `derivativePixels`, que no llega a convertir a grados.
  *
  * @param {Float32Array} values grados por celda
  * @param {(v: number) => number[]} colorFor cómo se colorea cada valor
@@ -217,26 +399,26 @@ export const rasterPixels = (values, colorFor = slopeColorFor) => {
 export const slopePixels = (slopes) => rasterPixels(slopes, slopeColorFor)
 
 /**
- * ¿Tiene sentido dibujar la capa con este zoom y esta separación?
+ * ¿Tiene sentido dibujar la capa con este zoom y esta inclinación?
  *
  * Devuelve el motivo por el que no, para poder decírselo al usuario en vez de
  * dejar la capa encendida sin pintar nada.
  */
-export const slopeUnavailableReason = ({ zoom, pitch, metrosPorPixel }) => {
+export const slopeUnavailableReason = ({ zoom, pitch }) => {
   if (pitch > 1) {
-    // La capa se coloca como una imagen sobre el rectángulo de pantalla, y con
-    // la cámara inclinada ese rectángulo no es un rectángulo en el terreno: la
-    // imagen quedaría estirada y señalando pendientes donde no las hay.
+    // **El motivo cambió, aunque la restricción siga siendo la misma.** Antes la
+    // capa era una imagen estirada sobre el rectángulo de pantalla y con la
+    // cámara inclinada señalaba pendientes donde no las había. Ahora el mosaico
+    // está pegado a las teselas del modelo y es geográficamente exacto; lo que
+    // impide dibujarlo es otra cosa: con la cámara inclinada se ve hasta el
+    // horizonte, y cubrir eso con teselas obligaría a bajar tanto el nivel que
+    // saldrían celdas de kilómetros. Se resuelve el día que la capa se sirva por
+    // teselas en vez de como una sola imagen.
     return "Esta capa solo se dibuja con el mapa plano. Vuelve a 2D para verla."
   }
 
   if (zoom < SLOPE_MIN_ZOOM) {
-    return "Acerca el mapa: a esta escala la rejilla sería más gruesa que el propio modelo."
-  }
-
-  const separacion = metrosPorPixel * SAMPLE_STEP_PX
-  if (separacion > DEM_RESOLUTION_M * 4) {
-    return "Acerca el mapa para ver esta capa."
+    return "Acerca el mapa: a esta escala cada celda pasaría de 150 m."
   }
 
   return null

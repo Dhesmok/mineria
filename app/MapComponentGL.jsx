@@ -217,11 +217,16 @@ export default function MapComponentGL({
   const { profileActive, toggleProfile, profile, profileHover, onProfileHover } =
     useTerrainProfileGL(mapRef, mapInstance, { elevationAt, setTerrainForQuery, startMode })
 
-  const { terrainMode, chooseTerrainMode, terrainRasterUnavailable } = useTerrainRasterGL(
-    mapRef,
-    mapInstance,
-    { setTerrainForQuery },
-  )
+  // Sin `setTerrainForQuery`: estas capas ya no le preguntan las alturas a
+  // MapLibre, bajan las teselas del modelo por su cuenta. Poner el terreno solo
+  // para consultarlo era trabajo pagado dos veces.
+  const {
+    terrainMode,
+    chooseTerrainMode,
+    terrainRasterUnavailable,
+    terrainRasterProgress,
+    terrainRasterCellSize,
+  } = useTerrainRasterGL(mapRef, mapInstance)
 
   /**
    * La consulta puntual al terreno: un modo, no un botón de una sola vez.
@@ -610,7 +615,12 @@ export default function MapComponentGL({
             en la misma columna, y cada uno solo aparece cuando hay algo que
             ajustar: un control que no hace nada visible confunde más que ayuda. */}
         {terrainMode && (
-          <TerrainRasterLegend mode={terrainMode} unavailable={terrainRasterUnavailable} />
+          <TerrainRasterLegend
+            mode={terrainMode}
+            unavailable={terrainRasterUnavailable}
+            progress={terrainRasterProgress}
+            cellSize={terrainRasterCellSize}
+          />
         )}
 
         {queryingTerrain && (
