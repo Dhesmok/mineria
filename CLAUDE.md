@@ -176,3 +176,14 @@ npm test        # Jest
 ## Trabajo pendiente inmediato
 
 Ver `docs/PLAN-MAPLIBRE.md`.
+
+## Riesgos abiertos
+
+`docs/RIESGOS.md`. **Léelo antes de tocar los mapas de fondo o de sumar una
+entidad nueva.** No son fallos del código: son decisiones sin tomar que pueden
+obligar a apagar algo —las condiciones de uso de las teselas de Google, la falta
+de licencia del repositorio, y que todos los datos vengan de un único servicio—.
+
+Es una lista viva, no una foto: se revisa y se tacha. `docs/AUDITORIA.md` es lo
+contrario, una foto fechada de agosto que se conserva por su razonamiento; ahí
+adentro hay una corrección marcada de una afirmación que resultó falsa.

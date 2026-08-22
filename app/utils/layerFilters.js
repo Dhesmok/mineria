@@ -20,6 +20,8 @@
  * Módulo puro: recibe atributos y devuelve datos.
  */
 
+import { escapeSqlText } from "./sqlText"
+
 /**
  * Campos por los que se puede filtrar.
  *
@@ -133,7 +135,7 @@ export const buildMapFilter = (selections = {}, areaRange = null) => {
 }
 
 /** Comilla simple duplicada: es como SQL escapa una comilla dentro de un texto. */
-const quote = (value) => `'${String(value).replace(/'/g, "''")}'`
+const quote = (value) => `'${escapeSqlText(value)}'`
 
 /**
  * El mismo filtro, pero en SQL, para pedírselo al servicio.
