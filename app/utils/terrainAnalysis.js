@@ -22,10 +22,20 @@
 /** Resolución aproximada del modelo global que usa el visor, en metros. */
 export const DEM_RESOLUTION_M = 30
 
-/** El aviso que acompaña a cualquier número que salga de aquí. */
-export const ACCURACY_WARNING =
-  `Calculado sobre un modelo global de ~${DEM_RESOLUTION_M} m. Sirve para leer el ` +
-  "terreno y descartar zonas; no para diseño de bancos ni cálculos de estabilidad."
+/**
+ * Para qué sirve y para qué no. Es la parte accionable del aviso.
+ *
+ * Va aparte porque la leyenda de las capas de color explica la resolución en su
+ * propia ventana de información, y repetir ahí «modelo global de ~30 m» sería
+ * decir dos veces lo mismo en el mismo recuadro. Lo que no se puede repartir es
+ * esto: es lo único que impide que alguien planee un banco con este mapa.
+ */
+export const ACCURACY_USE =
+  "Sirve para leer el terreno y descartar zonas; no para diseño de bancos ni " +
+  "cálculos de estabilidad."
+
+/** El aviso completo, para donde no hay sitio para explicar la resolución. */
+export const ACCURACY_WARNING = `Calculado sobre un modelo global de ~${DEM_RESOLUTION_M} m. ${ACCURACY_USE}`
 
 /** Los ocho rumbos, para decir la orientación con palabras. */
 const COMPASS = [
