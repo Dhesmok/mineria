@@ -198,22 +198,27 @@ export const loadMosaic = async (template, tiles, { cols, rows }, opciones = {})
 const METROS_POR_GRADO = 111320
 
 /**
- * ¿Qué altura tiene lo más alto de por aquí?
+ * ¿Cuánto sube el terreno alrededor de un punto, respecto de ese punto?
  *
- * La usa el 3D para saber por encima de qué tiene que pasar la cámara. No sirve
- * la cota del punto que se mira: en el fondo de un valle, una cámara unos metros
- * sobre el suelo queda metida dentro de la ladera de enfrente. Lo que tiene que
- * quedar por debajo es la loma.
+ * La usa el 3D para saber por encima de qué tiene que pasar la cámara. Y devuelve
+ * el **desnivel**, no la cota, porque MapLibre coloca la cámara sobre el suelo del
+ * punto que mira y no sobre el nivel del mar: estando en Medellín a 1.500 m, lo
+ * que hay que salvar no son los 2.200 m de la loma sino los 700 que sobresale.
+ * Confundir las dos cosas alejaba el mapa nivel y medio de zoom de más.
+ *
+ * Tampoco vale con la cota del punto sola: en el fondo de un valle, una cámara
+ * unos cientos de metros sobre el suelo queda metida dentro de la ladera de
+ * enfrente. Lo que tiene que quedar por debajo es la loma.
  *
  * Se pregunta al modelo directamente y no a MapLibre porque MapLibre solo tiene
- * las teselas de lo que está dibujando, y justo en el caso que importa —cámara
- * bajo tierra, mucho zoom— responde cero. Comprobado: a zoom 15 y más,
- * `queryTerrainElevation` devolvía 0 sobre un terreno de 1.800 m.
+ * las teselas de lo que está dibujando, y justo en el caso que importa —mucho
+ * zoom— responde cero. Comprobado: a zoom 15 y más, `queryTerrainElevation`
+ * devolvía 0 sobre un terreno de 1.800 m.
  *
- * @returns {Promise<number|null>} metros sobre el nivel del mar, **sin
- *   exagerar**, o null si el modelo no llegó
+ * @returns {Promise<{relief: number, center: number, highest: number}|null>}
+ *   metros **sin exagerar**, o null si el modelo no llegó
  */
-export const highestAround = async (template, { lng, lat, radiusMeters, zoom, signal }) => {
+export const reliefAround = async (template, { lng, lat, radiusMeters, zoom, signal }) => {
   const dLat = radiusMeters / METROS_POR_GRADO
   const dLng = radiusMeters / (METROS_POR_GRADO * Math.cos((lat * Math.PI) / 180) || 1)
 
@@ -228,7 +233,14 @@ export const highestAround = async (template, { lng, lat, radiusMeters, zoom, si
   const { col, row } = cellInMosaic(lng, lat, rango)
   const lado = cellSizeMeters(lat, rango.zoom)
   const radioEnCeldas = Math.max(1, Math.round(radiusMeters / lado))
-  return maxAround(heights, rango.cols, rango.rows, col, row, radioEnCeldas)
+
+  const cima = maxAround(heights, rango.cols, rango.rows, col, row, radioEnCeldas)
+  const centro = heights[row * rango.cols + col]
+  if (cima === null || !Number.isFinite(centro)) return null
+
+  // Nunca negativo: si el punto que se mira es el más alto de la zona, no hay
+  // nada que salvar.
+  return { relief: Math.max(0, cima - centro), center: centro, highest: cima }
 }
 
 /** Para las pruebas: dejar la memoria como recién arrancada. */

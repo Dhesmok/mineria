@@ -9,7 +9,7 @@ import {
   SCENE_RADIUS_M,
   safeZoomFor,
 } from "../../utils/camera3d"
-import { highestAround } from "../../utils/demTileLoader"
+import { reliefAround } from "../../utils/demTileLoader"
 import { sampleGrid, slopeAspectFrom } from "../../utils/terrainAnalysis"
 
 /**
@@ -27,8 +27,16 @@ import { sampleGrid, slopeAspectFrom } from "../../utils/terrainAnalysis"
  * parecen demasiado.
  */
 
-/** Inclinación de la cámara al entrar en 3D. Ni plano ni tan rasante que se pierda el norte. */
-const PITCH_3D = 58
+/**
+ * Inclinación de la cámara al entrar en 3D.
+ *
+ * Estaba en 58°, que con un máximo de 72 se lee como «casi al tope»: la entrada
+ * en 3D parecía un giro brusco de cámara más que una inclinación. A 45° la
+ * escena se levanta con claridad, se sigue reconociendo dónde estaba uno, y de
+ * paso la cámara queda un tercio más alta —el desnivel va con el coseno—, así que
+ * hay que alejarse menos para salvar las lomas.
+ */
+const PITCH_3D = 45
 const EXAGGERATION_DEFAULT = 1.5
 export const EXAGGERATION_MIN = 0.5
 export const EXAGGERATION_MAX = 3
@@ -69,6 +77,34 @@ const SPIN_DEGREES_PER_SECOND = 10
  */
 const TERRAIN_FAILURES_LIMIT = 4
 
+/**
+ * Cuánto se espera, como mucho, a que el terreno tenga teselas antes de inclinar.
+ *
+ * Con red buena no se llega a notar. Si la red está mal, más vale entrar en 3D
+ * con la cámara mal colocada que dejar el botón sin responder: lo primero se
+ * arregla moviendo el mapa, lo segundo parece que el visor se colgó.
+ */
+const TERRAIN_WAIT_MS = 1200
+
+/** Espera a que el mapa termine de cargar lo que está pidiendo, con tope. */
+const esperarAlTerreno = (map, ms = TERRAIN_WAIT_MS) =>
+  new Promise((listo) => {
+    if (map.areTilesLoaded()) {
+      listo()
+      return
+    }
+
+    let reloj = 0
+    const terminar = () => {
+      clearTimeout(reloj)
+      map.off("idle", terminar)
+      listo()
+    }
+
+    reloj = setTimeout(terminar, ms)
+    map.on("idle", terminar)
+  })
+
 export const useTerrainGL = (mapRef, mapInstance) => {
   const [is3D, setIs3D] = useState(false)
   /**
@@ -101,13 +137,16 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   const is3DRef = useRef(is3D)
   is3DRef.current = is3D
   /**
-   * Lo más alto del terreno alrededor del centro, en metros y sin exagerar.
+   * Cuánto sobresale el terreno de alrededor por encima del centro, en metros y
+   * sin exagerar.
    *
-   * Se mide al entrar en 3D y al terminar de mover el mapa, y de ahí lo leen
-   * los deslizadores, que no pueden esperar a una consulta en cada paso del
-   * arrastre. `null` mientras no se sepa.
+   * El desnivel y no la cota: MapLibre pone la cámara sobre el suelo del punto
+   * que mira, así que lo que hay que salvar es lo que las lomas suben respecto de
+   * ese punto. Se mide al entrar en 3D y al terminar de mover el mapa, y de ahí
+   * lo leen los deslizadores, que no pueden esperar a una consulta en cada paso
+   * del arrastre. `null` mientras no se sepa.
    */
-  const cimaRef = useRef(null)
+  const desnivelRef = useRef(null)
 
   const setHillshadeVisible = useCallback(
     (visible) => {
@@ -129,7 +168,7 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   const dismissTerrainError = useCallback(() => setTerrainError(null), [])
 
   /**
-   * Mide lo más alto del terreno alrededor y lo guarda.
+   * Mide cuánto sobresale el terreno de alrededor, y lo guarda.
    *
    * **Se le pregunta al modelo directamente, no a MapLibre**, y esa es la parte
    * que no es evidente: MapLibre solo tiene las teselas de elevación de lo que
@@ -138,20 +177,21 @@ export const useTerrainGL = (mapRef, mapInstance) => {
    * sintético de 1.800 m: a zoom 13 y 14 responde bien, de 15 en adelante da 0.
    * Preguntarle a él habría dado un techo de cero y no habría corregido nada.
    */
-  const medirLaCima = useCallback(async (map) => {
+  const medirElDesnivel = useCallback(async (map) => {
     const centro = map.getCenter()
     try {
-      cimaRef.current = await highestAround(TERRAIN_TILE_TEMPLATE, {
+      const medida = await reliefAround(TERRAIN_TILE_TEMPLATE, {
         lng: centro.lng,
         lat: centro.lat,
         radiusMeters: SCENE_RADIUS_M,
         zoom: LOOKAROUND_DEM_ZOOM,
       })
+      desnivelRef.current = medida?.relief ?? null
     } catch {
       // Sin modelo no hay nada que calcular.
-      cimaRef.current = null
+      desnivelRef.current = null
     }
-    return cimaRef.current
+    return desnivelRef.current
   }, [])
 
   /**
@@ -166,7 +206,7 @@ export const useTerrainGL = (mapRef, mapInstance) => {
    * es mejor que alejarse por un número inventado.
    */
   const zoomParaMirarElRelieve = useCallback((map, pitch, exageracion) => {
-    if (cimaRef.current === null) return map.getZoom()
+    if (desnivelRef.current === null) return map.getZoom()
 
     return safeZoomFor({
       currentZoom: map.getZoom(),
@@ -174,9 +214,9 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       pitch,
       viewportHeight: map.getCanvas().clientHeight,
       fov: map.getVerticalFieldOfView(),
-      // Lo que hay que esquivar es la superficie **dibujada**, que es la cota
-      // por la exageración. Con 3× un cerro de 2.000 m ocupa 6.000.
-      terrainTopMeters: cimaRef.current * (exageracion || 1),
+      // Lo que hay que esquivar es el relieve **dibujado**, que es el desnivel
+      // por la exageración. Con 3× una loma que sube 700 m sube 2.100.
+      reliefMeters: desnivelRef.current * (exageracion || 1),
     })
   }, [])
 
@@ -217,7 +257,13 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     // 3D la forma la da la propia geometría: la silueta contra el cielo y la
     // perspectiva ya dicen qué sube y qué baja. Quien lo quiera lo enciende.
 
-    await medirLaCima(map)
+    // **Aquí hay que esperar, y no es por cortesía.** MapLibre coloca la cámara
+    // sobre la cota del centro, pero solo si en ese instante la conoce. Con
+    // `setTerrain` y el movimiento seguidos, la pose se calcula con cota cero —y
+    // no la vuelve a tocar nunca—: la cámara se quedaba dentro del cerro. Se
+    // comprobó dejándolo quince segundos, y ahí seguía.
+    await Promise.all([medirElDesnivel(map), esperarAlTerreno(map)])
+
     const zoom = zoomParaMirarElRelieve(map, PITCH_3D, exaggerationRef.current)
     // Mientras se consultaba el modelo pudo pulsarse otra vez el botón.
     if (!is3DRef.current) return
@@ -225,7 +271,7 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     // Un solo movimiento, no dos: alejarse y luego inclinarse se ve como si el
     // mapa dudara.
     map.easeTo({ pitch: PITCH_3D, zoom, duration: 700 })
-  }, [mapRef, medirLaCima, zoomParaMirarElRelieve])
+  }, [mapRef, medirElDesnivel, zoomParaMirarElRelieve])
 
   const changeExaggeration = useCallback(
     (value) => {
@@ -353,7 +399,7 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   }, [is3D])
 
   /**
-   * La cima se vuelve a medir al terminar de mover, mientras se está en 3D.
+   * El desnivel se vuelve a medir al terminar de mover, mientras se está en 3D.
    *
    * Sin esto, los deslizadores seguirían calculando con la altura del sitio
    * donde se entró en 3D: uno se va del valle a la cordillera y la exageración
@@ -365,14 +411,14 @@ export const useTerrainGL = (mapRef, mapInstance) => {
 
     const remedir = () => {
       // Mientras gira solo, cada fotograma dispara un `moveend` y la cámara no
-      // se está desplazando: no hay cima nueva que medir.
+      // se está desplazando: no hay desnivel nuevo que medir.
       if (spinningRef.current) return
-      medirLaCima(mapInstance)
+      medirElDesnivel(mapInstance)
     }
 
     mapInstance.on("moveend", remedir)
     return () => mapInstance.off("moveend", remedir)
-  }, [mapInstance, is3D, medirLaCima])
+  }, [mapInstance, is3D, medirElDesnivel])
 
   // El mapa también se gira e inclina arrastrando con Ctrl, o con dos dedos en
   // el celular. Sin escuchar esos eventos, los deslizadores se quedarían
