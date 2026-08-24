@@ -166,17 +166,25 @@ montar un proxy en una API route de Next.
     falla nada visible: la capa sale bien colocada y con los colores correctos,
     solo que a la mitad de la resolución que la pantalla podía enseñar.
 
-12. **El zoom *es* la altura de la cámara, y encender el terreno sube el suelo
-    sin subir la cámara.** Sobre Medellín, a zoom 18 la cámara está a 400 m; con
-    el terreno puesto y exageración 1,5 la superficie llega a 2.700. Resultado:
-    entrar en 3D con mucho zoom dejaba la vista dentro del cerro. Inclinar lo
-    empeora —a 58° la cámara se queda al 53 % de su altura—. Lo resuelve
-    `camera3d.js`, que calcula hasta qué zoom se puede acercar sin enterrarse. Si
-    tocas la cámara del 3D, pásalo por ahí.
+12. **MapLibre coloca la cámara sobre la cota del centro —como Google Earth—,
+    pero solo si la conoce en ese instante.** Si `setTerrain` y el movimiento de
+    cámara van seguidos, la pose se calcula con cota cero y **no la vuelve a
+    tocar nunca**: comprobado dejándolo quince segundos con el suelo a 2.700 m y
+    la cámara a 424. Hay que esperar a que el terreno cargue antes de mover.
 
-    Y **`queryTerrainElevation` no sirve para saberlo**: MapLibre solo tiene las
-    teselas de lo que dibuja, así que justo en ese caso —cámara ya bajo tierra—
-    responde cero. La altura hay que sacarla del modelo, con `demTileLoader`.
+    Y lo que hay que salvar al entrar en 3D **no es la cota del terreno sino
+    cuánto sobresale el relieve por encima del punto que se mira**. Confundir las
+    dos cosas alejaba el mapa nivel y medio de zoom de más. Lo calcula
+    `camera3d.js`; si tocas la cámara del 3D, pásalo por ahí.
+
+    Y **`queryTerrainElevation` no sirve para medirlo**: MapLibre solo tiene las
+    teselas de lo que dibuja, así que con mucho zoom responde cero. La altura hay
+    que sacarla del modelo, con `demTileLoader.reliefAround()`.
+
+    Nota de método: la primera versión de este arreglo dio por hecho que la
+    cámara se mide desde el nivel del mar, porque eso es lo que devolvía
+    `getCameraAltitude()` **antes de que cargara el terreno**. Medir en el momento
+    equivocado da un número correcto de una pregunta distinta.
 
 13. **Antes de sumar una dependencia, mira si ya existe.** El proyecto arrastró
     ocho paquetes que ningún `import` usaba. Pero al revés también cuenta:

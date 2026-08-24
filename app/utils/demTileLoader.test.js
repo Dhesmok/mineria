@@ -1,5 +1,5 @@
 import { TILE_SIZE, tileRangeFor, tilesOf } from "./demTiles"
-import { clearTileCache, loadMosaic, loadTile } from "./demTileLoader"
+import { clearTileCache, loadMosaic, loadTile, reliefAround } from "./demTileLoader"
 
 /**
  * El navegador, de mentira.
@@ -172,5 +172,81 @@ describe("loadMosaic", () => {
 
     await loadMosaic(PLANTILLA, teselas, rango, { signal: control.signal })
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe("reliefAround", () => {
+  const PLANTILLA = "https://ejemplo/{z}/{x}/{y}.png"
+  const PUNTO = { lng: -75.6, lat: 6.24, radiusMeters: 2000, zoom: 11 }
+
+  /**
+   * Un terreno que sube `porCelda` metros hacia el este, continuo entre teselas.
+   *
+   * Con una rampa se puede calcular de antemano cuánto tiene que salir: el radio
+   * de dos kilómetros, dividido por el lado de la celda, por la pendiente.
+   */
+  const rampa = (base, porCelda) => {
+    // El origen es la primera tesela que se pida. Sin él, la rampa arrancaría en
+    // el meridiano de Greenwich y para cuando llega a Colombia lleva trescientos
+    // kilómetros de altura, que el formato terrarium ni siquiera puede codificar.
+    let origen = null
+    global.fetch.mockImplementation((url) => {
+      const [, x] = url.match(/\/(\d+)\/(\d+)\/(\d+)\.png$/).slice(1).map(Number)
+      if (origen === null) origen = x
+      const rgba = new Uint8ClampedArray(TILE_SIZE * TILE_SIZE * 4)
+      for (let fila = 0; fila < TILE_SIZE; fila++) {
+        for (let col = 0; col < TILE_SIZE; col++) {
+          const total = Math.round((base + ((x - origen) * TILE_SIZE + col) * porCelda + 32768) * 256)
+          const i = (fila * TILE_SIZE + col) * 4
+          rgba[i] = (total >> 16) & 255
+          rgba[i + 1] = (total >> 8) & 255
+          rgba[i + 2] = total & 255
+        }
+      }
+      return Promise.resolve({ ok: true, blob: () => Promise.resolve({ pixeles: rgba }) })
+    })
+  }
+
+  it("sobre terreno llano no hay nada que salvar", async () => {
+    rampa(1500, 0)
+    await expect(reliefAround(PLANTILLA, PUNTO)).resolves.toMatchObject({ relief: 0 })
+  })
+
+  it("devuelve el desnivel, no la cota", async () => {
+    // **Es la corrección que motivó reescribir esto.** MapLibre pone la cámara
+    // sobre el suelo del punto que mira, así que lo que hay que salvar no es la
+    // cota de la loma sino lo que sobresale. Con una rampa de 2 m por celda y un
+    // radio de 2 km, el desnivel son unos 52 m —26 celdas de 76 m— mientras que
+    // la cota anda por los miles. Devolver la cota alejaba el mapa nivel y medio
+    // de zoom de más.
+    rampa(1500, 2)
+    const r = await reliefAround(PLANTILLA, PUNTO)
+
+    expect(r.center).toBeGreaterThan(1500)
+    expect(r.highest).toBe(r.center + r.relief)
+    // El radio en celdas: 2.000 m entre el lado de la celda del nivel 11.
+    expect(r.relief).toBeCloseTo(Math.round(2000 / 19.06 / 4) * 2, 0)
+  })
+
+  it("mira alrededor y no solo el punto", async () => {
+    // Sin el «alrededor», en el fondo de un valle la cámara quedaría metida en la
+    // ladera de enfrente. Un radio mayor tiene que encontrar más desnivel.
+    rampa(1500, 2)
+    const cerca = await reliefAround(PLANTILLA, { ...PUNTO, radiusMeters: 500 })
+    const lejos = await reliefAround(PLANTILLA, { ...PUNTO, radiusMeters: 4000 })
+    expect(lejos.relief).toBeGreaterThan(cerca.relief)
+  })
+
+  it("nunca devuelve desnivel negativo", async () => {
+    // Si el punto que se mira es lo más alto de la zona, no hay nada que salvar
+    // —y un número negativo haría que el visor se acercara «para compensar».
+    rampa(2200, 0)
+    const r = await reliefAround(PLANTILLA, PUNTO)
+    expect(r.relief).toBeGreaterThanOrEqual(0)
+  })
+
+  it("sin modelo no responde", async () => {
+    global.fetch.mockImplementation(() => Promise.resolve({ ok: false, status: 500 }))
+    await expect(reliefAround(PLANTILLA, PUNTO)).resolves.toBeNull()
   })
 })

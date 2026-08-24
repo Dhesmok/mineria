@@ -1,26 +1,43 @@
 /**
- * Dónde está la cámara, y hasta dónde se puede acercar sin meterse en el cerro.
+ * A qué altura vuela la cámara del 3D, y cuánto hay que subirla para ver.
  *
- * **El problema que resuelve.** Al pulsar «Ver en 3D» con mucho zoom, la vista
- * salía desde debajo del suelo y había que alejarse a mano buscando el sitio.
- * No era un fallo de dibujo: era geometría.
+ * **Esto se escribió dos veces, y la primera partía de una premisa falsa.** Vale
+ * la pena contar las dos, porque la equivocada es la que parece obvia.
  *
- * En un mapa plano, el zoom **es** la altura de la cámara. Cada nivel que se
- * acerca la baja a la mitad: sobre Medellín, a zoom 13 la cámara está a 12.800 m
- * y a zoom 18 a 400. Mientras el mapa es plano da igual, porque el suelo está a
- * cota cero por definición. Pero al encender el 3D el terreno sube a su cota de
- * verdad —1.800 m, y con exageración 1,5 la superficie dibujada llega a 2.700—
- * mientras la cámara sigue donde estaba. A zoom 18 eso deja la cámara 2.300 m
- * **por debajo** de la montaña. Está dentro del cerro, literalmente.
+ * *Lo que parecía.* En un mapa plano el zoom **es** la altura de la cámara: cada
+ * nivel que se acerca la baja a la mitad. Sobre Medellín, a zoom 13 está a
+ * 12.800 m y a zoom 18 a 400. Al encender el terreno el suelo sube a su cota de
+ * verdad, así que —parecía— la cámara se quedaba 2.300 m dentro de la montaña, y
+ * había que sacarla por encima de los 2.700 m de superficie.
  *
- * E inclinar la empeora: al inclinarse conserva la distancia al punto que mira,
- * así que baja. A 58° se queda al 53 % de la altura que tenía.
+ * *Lo que pasa de verdad.* MapLibre coloca la cámara **sobre la cota del centro**,
+ * no sobre el nivel del mar. Es el mismo criterio de Google Earth: a zoom 17 uno
+ * está 425 m sobre el suelo que pisa, esté ese suelo a 0 m o a 1.800. Medido
+ * contra `transform.getCameraAltitude()` en siete combinaciones de zoom e
+ * inclinación, con el terreno ya cargado: coincide siempre con «cota del centro
+ * más el desnivel de cámara», con un margen de 8 m.
+ *
+ * Y entonces, ¿por qué la vista salía rota? Por dos cosas distintas:
+ *
+ * 1. **MapLibre solo aplica la cota del centro si la conoce en ese instante.** Si
+ *    `setTerrain` y el movimiento de cámara van seguidos, la pose se calcula con
+ *    cota cero — y no la vuelve a tocar nunca. Comprobado: quince segundos
+ *    después seguía a 424 m con el suelo a 2.700. El arreglo es esperar a que el
+ *    terreno cargue antes de inclinar; lo hace `useTerrainGL`.
+ * 2. **Las lomas de al lado.** Estar 425 m sobre el suelo que uno pisa no evita
+ *    estar dentro de la ladera de enfrente, si esa ladera sube 1.000 m. Eso es lo
+ *    que calcula este módulo.
+ *
+ * Así que lo que hay que salvar **no es la cota del terreno, sino cuánto
+ * sobresale el relieve por encima del punto que se está mirando**. En Medellín la
+ * diferencia entre las dos lecturas es kilómetro y medio de altura, o sea nivel y
+ * medio de zoom: la premisa equivocada alejaba mucho más de lo necesario.
  *
  * **Por qué la solución es alejarse y no otra cosa.** En una cámara en
  * perspectiva, la altura y el detalle están atados: el zoom es la altura. Se
  * puede aflojar el vínculo estrechando el campo de visión —un teleobjetivo mira
- * de lejos y ve pequeño—, pero para salvar 2.300 m a zoom 18 haría falta un
- * campo de unos 3°, y con eso el relieve pierde toda la perspectiva y se ve
+ * de lejos y ve pequeño—, pero para salvar mil metros a zoom 18 haría falta un
+ * campo de pocos grados, y con eso el relieve pierde la perspectiva y se ve
  * plano. Así que se sale hacia arriba, que además es lo que uno hace a mano.
  *
  * Módulo puro: recibe números y devuelve números.
@@ -38,13 +55,12 @@ import { metersPerPixel } from "./imageExport"
 export const DEFAULT_FOV = 36.86989764584402
 
 /**
- * Cuánto se deja entre la cámara y lo más alto del terreno, en metros.
+ * Cuánto se deja entre la cámara y lo más alto del relieve, en metros.
  *
  * **Es un margen de aterrizaje, no un mínimo permanente**, y la diferencia
- * importa: solo se aplica cuando hay que corregir. Si se exigiera siempre,
- * mirar en 3D una zona plana a la orilla del mar quedaría limitado a zoom 17
- * sin que nada estuviera mal — una restricción inventada donde no había
- * problema. Ver `safeZoomFor`.
+ * importa: solo se aplica cuando hay que corregir. Si se exigiera siempre, mirar
+ * en 3D una zona plana quedaría limitado sin que nada estuviera mal — una
+ * restricción inventada donde no había problema. Ver `safeZoomFor`.
  */
 export const CLEARANCE_M = 400
 
@@ -52,15 +68,15 @@ export const CLEARANCE_M = 400
  * Qué se considera «lo que hay alrededor», en metros.
  *
  * No basta con la cota del punto que se mira. Estando en el fondo de un valle,
- * una cámara 400 m sobre el fondo queda metida dentro de la ladera de enfrente y
- * la vista es un muro de tierra. Lo que tiene que quedar por debajo es la loma,
- * no el suelo que se pisa. Dos kilómetros es el orden de lo que se ve en pantalla
- * a los zooms donde esto pasa.
+ * una cámara unos cientos de metros sobre el suelo queda metida dentro de la
+ * ladera de enfrente y la vista es un muro de tierra. Lo que tiene que quedar por
+ * debajo es la loma, no el suelo que se pisa. Dos kilómetros es el orden de lo
+ * que se ve en pantalla a los zooms donde esto pasa.
  */
 export const SCENE_RADIUS_M = 2000
 
 /**
- * Nivel de teselas con el que se mira «qué tan alto está el terreno por aquí».
+ * Nivel de teselas con el que se mira «cuánto sube el terreno por aquí».
  *
  * Grueso a propósito: la pregunta es la altura de la loma, no el detalle de la
  * ladera, y una tesela de este nivel abarca 19 km, así que casi siempre basta
@@ -70,11 +86,11 @@ export const SCENE_RADIUS_M = 2000
 export const LOOKAROUND_DEM_ZOOM = 11
 
 /**
- * Altura de la cámara sobre el nivel del mar, en metros.
+ * A qué altura vuela la cámara **sobre el suelo del punto que mira**.
  *
- * Es la fórmula que usa MapLibre por dentro, escrita aquí para poder invertirla.
- * Comprobada contra `transform.getCameraAltitude()` en el navegador: a zoom 13 y
- * 58° de inclinación devuelve 6.787 m y MapLibre reporta 6.787.
+ * No sobre el nivel del mar: MapLibre suma por su cuenta la cota del centro, así
+ * que este número es el desnivel de la cámara respecto de ese suelo. A zoom 17 e
+ * inclinada 45° son 566 m, se esté sobre el mar o sobre el altiplano.
  *
  * @param {number} latitude grados
  * @param {number} zoom el del mapa (teselas de 512 px)
@@ -82,7 +98,13 @@ export const LOOKAROUND_DEM_ZOOM = 11
  * @param {number} viewportHeight alto del lienzo, en píxeles
  * @param {number} [fov] campo de visión vertical, en grados
  */
-export const cameraAltitude = ({ latitude, zoom, pitch, viewportHeight, fov = DEFAULT_FOV }) => {
+export const cameraHeightAboveGround = ({
+  latitude,
+  zoom,
+  pitch,
+  viewportHeight,
+  fov = DEFAULT_FOV,
+}) => {
   // La distancia de la cámara al punto que mira, en píxeles. Sale de encajar el
   // alto de la pantalla dentro del campo de visión.
   const distancia = (0.5 * viewportHeight) / Math.tan((fov * Math.PI) / 360)
@@ -90,15 +112,15 @@ export const cameraAltitude = ({ latitude, zoom, pitch, viewportHeight, fov = DE
 }
 
 /**
- * El zoom más cercano al que la cámara todavía vuela por encima del terreno.
+ * El zoom más cercano al que la cámara todavía pasa por encima de las lomas.
  *
- * Se despeja de la fórmula de arriba: la altura de la cámara se divide por dos
- * en cada nivel de zoom, así que basta saber a cuánto está a zoom cero y dividir
+ * Se despeja de la fórmula de arriba: el desnivel de la cámara se divide por dos
+ * en cada nivel de zoom, así que basta saber cuánto es a zoom cero y dividir
  * hasta llegar al techo que se le pide.
  *
- * @param {number} terrainTopMeters lo más alto del terreno alrededor, **ya
- *   multiplicado por la exageración** — es lo que se dibuja, no lo que mide
- * @param {number} [clearance] margen de vista por encima de eso
+ * @param {number} reliefMeters cuánto sobresale el terreno de alrededor **por
+ *   encima del punto que se mira**, ya multiplicado por la exageración
+ * @param {number} [clearance] margen por encima de eso
  * @returns {number} un zoom, no necesariamente entero; `Infinity` si no hay nada
  *   que esquivar
  */
@@ -107,19 +129,19 @@ export const maxZoomAboveTerrain = ({
   pitch,
   viewportHeight,
   fov = DEFAULT_FOV,
-  terrainTopMeters,
+  reliefMeters,
   clearance = CLEARANCE_M,
 }) => {
-  // El guardia va sobre el dato de entrada y no sobre la suma. Con
-  // `terrainTopMeters` a `null`, la suma da 400 —JavaScript trata null como
-  // cero— y eso pasaba por bueno: sin altura conocida se calculaba un tope
-  // igualmente y el mapa se alejaba por un número que nadie había medido.
-  if (!Number.isFinite(terrainTopMeters)) return Infinity
+  // El guardia va sobre el dato de entrada y no sobre la suma. Con `reliefMeters`
+  // a `null`, la suma da 400 —JavaScript trata null como cero— y eso pasaba por
+  // bueno: sin relieve conocido se calculaba un tope igualmente y el mapa se
+  // alejaba por un número que nadie había medido.
+  if (!Number.isFinite(reliefMeters)) return Infinity
 
-  const techo = terrainTopMeters + clearance
+  const techo = reliefMeters + clearance
   if (techo <= 0) return Infinity
 
-  const aZoomCero = cameraAltitude({ latitude, zoom: 0, pitch, viewportHeight, fov })
+  const aZoomCero = cameraHeightAboveGround({ latitude, zoom: 0, pitch, viewportHeight, fov })
   if (!(aZoomCero > 0)) return Infinity
 
   return Math.log2(aZoomCero / techo)
@@ -128,25 +150,24 @@ export const maxZoomAboveTerrain = ({
 /**
  * El zoom con el que entrar en 3D: el que se tenía, o el máximo seguro.
  *
- * **Solo se mete cuando la cámara iba a quedar bajo tierra**, y ahí está la
+ * **Solo se mete cuando la cámara iba a quedar dentro de una loma**, y ahí está la
  * decisión. Aplicar el margen siempre habría limitado el zoom también donde no
- * pasaba nada —una playa, una sabana—, y una herramienta que restringe sin
- * motivo se siente rota aunque funcione. Así que la pregunta es binaria: ¿queda
- * la cámara por debajo de la superficie? Si no, no se toca nada. Si sí, se sale
- * hasta el margen.
+ * pasaba nada —una sabana, una playa—, y una herramienta que restringe sin motivo
+ * se siente rota aunque funcione. Así que la pregunta es binaria: ¿se queda la
+ * cámara por debajo de lo que sobresale alrededor? Si no, no se toca nada.
  *
- * Estar «justo por encima» no es una mala vista, dicho sea de paso: el techo que
- * se le pasa es lo más alto de un par de kilómetros a la redonda, así que rozarlo
- * significa estar a la altura de la loma mirando por encima de ella.
+ * Estar «justo por encima» no es mala vista, dicho sea de paso: el techo que se
+ * le pasa es lo más alto de un par de kilómetros a la redonda, así que rozarlo
+ * significa ir a la altura de la loma mirando por encima de ella.
  *
  * **Solo aleja, nunca acerca.** Quien está mirando de lejos lo pidió así.
  */
-export const safeZoomFor = ({ currentZoom, terrainTopMeters, clearance, ...vista }) => {
-  if (!Number.isFinite(terrainTopMeters)) return currentZoom
+export const safeZoomFor = ({ currentZoom, reliefMeters, clearance, ...vista }) => {
+  if (!Number.isFinite(reliefMeters)) return currentZoom
 
-  const altura = cameraAltitude({ ...vista, zoom: currentZoom })
-  if (altura > terrainTopMeters) return currentZoom
+  const desnivel = cameraHeightAboveGround({ ...vista, zoom: currentZoom })
+  if (desnivel > reliefMeters) return currentZoom
 
-  const tope = maxZoomAboveTerrain({ ...vista, terrainTopMeters, clearance })
+  const tope = maxZoomAboveTerrain({ ...vista, reliefMeters, clearance })
   return Number.isFinite(tope) ? Math.min(currentZoom, tope) : currentZoom
 }

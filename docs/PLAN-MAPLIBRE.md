@@ -8,7 +8,7 @@ Hechos también los ajustes de uso (Fase 8), el panel por áreas (Fase 9) y los 
 lectura (Fase 10). Pendiente: recorte de DEM (Fase 5, fuente ya decidida), las
 entidades nuevas (Fase 6, faltan sus direcciones) y filtrar por departamento y
 municipio (Fase 8, falta sondear qué campos traen los servicios).
-**Última actualización:** 2026-08-22
+**Última actualización:** 2026-08-23
 
 ---
 
@@ -1351,3 +1351,71 @@ antes había 19— y que subir la exageración a 3× tampoco entierre la cámara
 antes de esta tanda. Son de fases anteriores y buscan cosas que ya no existen —un
 botón «Relieve» de primer nivel, un `#sistema`, una inclinación máxima de 85°—.
 No se tocaron.
+
+### La cámara del 3D, segunda vuelta — 2026-08-23
+
+**La primera versión mejoró el síntoma partiendo de una premisa falsa.** Queda
+escrito porque la premisa equivocada es la que parece obvia, y porque el error de
+método —medir en el momento equivocado— es más reutilizable que el arreglo.
+
+*Lo que se creyó.* Que MapLibre mide la cámara desde el nivel del mar. A zoom 18
+está a 400 m; con el terreno puesto la superficie de Medellín llega a 2.700, así
+que la cámara quedaría 2.300 m dentro de la montaña y habría que sacarla por
+encima de esa cota.
+
+*Lo que pasa.* MapLibre coloca la cámara **sobre la cota del centro**, igual que
+Google Earth: a zoom 17 uno está 425 m sobre el suelo que pisa, esté ese suelo a
+0 m o a 1.800. Medido contra `getCameraAltitude()` en siete combinaciones de zoom
+e inclinación, con el terreno ya cargado y el mapa quieto: coincide siempre con
+«cota del centro más desnivel de cámara», con margen de 8 m.
+
+*De dónde salió la confusión.* De medir antes de tiempo. Con el terreno recién
+encendido, `getCameraAltitude()` devuelve el número sin la cota. Es un valor
+correcto de otra pregunta.
+
+**Entonces, ¿por qué se veía rota la vista?** Por dos cosas distintas, y solo la
+segunda se había atacado:
+
+1. **MapLibre solo aplica la cota del centro si la conoce en ese instante.** Con
+   `setTerrain` y el movimiento seguidos, la pose se calcula con cota cero — y no
+   la corrige nunca. Comprobado dejándolo quince segundos: seguía a 424 m con el
+   suelo a 2.700. Ahora se espera a que el terreno cargue antes de inclinar, con
+   tope de 1,2 s para que el botón no se quede mudo si la red va mal.
+2. **Las lomas de al lado.** Estar 425 m sobre el suelo que uno pisa no evita
+   estar dentro de la ladera de enfrente si esa ladera sube mil metros. Eso es lo
+   que hay que salvar — y es el **desnivel**, no la cota.
+
+**Lo que cambió en números.** Entrando en 3D desde zoom 17 sobre colinas de 700 m:
+
+| | zoom final | inclinación |
+|---|---|---|
+| antes de todo | 17 (la vista se veía desde dentro) | 58° |
+| con la premisa falsa | 13,88 | 58° |
+| ahora | **15,58** | **45°** |
+
+Y desde zoom 16 no se aleja nada: la cámara ya iba lo bastante alta.
+
+**La inclinación baja de 58° a 45°**, que es lo que pidió el usuario: con un
+máximo de 72, 58 se lee como «casi al tope» y la entrada en 3D parecía un giro
+brusco. A 45° la escena se levanta con claridad y de paso la cámara queda un
+tercio más alta —el desnivel va con el coseno—, así que hay que alejarse menos.
+
+**Dos instrumentos de prueba que dieron aprobados falsos**, y los dos por lo
+mismo: medir la magnitud de al lado.
+
+- Buscar «la línea del horizonte» recorriendo una columna de píxeles en x=1100.
+  Lo que cruza esa columna es el panel de Opciones 3D: el salto de 134 tonos era
+  su borde superior. Y con menos inclinación el horizonte se sale por arriba de
+  la pantalla, así que exigirlo era exigir lo que no tiene por qué estar.
+- Medir el contraste del sombreado. Con la tarjeta gráfica por software de esta
+  máquina la señal salió 7,4 frente a 3,6: no distingue nada con confianza.
+
+La comprobación final es geométrica y no depende del dibujo: la cámara vuela más
+alto que lo que sobresale el terreno alrededor, con el desnivel calculado sobre
+la misma fórmula que genera las teselas de prueba. Las capturas se conservan y se
+miran, que es lo que destapó el fallo del instrumento.
+
+**Comprobado**: 423 pruebas unitarias y una suite de navegador de 9
+comprobaciones. La cámara sale a 1.516 m sobre el suelo con lomas que suben 1.132
+—antes se quedaba a 425—, el punto que se estaba mirando sigue en el centro con
+1 m de desvío, y subir la exageración a 3× tampoco la entierra.
