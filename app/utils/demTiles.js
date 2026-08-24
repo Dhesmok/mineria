@@ -211,6 +211,51 @@ export const tilesOf = (range) => {
   return lista
 }
 
+/**
+ * En qué celda del mosaico cae un punto.
+ *
+ * Hace falta para preguntar «¿qué altura hay aquí?» sin recorrer nada: se
+ * localiza la celda y se lee. Puede salir fuera del mosaico si el punto no está
+ * dentro; quien llame lo comprueba.
+ */
+export const cellInMosaic = (lng, lat, range) => {
+  const celdas = TILE_SIZE * 2 ** range.zoom
+  return {
+    col: Math.floor(lngToMercatorX(lng) * celdas) - range.minX * TILE_SIZE,
+    row: Math.floor(latToMercatorY(lat) * celdas) - range.minY * TILE_SIZE,
+  }
+}
+
+/**
+ * La altura más alta en un cuadro alrededor de una celda.
+ *
+ * Es lo que se le pregunta al modelo para saber por dónde tiene que pasar la
+ * cámara del 3D: no la cota del punto que se mira, sino la de la loma que lo
+ * rodea. Ver `camera3d.js`.
+ *
+ * Se salta los huecos en vez de dejar `NaN`: con una tesela caída conviene una
+ * respuesta prudente —la altura de lo que sí llegó— antes que ninguna.
+ *
+ * @returns {number|null} metros, o null si no había ni un dato en el cuadro
+ */
+export const maxAround = (heights, cols, rows, col, row, radiusCells) => {
+  const desdeFila = Math.max(0, row - radiusCells)
+  const hastaFila = Math.min(rows - 1, row + radiusCells)
+  const desdeCol = Math.max(0, col - radiusCells)
+  const hastaCol = Math.min(cols - 1, col + radiusCells)
+
+  let maximo = -Infinity
+  for (let f = desdeFila; f <= hastaFila; f++) {
+    const fila = f * cols
+    for (let c = desdeCol; c <= hastaCol; c++) {
+      const altura = heights[fila + c]
+      if (altura > maximo) maximo = altura
+    }
+  }
+
+  return Number.isFinite(maximo) ? maximo : null
+}
+
 /** La dirección de una tesela, a partir de la plantilla de la fuente. */
 export const tileUrl = (template, { z, x, y }) =>
   template.replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y))
