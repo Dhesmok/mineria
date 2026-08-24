@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { HILLSHADE_LAYER_ID, TERRAIN_SOURCE_ID } from "../../utils/mapStyles"
+import {
+  HILLSHADE_LAYER_ID,
+  TERRAIN_SOURCE_ID,
+  TERRAIN_TILE_TEMPLATE,
+} from "../../utils/mapStyles"
+import {
+  LOOKAROUND_DEM_ZOOM,
+  SCENE_RADIUS_M,
+  safeZoomFor,
+} from "../../utils/camera3d"
+import { highestAround } from "../../utils/demTileLoader"
 import { sampleGrid, slopeAspectFrom } from "../../utils/terrainAnalysis"
 
 /**
@@ -90,6 +100,14 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   // el 3D: quitarlo entonces apagaría el 3D por debajo.
   const is3DRef = useRef(is3D)
   is3DRef.current = is3D
+  /**
+   * Lo más alto del terreno alrededor del centro, en metros y sin exagerar.
+   *
+   * Se mide al entrar en 3D y al terminar de mover el mapa, y de ahí lo leen
+   * los deslizadores, que no pueden esperar a una consulta en cada paso del
+   * arrastre. `null` mientras no se sepa.
+   */
+  const cimaRef = useRef(null)
 
   const setHillshadeVisible = useCallback(
     (visible) => {
@@ -110,42 +128,104 @@ export const useTerrainGL = (mapRef, mapInstance) => {
 
   const dismissTerrainError = useCallback(() => setTerrainError(null), [])
 
-  const toggle3D = useCallback(() => {
+  /**
+   * Mide lo más alto del terreno alrededor y lo guarda.
+   *
+   * **Se le pregunta al modelo directamente, no a MapLibre**, y esa es la parte
+   * que no es evidente: MapLibre solo tiene las teselas de elevación de lo que
+   * está dibujando, así que justo en el caso que importa —mucho zoom, cámara ya
+   * bajo tierra— `queryTerrainElevation` responde cero. Medido sobre un terreno
+   * sintético de 1.800 m: a zoom 13 y 14 responde bien, de 15 en adelante da 0.
+   * Preguntarle a él habría dado un techo de cero y no habría corregido nada.
+   */
+  const medirLaCima = useCallback(async (map) => {
+    const centro = map.getCenter()
+    try {
+      cimaRef.current = await highestAround(TERRAIN_TILE_TEMPLATE, {
+        lng: centro.lng,
+        lat: centro.lat,
+        radiusMeters: SCENE_RADIUS_M,
+        zoom: LOOKAROUND_DEM_ZOOM,
+      })
+    } catch {
+      // Sin modelo no hay nada que calcular.
+      cimaRef.current = null
+    }
+    return cimaRef.current
+  }, [])
+
+  /**
+   * El zoom seguro con la cima ya medida. Sin espera, para los deslizadores.
+   *
+   * Los controles de exageración e inclinación tienen el mismo problema que el
+   * botón —subir la exageración a 3× levanta el terreno al doble que a 1,5×, e
+   * inclinar más baja la cámara—, pero se arrastran, y no se puede consultar el
+   * modelo en cada paso del arrastre. De ahí que la cima se guarde.
+   *
+   * Si no se sabe la cima, **no se toca el zoom**: dejar la vista como está hoy
+   * es mejor que alejarse por un número inventado.
+   */
+  const zoomParaMirarElRelieve = useCallback((map, pitch, exageracion) => {
+    if (cimaRef.current === null) return map.getZoom()
+
+    return safeZoomFor({
+      currentZoom: map.getZoom(),
+      latitude: map.getCenter().lat,
+      pitch,
+      viewportHeight: map.getCanvas().clientHeight,
+      fov: map.getVerticalFieldOfView(),
+      // Lo que hay que esquivar es la superficie **dibujada**, que es la cota
+      // por la exageración. Con 3× un cerro de 2.000 m ocupa 6.000.
+      terrainTopMeters: cimaRef.current * (exageracion || 1),
+    })
+  }, [])
+
+  /**
+   * Entrar y salir del 3D.
+   *
+   * **Los efectos van fuera del actualizador de estado.** Estuvieron dentro de
+   * `setIs3D(current => …)`, que es el patrón que ya costó una tanda con el
+   * perfil longitudinal: React puede ejecutar ese actualizador más de una vez
+   * para el mismo cambio, y ahí dentro no puede haber nada que no se pueda
+   * repetir. Aquí, además, ahora hay una espera de por medio.
+   */
+  const toggle3D = useCallback(async () => {
     const map = mapRef.current
     if (!map) return
 
     setTerrainError(null)
-    setIs3D((current) => {
-      const next = !current
+    const entrando = !is3DRef.current
+    is3DRef.current = entrando
+    setIs3D(entrando)
 
-      if (next) {
-        map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: exaggerationRef.current })
-        map.setSky(SKY)
-        map.easeTo({ pitch: PITCH_3D, duration: 700 })
-        // **El relieve ya no se enciende solo al entrar en 3D.**
-        //
-        // Se encendía porque en vista inclinada, sin sombras, un cerro y un
-        // valle se parecen. Pero el sombreado es una segunda pasada sobre el
-        // mismo modelo de elevación que el terreno ya está usando, y en 3D la
-        // forma del relieve la da la propia geometría: la silueta contra el
-        // cielo y la perspectiva ya dicen qué sube y qué baja.
-        //
-        // Quien lo quiera lo enciende con su botón, y si ya lo tenía encendido
-        // se queda encendido. Lo que se quita es pagarlo sin haberlo pedido.
-      } else {
-        // `null` y no `undefined`: con undefined, MapLibre entiende "no me
-        // digas nada" y deja el terreno puesto.
-        map.setTerrain(null)
-        map.setSky(undefined)
-        map.easeTo({ pitch: 0, bearing: 0, duration: 700 })
-        // El relieve se queda encendido a propósito: sigue siendo útil en
-        // plano, y apagarlo de golpe al volver a 2D se siente como si el mapa
-        // hubiera perdido información.
-      }
+    if (!entrando) {
+      // `null` y no `undefined`: con undefined, MapLibre entiende "no me digas
+      // nada" y deja el terreno puesto.
+      map.setTerrain(null)
+      map.setSky(undefined)
+      map.easeTo({ pitch: 0, bearing: 0, duration: 700 })
+      // El relieve se queda encendido a propósito: sigue siendo útil en plano, y
+      // apagarlo de golpe al volver a 2D se siente como si el mapa hubiera
+      // perdido información.
+      return
+    }
 
-      return next
-    })
-  }, [mapRef])
+    map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: exaggerationRef.current })
+    map.setSky(SKY)
+    // **El relieve ya no se enciende solo al entrar en 3D.** El sombreado es una
+    // segunda pasada sobre el mismo modelo que el terreno ya está usando, y en
+    // 3D la forma la da la propia geometría: la silueta contra el cielo y la
+    // perspectiva ya dicen qué sube y qué baja. Quien lo quiera lo enciende.
+
+    await medirLaCima(map)
+    const zoom = zoomParaMirarElRelieve(map, PITCH_3D, exaggerationRef.current)
+    // Mientras se consultaba el modelo pudo pulsarse otra vez el botón.
+    if (!is3DRef.current) return
+
+    // Un solo movimiento, no dos: alejarse y luego inclinarse se ve como si el
+    // mapa dudara.
+    map.easeTo({ pitch: PITCH_3D, zoom, duration: 700 })
+  }, [mapRef, medirLaCima, zoomParaMirarElRelieve])
 
   const changeExaggeration = useCallback(
     (value) => {
@@ -154,11 +234,21 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       // Solo tiene efecto con el terreno puesto. Sin la comprobación,
       // setTerrain lo encendería desde el slider, que no es lo que nadie espera
       // al mover una barra.
-      if (map?.getTerrain()) {
-        map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: value })
-      }
+      if (!map?.getTerrain()) return
+
+      map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: value })
+
+      // Subir la exageración levanta el terreno sin mover la cámara: de 1,5× a
+      // 3× un cerro de 2.000 m pasa de 3.000 a 6.000, y lo que era una vista
+      // aérea acaba dentro de la montaña. Solo en 3D: en vista cenital la cámara
+      // mira desde arriba y da igual dónde esté.
+      if (!is3DRef.current) return
+      const zoom = zoomParaMirarElRelieve(map, map.getPitch(), value)
+      // `jumpTo` y no `easeTo`: mientras se arrastra la barra, una animación por
+      // cada paso hace que la cámara persiga al control con retraso.
+      if (zoom < map.getZoom()) map.jumpTo({ zoom })
     },
-    [mapRef],
+    [mapRef, zoomParaMirarElRelieve],
   )
 
   /**
@@ -183,9 +273,19 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   const changePitch = useCallback(
     (value) => {
       setPitch(value)
-      mapRef.current?.jumpTo({ pitch: value })
+      const map = mapRef.current
+      if (!map) return
+
+      // Inclinar baja la cámara: conserva la distancia al punto que mira, así que
+      // se acerca al suelo. A 72° se queda al 31 % de la altura que tenía plana.
+      const zoom =
+        is3DRef.current && map.getTerrain()
+          ? zoomParaMirarElRelieve(map, value, exaggerationRef.current)
+          : map.getZoom()
+
+      map.jumpTo(zoom < map.getZoom() ? { pitch: value, zoom } : { pitch: value })
     },
-    [mapRef],
+    [mapRef, zoomParaMirarElRelieve],
   )
 
   /** Vuelve a poner el norte arriba sin tocar la inclinación. */
@@ -251,6 +351,28 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   useEffect(() => {
     if (!is3D) setIsSpinning(false)
   }, [is3D])
+
+  /**
+   * La cima se vuelve a medir al terminar de mover, mientras se está en 3D.
+   *
+   * Sin esto, los deslizadores seguirían calculando con la altura del sitio
+   * donde se entró en 3D: uno se va del valle a la cordillera y la exageración
+   * cree que sigue sobre el valle. Casi siempre sale de la memoria, porque una
+   * tesela de este nivel abarca 19 km y moverse dentro de ella no pide nada.
+   */
+  useEffect(() => {
+    if (!mapInstance || !is3D) return
+
+    const remedir = () => {
+      // Mientras gira solo, cada fotograma dispara un `moveend` y la cámara no
+      // se está desplazando: no hay cima nueva que medir.
+      if (spinningRef.current) return
+      medirLaCima(mapInstance)
+    }
+
+    mapInstance.on("moveend", remedir)
+    return () => mapInstance.off("moveend", remedir)
+  }, [mapInstance, is3D, medirLaCima])
 
   // El mapa también se gira e inclina arrastrando con Ctrl, o con dos dedos en
   // el celular. Sin escuchar esos eventos, los deslizadores se quedarían

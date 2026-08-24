@@ -1280,3 +1280,74 @@ con el hilo de la página libre, que son de subir la imagen a la tarjeta gráfic
 moviendo el mapa con la capa apagada el hueco es de 1,6 s, así que la mayor parte
 no es de la capa. En una tarjeta de verdad esto debería desaparecer, pero es una
 predicción, no una medida: hay que mirarlo en el equipo real.
+
+### La cámara del 3D, por encima del terreno — 2026-08-22
+
+**El síntoma, tal como llegó:** «al darle a Ver en 3D con mucho zoom, la cámara
+me queda como por debajo del mapa; me toca alejarme a buscar la vista».
+
+**No era un fallo de dibujo, era geometría, y conviene entenderla porque va a
+volver a aparecer.** En un mapa plano el zoom *es* la altura de la cámara: cada
+nivel que se acerca la baja a la mitad. Sobre Medellín, a zoom 13 está a 12.808 m
+y a zoom 18 a 400. Mientras el mapa es plano da igual, porque el suelo está a
+cota cero por definición. Pero al encender el 3D el terreno sube a su cota de
+verdad —1.800 m, y con exageración 1,5 la superficie dibujada llega a 2.700—
+mientras la cámara se queda donde estaba. A zoom 18 eso la deja 2.300 m **dentro
+de la montaña**. E inclinar lo empeora: al inclinarse la cámara conserva la
+distancia al punto que mira, así que baja; a 58° se queda al 53 %.
+
+Medido en el navegador contra `transform.getCameraAltitude()`, con un terreno
+sintético llano de 1.800 m:
+
+| zoom | cámara en 2D | cámara en 3D | superficie |
+|---|---|---|---|
+| 13 | 12.808 m | 6.787 m | 2.700 m |
+| 15 | 3.202 m | 1.697 m | 2.700 m ← dentro |
+| 18 | 400 m | 212 m | 2.700 m ← muy dentro |
+
+**Por qué la solución es alejarse y no otra cosa.** En una cámara en perspectiva
+la altura y el detalle están atados; el zoom *es* la altura. Se puede aflojar el
+vínculo estrechando el campo de visión —un teleobjetivo mira de lejos y ve
+pequeño—, pero para salvar 2.300 m a zoom 18 haría falta un campo de unos 3°, y
+con eso el relieve pierde la perspectiva y se ve plano. Así que se sale hacia
+arriba, que además es lo que el usuario ya hacía a mano.
+
+**Dos decisiones dentro del arreglo.**
+
+*Se mide la loma, no el suelo.* La cota del punto que se mira no basta: en el
+fondo de un valle, una cámara unos metros sobre el suelo queda metida dentro de
+la ladera de enfrente y la vista es un muro de tierra. Lo que tiene que quedar
+por debajo es lo más alto de un par de kilómetros a la redonda.
+
+*El margen de 400 m solo se aplica cuando hay que corregir.* Exigirlo siempre
+habría limitado el 3D a zoom 17 también en una playa o una sabana, donde no
+pasaba nada. Una herramienta que restringe sin motivo se siente rota aunque
+funcione. Así que la pregunta es binaria: ¿queda la cámara por debajo de la
+superficie? Si no, no se toca nada.
+
+**Y una trampa que se llevó por delante media hora:** la altura no se le puede
+preguntar a MapLibre. `queryTerrainElevation` solo conoce las teselas de lo que
+está dibujando, así que justo en el caso que importa —mucho zoom, cámara ya bajo
+tierra— devuelve **cero**. Comprobado: sobre un terreno de 1.800 m responde bien
+a zoom 13 y 14, y 0 de 15 en adelante. Preguntándole a él, el techo habría salido
+a cero y no se habría corregido nada. La altura sale del modelo, con
+`demTileLoader.highestAround()`, que además reaprovecha la caché de teselas que
+ya monta la capa de pendiente.
+
+**Alcance.** También se corrige al mover el deslizador de exageración —de 1,5× a
+3× un cerro de 2.000 m pasa de 3.000 a 6.000— y el de inclinación. No se corrige
+el zoom libre con la rueda estando ya en 3D: pelearse con el propio gesto del
+usuario sería peor que el problema. Si eso molesta, la solución es limitar el
+zoom máximo mientras dura el 3D.
+
+**Comprobado**: 417 pruebas unitarias (18 nuevas del módulo puro, incluidas las
+que contrastan la fórmula contra los números que reporta MapLibre) y una suite de
+navegador de 7 comprobaciones sobre un relieve sintético de colinas de 700 m: que
+la cámara salga por encima de la superficie, que el zoom baje solo lo necesario
+(17 → 13,88), que aparezca la línea del horizonte —un salto de 134 tonos donde
+antes había 19— y que subir la exageración a 3× tampoco entierre la cámara.
+
+*Nota sobre dos suites viejas:* `fase4` y `ajustes2` fallan, y también fallaban
+antes de esta tanda. Son de fases anteriores y buscan cosas que ya no existen —un
+botón «Relieve» de primer nivel, un `#sistema`, una inclinación máxima de 85°—.
+No se tocaron.

@@ -166,7 +166,19 @@ montar un proxy en una API route de Next.
     falla nada visible: la capa sale bien colocada y con los colores correctos,
     solo que a la mitad de la resolución que la pantalla podía enseñar.
 
-12. **Antes de sumar una dependencia, mira si ya existe.** El proyecto arrastró
+12. **El zoom *es* la altura de la cámara, y encender el terreno sube el suelo
+    sin subir la cámara.** Sobre Medellín, a zoom 18 la cámara está a 400 m; con
+    el terreno puesto y exageración 1,5 la superficie llega a 2.700. Resultado:
+    entrar en 3D con mucho zoom dejaba la vista dentro del cerro. Inclinar lo
+    empeora —a 58° la cámara se queda al 53 % de su altura—. Lo resuelve
+    `camera3d.js`, que calcula hasta qué zoom se puede acercar sin enterrarse. Si
+    tocas la cámara del 3D, pásalo por ahí.
+
+    Y **`queryTerrainElevation` no sirve para saberlo**: MapLibre solo tiene las
+    teselas de lo que dibuja, así que justo en ese caso —cámara ya bajo tierra—
+    responde cero. La altura hay que sacarla del modelo, con `demTileLoader`.
+
+13. **Antes de sumar una dependencia, mira si ya existe.** El proyecto arrastró
     ocho paquetes que ningún `import` usaba. Pero al revés también cuenta:
     `maplibre-contour` (MIT) ya resuelve bajar y decodificar teselas terrarium
     en un *worker* y servirlas por `addProtocol`; si algún día la capa de

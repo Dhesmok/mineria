@@ -15,7 +15,17 @@
  * por tesela y al mover el mapa se repiten casi todas.
  */
 
-import { TILE_SIZE, blankTile, pasteTile, tileUrl } from "./demTiles"
+import {
+  TILE_SIZE,
+  blankTile,
+  cellInMosaic,
+  cellSizeMeters,
+  maxAround,
+  pasteTile,
+  tileRangeFor,
+  tileUrl,
+  tilesOf,
+} from "./demTiles"
 
 /**
  * Cuántas teselas decodificadas se recuerdan.
@@ -182,6 +192,43 @@ export const loadMosaic = async (template, tiles, { cols, rows }, opciones = {})
   )
 
   return { heights: alturas, missing: faltantes }
+}
+
+/** Un grado de latitud, en metros. Es constante; el de longitud no. */
+const METROS_POR_GRADO = 111320
+
+/**
+ * ¿Qué altura tiene lo más alto de por aquí?
+ *
+ * La usa el 3D para saber por encima de qué tiene que pasar la cámara. No sirve
+ * la cota del punto que se mira: en el fondo de un valle, una cámara unos metros
+ * sobre el suelo queda metida dentro de la ladera de enfrente. Lo que tiene que
+ * quedar por debajo es la loma.
+ *
+ * Se pregunta al modelo directamente y no a MapLibre porque MapLibre solo tiene
+ * las teselas de lo que está dibujando, y justo en el caso que importa —cámara
+ * bajo tierra, mucho zoom— responde cero. Comprobado: a zoom 15 y más,
+ * `queryTerrainElevation` devolvía 0 sobre un terreno de 1.800 m.
+ *
+ * @returns {Promise<number|null>} metros sobre el nivel del mar, **sin
+ *   exagerar**, o null si el modelo no llegó
+ */
+export const highestAround = async (template, { lng, lat, radiusMeters, zoom, signal }) => {
+  const dLat = radiusMeters / METROS_POR_GRADO
+  const dLng = radiusMeters / (METROS_POR_GRADO * Math.cos((lat * Math.PI) / 180) || 1)
+
+  const rango = tileRangeFor(
+    { west: lng - dLng, east: lng + dLng, south: lat - dLat, north: lat + dLat },
+    zoom,
+  )
+  const teselas = tilesOf(rango)
+  const { heights, missing } = await loadMosaic(template, teselas, rango, { signal })
+  if (missing === teselas.length) return null
+
+  const { col, row } = cellInMosaic(lng, lat, rango)
+  const lado = cellSizeMeters(lat, rango.zoom)
+  const radioEnCeldas = Math.max(1, Math.round(radiusMeters / lado))
+  return maxAround(heights, rango.cols, rango.rows, col, row, radioEnCeldas)
 }
 
 /** Para las pruebas: dejar la memoria como recién arrancada. */
