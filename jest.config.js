@@ -21,7 +21,7 @@ module.exports = async () => {
   // (`/node_modules/`) gana siempre. polylabel y su dependencia tinyqueue se publican
   // únicamente como ESM, así que hay que reemplazar la lista para poder transformarlos.
   config.transformIgnorePatterns = [
-    '/node_modules/(?!(polylabel|tinyqueue)/)',
+    '/node_modules/(?!.*(polylabel|tinyqueue))',
     '^.+\\.module\\.(css|sass|scss)$',
   ]
 
