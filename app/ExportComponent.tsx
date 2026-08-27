@@ -6,6 +6,7 @@ import * as turf from '@turf/turf'
 import { saveAs } from 'file-saver'
 import { buildKml } from './utils/exportUtils'
 import { crsById, SOURCE_CRS } from './utils/crs'
+import { Loader2 } from 'lucide-react'
 
 // Los sistemas ya no se declaran aquí. Había dos listas: la de la tabla de
 // coordenadas y esta, con solo 4686 y 9377 y un respaldo silencioso a 9377. Al
@@ -146,6 +147,7 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
         onClick={exportSHP}
         disabled={isExportingSHP || isExportingKML}
       >
+        {isExportingSHP && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {isExportingSHP ? 'Exportando...' : 'Exportar SHP'}
       </Button>
       <Button
@@ -154,6 +156,7 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
         onClick={exportKML}
         disabled={isExportingSHP || isExportingKML}
       >
+        {isExportingKML && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {isExportingKML ? 'Exportando...' : 'Exportar KML'}
       </Button>
     </div>

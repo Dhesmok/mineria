@@ -10,3 +10,7 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+
+## 2024-08-27 - Consistent UX loading states for asynchronous operations
+**Learning:** Found that long-running tasks like exporting SHP/KML files lacked visual loading feedback, leaving the user unsure if their click registered.
+**Action:** Replaced static 'Exportando...' text with `Loader2` from `lucide-react` and added `animate-spin` class for consistent visual feedback during asynchronous operations.
