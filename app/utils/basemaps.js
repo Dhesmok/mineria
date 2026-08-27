@@ -172,27 +172,6 @@ export const BASEMAPS = [
     withoutLabels: [],
   },
   {
-    /**
-     * **El identificador sigue siendo `positron` aunque ya no sea el de CARTO.**
-     *
-     * No es descuido: el visor guarda en el navegador qué fondo eligió cada
-     * usuario, y cambiar la palabra haría que a todo el que tuviera este puesto le
-     * apareciera otro distinto al volver. Es el mismo motivo por el que
-     * «Cartografía» conserva por dentro el nombre `catastro`.
-     */
-    id: "positron",
-    name: "Cartográfico claro",
-    short: "Claro",
-    source: "Esri",
-    hint: "Base gris de bajo contraste. Los títulos y sus contornos se leen sin competir con el fondo.",
-    // "overlay" y no "swap": aquí los nombres son una capa aparte que se pone
-    // encima, como en la imagen de Esri. CARTO publicaba dos direcciones
-    // distintas y por eso era "swap".
-    labels: "overlay",
-    withLabels: [BASEMAP_LAYERS.grayBase, BASEMAP_LAYERS.grayReference],
-    withoutLabels: [BASEMAP_LAYERS.grayBase],
-  },
-  {
     id: "satellite",
     name: "Imagen satelital",
     short: "Satélite",
@@ -232,17 +211,45 @@ export const BASEMAPS = [
     withLabels: [BASEMAP_LAYERS.osm],
     withoutLabels: [BASEMAP_LAYERS.osm],
   },
+  {
+    /**
+     * **El identificador sigue siendo `positron` aunque ya no sea el de CARTO.**
+     *
+     * No es descuido: el visor guarda en el navegador qué fondo eligió cada
+     * usuario, y cambiar la palabra haría que a todo el que tuviera este puesto le
+     * apareciera otro distinto al volver. Es el mismo motivo por el que
+     * «Cartografía» conserva por dentro el nombre `catastro`.
+     */
+    id: "positron",
+    name: "Cartográfico claro",
+    short: "Claro",
+    source: "Esri",
+    hint: "Base gris de bajo contraste. Los títulos y sus contornos se leen sin competir con el fondo.",
+    // "overlay" y no "swap": aquí los nombres son una capa aparte que se pone
+    // encima, como en la imagen de Esri. CARTO publicaba dos direcciones
+    // distintas y por eso era "swap".
+    labels: "overlay",
+    withLabels: [BASEMAP_LAYERS.grayBase, BASEMAP_LAYERS.grayReference],
+    withoutLabels: [BASEMAP_LAYERS.grayBase],
+  },
 ]
 
 /**
  * El fondo de partida.
  *
- * Es el gris claro y no la imagen de satélite, porque lo primero que este visor
- * tiene que dejar ver son los títulos: sobre la imagen, un polígono marrón
- * semitransparente compite con el terreno que hay debajo, y los contornos se
- * pierden. La imagen se enciende cuando ya se sabe dónde mirar.
+ * **La imagen de satélite, por decisión del autor**, y conviene dejar escrito el
+ * argumento que hay en contra para que quien lo lea mañana sepa que se sopesó:
+ * sobre la imagen, un polígono marrón semitransparente compite con el terreno
+ * que hay debajo y sus contornos se leen peor que sobre un fondo liso. A cambio,
+ * quien abre el visor reconoce dónde está de un vistazo, que sobre un mapa gris
+ * de Colombia entera no es evidente.
+ *
+ * **Y trae una consecuencia que no es de gusto sino de riesgo:** estas teselas
+ * salen de un extremo interno de Google, no de su API publicada, y eso está
+ * abierto en `docs/RIESGOS.md` desde el principio. Pasar de fondo opcional a
+ * fondo de partida multiplica lo que se pierde el día que deje de responder.
  */
-export const DEFAULT_BASEMAP = "positron"
+export const DEFAULT_BASEMAP = "satellite"
 
 const BY_ID = new Map(BASEMAPS.map((basemap) => [basemap.id, basemap]))
 

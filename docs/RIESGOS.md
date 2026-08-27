@@ -15,6 +15,13 @@ casi todas necesitan que las tome Fabio, no un programador.
 
 **Estado:** abierto. Es el mayor riesgo no técnico del proyecto.
 
+**Actualización de agosto de 2026: este fondo pasó a ser el de partida.** Antes
+era uno de seis y había que elegirlo; ahora es lo que ve todo el que abre el
+visor. El riesgo no cambió de naturaleza, pero sí de tamaño: lo que antes era
+«se apaga un fondo» ahora es «el visor arranca en blanco». El motivo del cambio
+fue que CARTO —el fondo de partida anterior— empezó a exigir clave; ver el
+riesgo 4.
+
 El fondo «Imagen satelital» pide las imágenes a `mt0-3.google.com/vt`. **Eso es
 un extremo interno de Google, no su API publicada.** Funciona, lo usan muchos
 visores, y ninguna de las dos cosas lo convierte en permitido: la API que Google
@@ -31,7 +38,8 @@ responder, o llegue una carta, y haya que apagar el fondo que más se usa.
 1. Leer las condiciones de Google Maps Platform con la pregunta concreta
    delante: ¿puede un tercero pedir teselas a `mt*.google.com` sin clave?
 2. Si la respuesta es no —que es lo probable—, decidir entre pagar la API, o
-   quitar ese fondo y quedarse con los que sí son libres. **El visor ya funciona
+   quitar ese fondo y quedarse con los que sí son libres. Y ahora, además,
+   devolver el fondo de partida a uno que no dependa de Google. **El visor ya funciona
    sin él**: Esri, CARTO, OpenTopoMap y OSM están puestos y probados.
 3. Mientras tanto, no anunciar «imágenes de Google» en ningún material.
 

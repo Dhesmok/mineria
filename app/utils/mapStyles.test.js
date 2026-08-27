@@ -41,13 +41,12 @@ describe("createBaseStyle", () => {
   })
 
   it("arranca en el fondo por omisión cuando no se pide nada", () => {
-    // Es el gris claro, no la imagen de satélite: lo primero que este visor
-    // tiene que dejar ver son los títulos, y sobre la imagen sus contornos se
-    // pierden.
+    // La imagen de satélite de Google, con sus nombres. Se sopesó dejar el gris
+    // claro —sobre la imagen los contornos de los títulos se leen peor— y se
+    // eligió que quien abre el visor reconozca dónde está de un vistazo.
     const style = createBaseStyle()
-    expect(layerById(style, BASEMAP_LAYERS.grayBase).layout.visibility).toBe("visible")
-    expect(layerById(style, BASEMAP_LAYERS.grayReference).layout.visibility).toBe("visible")
-    expect(layerById(style, BASEMAP_LAYERS.googleHybrid).layout.visibility).toBe("none")
+    expect(layerById(style, BASEMAP_LAYERS.googleHybrid).layout.visibility).toBe("visible")
+    expect(layerById(style, BASEMAP_LAYERS.grayBase).layout.visibility).toBe("none")
     expect(layerById(style, BASEMAP_LAYERS.osm).layout.visibility).toBe("none")
   })
 
