@@ -62,22 +62,36 @@ describe("basemaps", () => {
     expect(visibleBasemapLayers("osm", true)).toEqual(visibleBasemapLayers("osm", false))
   })
 
-  it("Esri superpone los nombres en vez de cambiar de dirección", () => {
-    const con = visibleBasemapLayers("esri", true)
-    const sin = visibleBasemapLayers("esri", false)
-    expect(con).toHaveLength(2)
-    expect(sin).toHaveLength(1)
-    expect(con).toEqual(expect.arrayContaining(sin))
-  })
-
-  it("Google y CARTO cambian de dirección, no superponen", () => {
-    for (const id of ["satellite", "positron"]) {
+  it("los dos fondos de Esri superponen los nombres", () => {
+    // La imagen de satélite y el lienzo gris claro. El gris pasó a esta familia
+    // al sustituir a CARTO: CARTO publicaba dos direcciones distintas —una con
+    // nombres y otra sin— mientras que Esri publica los nombres aparte.
+    for (const id of ["esri", "positron"]) {
       const con = visibleBasemapLayers(id, true)
       const sin = visibleBasemapLayers(id, false)
-      expect(con).toHaveLength(1)
+      expect(con).toHaveLength(2)
       expect(sin).toHaveLength(1)
-      expect(con[0]).not.toBe(sin[0])
+      expect(con).toEqual(expect.arrayContaining(sin))
     }
+  })
+
+  it("Google cambia de dirección, no superpone", () => {
+    const con = visibleBasemapLayers("satellite", true)
+    const sin = visibleBasemapLayers("satellite", false)
+    expect(con).toHaveLength(1)
+    expect(sin).toHaveLength(1)
+    expect(con[0]).not.toBe(sin[0])
+  })
+
+  it("ningún fondo depende ya de un servicio que pida clave", () => {
+    // CARTO servía el gris claro sin pedir nada y de un día para otro empezó a
+    // devolver las teselas atravesadas por un «API KEY REQUIRED». Como era el
+    // fondo de partida, el visor abría con el mapa marcado de lado a lado.
+    const direcciones = Object.values(BASEMAP_SOURCES).flatMap((s) => s.tiles)
+    direcciones.forEach((url) => {
+      expect(url).not.toMatch(/cartocdn/)
+      expect(url).not.toMatch(/[?&](api_?key|access_token|key)=/i)
+    })
   })
 
   it("un fondo desconocido cae en el de partida", () => {

@@ -38,7 +38,6 @@
 const TESELAS = [
   "https://tile.openstreetmap.org",
   "https://*.tile.opentopomap.org",
-  "https://*.basemaps.cartocdn.com",
   "https://mt0.google.com",
   "https://mt1.google.com",
   "https://mt2.google.com",

@@ -15,6 +15,13 @@ casi todas necesitan que las tome Fabio, no un programador.
 
 **Estado:** abierto. Es el mayor riesgo no técnico del proyecto.
 
+**Actualización de agosto de 2026: este fondo pasó a ser el de partida.** Antes
+era uno de seis y había que elegirlo; ahora es lo que ve todo el que abre el
+visor. El riesgo no cambió de naturaleza, pero sí de tamaño: lo que antes era
+«se apaga un fondo» ahora es «el visor arranca en blanco». El motivo del cambio
+fue que CARTO —el fondo de partida anterior— empezó a exigir clave; ver el
+riesgo 4.
+
 El fondo «Imagen satelital» pide las imágenes a `mt0-3.google.com/vt`. **Eso es
 un extremo interno de Google, no su API publicada.** Funciona, lo usan muchos
 visores, y ninguna de las dos cosas lo convierte en permitido: la API que Google
@@ -31,7 +38,8 @@ responder, o llegue una carta, y haya que apagar el fondo que más se usa.
 1. Leer las condiciones de Google Maps Platform con la pregunta concreta
    delante: ¿puede un tercero pedir teselas a `mt*.google.com` sin clave?
 2. Si la respuesta es no —que es lo probable—, decidir entre pagar la API, o
-   quitar ese fondo y quedarse con los que sí son libres. **El visor ya funciona
+   quitar ese fondo y quedarse con los que sí son libres. Y ahora, además,
+   devolver el fondo de partida a uno que no dependa de Google. **El visor ya funciona
    sin él**: Esri, CARTO, OpenTopoMap y OSM están puestos y probados.
 3. Mientras tanto, no anunciar «imágenes de Google» en ningún material.
 
@@ -98,14 +106,30 @@ Lo que **no** hace, y sería lo siguiente:
 
 ## 4. Los mapas de fondo no tienen alternativa declarada
 
-**Estado:** abierto, menor.
+**Estado:** abierto — y **ya pasó una vez**, en agosto de 2026.
 
-Cada fondo apunta a un único proveedor. Si CARTO deja de servir —es el fondo por
-defecto—, el visor arranca con el mapa gris y sin decir nada. No hay
-respaldo ni aviso.
+Este riesgo estaba escrito así: «si CARTO deja de servir —es el fondo por
+defecto—, el visor arranca con el mapa gris y sin decir nada». Ocurrió, y peor
+que en gris: CARTO empezó a devolver sus teselas **atravesadas por un rótulo de
+"API KEY REQUIRED"**, de lado a lado del mapa. No fue una caída ni un aviso
+previo; fue un cambio de producto de un día para otro. Como era el fondo de
+partida, todo el que abría el visor lo veía marcado.
 
-Lo mínimo sería avisar cuando las teselas de un fondo fallan varias veces
-seguidas, igual que ya se hace con el modelo de elevación en 3D.
+Se resolvió cambiando ese fondo por el **lienzo gris claro de Esri**, del mismo
+servicio que ya sirve la imagen de satélite: sin cuenta, sin proveedor nuevo y
+sin permiso nuevo en la política de seguridad. Pero eso es tapar el agujero, no
+cerrarlo: **el riesgo sigue abierto y ahora apunta a Esri**, que puede hacer
+exactamente lo mismo.
+
+Lo que la experiencia deja claro es que el aviso no basta: cuando pasó, las
+teselas **llegaban con un 200**. Un mapa marcado no es un fallo de red y ningún
+contador de errores lo habría detectado. Las dos cosas que sí ayudarían:
+
+1. **Un fondo de respaldo declarado por cada fondo**, para poder cambiar de
+   proveedor con una línea el día que haga falta —que es lo que costó esta vez, y
+   fue barato justamente porque el módulo de fondos es una lista de datos.
+2. **Mirar el visor de vez en cuando.** Suena a poco, pero esto se detectó porque
+   alguien abrió la página, no porque saltara nada.
 
 ---
 

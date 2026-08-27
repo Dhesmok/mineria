@@ -368,7 +368,7 @@ export default function MapComponentGL({
       // hasta comparar la atribución de la esquina con lo que decía el botón.
       //
       // Y se lee de las preferencias, no del valor de fábrica: si no, quien
-      // dejó puesto el satélite vería un parpadeo del gris de CARTO en cada
+      // dejó puesto el fondo claro vería un parpadeo del satélite en cada
       // recarga antes de que el fondo guardado se aplicara encima.
       style: createBaseStyle(readPreferences().basemap),
       center: INITIAL_CENTER,
