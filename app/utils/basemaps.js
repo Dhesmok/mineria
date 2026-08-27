@@ -10,10 +10,11 @@
  * **Sobre las etiquetas.** Cada fondo resuelve los nombres a su manera y por eso
  * no hay un único mecanismo:
  *
- * - Google y CARTO publican **dos direcciones distintas**, una con nombres y
- *   otra sin ellos. Ahí se cambia de dirección.
+ * - Google publica **dos direcciones distintas**, una con nombres y otra sin
+ *   ellos. Ahí se cambia de dirección.
  * - Esri publica la imagen por un lado y los nombres por otro, para superponer.
- *   Ahí se enciende una segunda capa encima.
+ *   Ahí se enciende una segunda capa encima. Vale igual para la imagen de
+ *   satélite y para el lienzo gris.
  * - OSM y OpenTopoMap traen los nombres pintados dentro de la propia tesela. Ahí
  *   no hay nada que quitar, y el visor tiene que decirlo en vez de ofrecer un
  *   interruptor que no hace nada.
@@ -32,8 +33,8 @@ export const BASEMAP_LAYERS = {
   esriImagery: "bm-esri-imagery",
   esriReference: "bm-esri-reference",
   topo: "bm-topo",
-  cartoLabels: "bm-carto-labels",
-  cartoPlain: "bm-carto-plain",
+  grayBase: "bm-gray-base",
+  grayReference: "bm-gray-reference",
 }
 
 /**
@@ -94,23 +95,40 @@ export const BASEMAP_SOURCES = {
     maxzoom: 17,
     attribution: `${OSM_ATTRIBUTION}, SRTM · © <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)`,
   },
-  "bm-carto-labels-src": {
+  /**
+   * El lienzo gris claro, que **sustituyó al de CARTO**.
+   *
+   * CARTO servía este mismo tipo de fondo sin pedir nada, y de un día para otro
+   * empezó a devolver las teselas atravesadas por un «API KEY REQUIRED». No es un
+   * fallo pasajero: es un cambio de producto, y como era el fondo de partida, el
+   * visor abría con el mapa marcado de lado a lado.
+   *
+   * Este viene del mismo servicio de Esri que ya sirve la imagen de satélite, así
+   * que no suma un proveedor nuevo ni un permiso nuevo en la política de
+   * seguridad. Y es un fondo pensado justo para esto: gris de bajo contraste para
+   * poner datos encima.
+   *
+   * **Queda anotado en `docs/RIESGOS.md`,** porque la lección no es «CARTO se
+   * portó mal» sino que todos los fondos de este visor son cortesías de terceros
+   * que pueden retirarse sin avisar. Este puede ser el siguiente.
+   */
+  "bm-gray-base-src": {
     type: "raster",
-    tiles: ["a", "b", "c", "d"].map(
-      (s) => `https://${s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png`,
-    ),
+    tiles: [
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    ],
     tileSize: 256,
-    maxzoom: 20,
-    attribution: `${OSM_ATTRIBUTION} © <a href="https://carto.com/attributions">CARTO</a>`,
+    maxzoom: 16,
+    attribution: `Esri, ${OSM_ATTRIBUTION}`,
   },
-  "bm-carto-plain-src": {
+  "bm-gray-reference-src": {
     type: "raster",
-    tiles: ["a", "b", "c", "d"].map(
-      (s) => `https://${s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png`,
-    ),
+    tiles: [
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+    ],
     tileSize: 256,
-    maxzoom: 20,
-    attribution: `${OSM_ATTRIBUTION} © <a href="https://carto.com/attributions">CARTO</a>`,
+    maxzoom: 16,
+    attribution: "Esri",
   },
 }
 
@@ -154,14 +172,25 @@ export const BASEMAPS = [
     withoutLabels: [],
   },
   {
+    /**
+     * **El identificador sigue siendo `positron` aunque ya no sea el de CARTO.**
+     *
+     * No es descuido: el visor guarda en el navegador qué fondo eligió cada
+     * usuario, y cambiar la palabra haría que a todo el que tuviera este puesto le
+     * apareciera otro distinto al volver. Es el mismo motivo por el que
+     * «Cartografía» conserva por dentro el nombre `catastro`.
+     */
     id: "positron",
     name: "Cartográfico claro",
     short: "Claro",
-    source: "CARTO",
+    source: "Esri",
     hint: "Base gris de bajo contraste. Los títulos y sus contornos se leen sin competir con el fondo.",
-    labels: "swap",
-    withLabels: [BASEMAP_LAYERS.cartoLabels],
-    withoutLabels: [BASEMAP_LAYERS.cartoPlain],
+    // "overlay" y no "swap": aquí los nombres son una capa aparte que se pone
+    // encima, como en la imagen de Esri. CARTO publicaba dos direcciones
+    // distintas y por eso era "swap".
+    labels: "overlay",
+    withLabels: [BASEMAP_LAYERS.grayBase, BASEMAP_LAYERS.grayReference],
+    withoutLabels: [BASEMAP_LAYERS.grayBase],
   },
   {
     id: "satellite",
@@ -208,10 +237,10 @@ export const BASEMAPS = [
 /**
  * El fondo de partida.
  *
- * Es el gris claro de CARTO y no la imagen de satélite, porque lo primero que
- * este visor tiene que dejar ver son los títulos: sobre la imagen, un polígono
- * marrón semitransparente compite con el terreno que hay debajo, y los
- * contornos se pierden. La imagen se enciende cuando ya se sabe dónde mirar.
+ * Es el gris claro y no la imagen de satélite, porque lo primero que este visor
+ * tiene que dejar ver son los títulos: sobre la imagen, un polígono marrón
+ * semitransparente compite con el terreno que hay debajo, y los contornos se
+ * pierden. La imagen se enciende cuando ya se sabe dónde mirar.
  */
 export const DEFAULT_BASEMAP = "positron"
 

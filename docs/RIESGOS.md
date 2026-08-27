@@ -98,14 +98,30 @@ Lo que **no** hace, y sería lo siguiente:
 
 ## 4. Los mapas de fondo no tienen alternativa declarada
 
-**Estado:** abierto, menor.
+**Estado:** abierto — y **ya pasó una vez**, en agosto de 2026.
 
-Cada fondo apunta a un único proveedor. Si CARTO deja de servir —es el fondo por
-defecto—, el visor arranca con el mapa gris y sin decir nada. No hay
-respaldo ni aviso.
+Este riesgo estaba escrito así: «si CARTO deja de servir —es el fondo por
+defecto—, el visor arranca con el mapa gris y sin decir nada». Ocurrió, y peor
+que en gris: CARTO empezó a devolver sus teselas **atravesadas por un rótulo de
+"API KEY REQUIRED"**, de lado a lado del mapa. No fue una caída ni un aviso
+previo; fue un cambio de producto de un día para otro. Como era el fondo de
+partida, todo el que abría el visor lo veía marcado.
 
-Lo mínimo sería avisar cuando las teselas de un fondo fallan varias veces
-seguidas, igual que ya se hace con el modelo de elevación en 3D.
+Se resolvió cambiando ese fondo por el **lienzo gris claro de Esri**, del mismo
+servicio que ya sirve la imagen de satélite: sin cuenta, sin proveedor nuevo y
+sin permiso nuevo en la política de seguridad. Pero eso es tapar el agujero, no
+cerrarlo: **el riesgo sigue abierto y ahora apunta a Esri**, que puede hacer
+exactamente lo mismo.
+
+Lo que la experiencia deja claro es que el aviso no basta: cuando pasó, las
+teselas **llegaban con un 200**. Un mapa marcado no es un fallo de red y ningún
+contador de errores lo habría detectado. Las dos cosas que sí ayudarían:
+
+1. **Un fondo de respaldo declarado por cada fondo**, para poder cambiar de
+   proveedor con una línea el día que haga falta —que es lo que costó esta vez, y
+   fue barato justamente porque el módulo de fondos es una lista de datos.
+2. **Mirar el visor de vez en cuando.** Suena a poco, pero esto se detectó porque
+   alguien abrió la página, no porque saltara nada.
 
 ---
 
