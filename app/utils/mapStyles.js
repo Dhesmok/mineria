@@ -26,6 +26,14 @@ import {
   emptyFeatureCollection,
   LAYERS_MIN_ZOOM,
 } from "./anmLayers"
+import {
+  SGC_ATTRIBUTION,
+  SGC_LAYERS,
+  SGC_TILE_SIZE,
+  sgcLayerId,
+  sgcSourceId,
+  sgcTileTemplate,
+} from "./sgcLayers"
 
 /** Centro y zoom iniciales, los mismos del visor Leaflet pero en orden [lon, lat]. */
 export const INITIAL_CENTER = [-72, 4]
@@ -168,6 +176,45 @@ const hillshadeLayer = () => ({
 })
 
 /**
+ * Las capas de geología del SGC: una fuente ráster y una capa por servicio.
+ *
+ * Van **por debajo de la capa de pendiente y de los títulos mineros**, y por
+ * encima del mapa de fondo. Es el sitio que les corresponde por lo que son: el
+ * contexto geológico sobre el que se miran los títulos, no algo que deba
+ * taparlos. Quien quiera lo contrario lo consigue arrastrando en el panel.
+ *
+ * Como el resto, se declaran ocultas desde el arranque. Una capa ráster oculta no
+ * pide ni una tesela, así que declararlas todas no cuesta nada — y evita tener
+ * que reconstruir el estilo al encender una, que es lo que borraría lo dibujado
+ * por el usuario.
+ */
+const sgcSources = () =>
+  Object.fromEntries(
+    SGC_LAYERS.map((capa) => [
+      sgcSourceId(capa.key),
+      {
+        type: "raster",
+        tiles: [sgcTileTemplate(capa.key)],
+        tileSize: SGC_TILE_SIZE,
+        attribution: SGC_ATTRIBUTION,
+      },
+    ]),
+  )
+
+const sgcLayers = () =>
+  SGC_LAYERS.map((capa) => ({
+    id: sgcLayerId(capa.key),
+    type: "raster",
+    source: sgcSourceId(capa.key),
+    layout: { visibility: "none" },
+    // La opacidad de partida es la misma que la de las capas de la ANM, y la
+    // maneja el deslizador del panel. `raster-fade-duration` en cero porque
+    // estas teselas tardan segundos en llegar y el desvanecido encima las hacía
+    // parecer más lentas todavía.
+    paint: { "raster-opacity": 0.6, "raster-fade-duration": 0 },
+  }))
+
+/**
  * Construye el estilo con las dos capas base cargadas desde el principio y una
  * de ellas oculta.
  *
@@ -188,6 +235,7 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     ...BASEMAP_SOURCES,
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
     [DERIVATIVE_SOURCE_ID]: DERIVATIVE_SOURCE,
+    ...sgcSources(),
     ...anmSources(),
   },
   layers: [
@@ -197,6 +245,7 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     { id: "fondo-neutro", type: "background", paint: { "background-color": "#eef2f6" } },
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
+    ...sgcLayers(),
     derivativeLayer(),
     ...anmLayers(),
     ...searchLayers(),

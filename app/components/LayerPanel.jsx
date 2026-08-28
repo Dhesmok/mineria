@@ -142,13 +142,25 @@ const LayerRow = ({
       </button>
     )}
 
-    <ColorSwatch layer={layer} state={state} disabled={layer.pending} onOpen={onOpenColor} />
+    {/* Sin selector de color en las capas ráster: llegan ya dibujadas por el
+        servicio, con la simbología que un geólogo reconoce —el amarillo de un
+        cuaternario, el granate de un batolito—. Un selector ahí no cambiaría
+        nada, y un control que no hace nada se lee como roto. */}
+    <ColorSwatch
+      layer={layer}
+      state={state}
+      disabled={layer.pending || layer.raster}
+      onOpen={onOpenColor}
+    />
 
     <span
       className={`min-w-0 flex-1 truncate text-[13px] ${
         state.on ? "text-slate-900" : layer.pending ? "text-slate-400" : "text-slate-600"
       }`}
-      title={layer.label}
+      // La pista y la escala van al `title`: es donde caben sin gastar ancho, y
+      // «1:500.000» contra «1:100.000» es la diferencia entre dos capas que en la
+      // lista se llaman casi igual.
+      title={[layer.label, layer.scale, layer.hint].filter(Boolean).join(" · ")}
     >
       {layer.label}
     </span>

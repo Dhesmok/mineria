@@ -12,6 +12,7 @@ import {
   PITCH_MAX,
 } from "./hooks/map/useTerrainGL"
 import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
+import { useSgcLayersGL } from "./hooks/map/useSgcLayersGL"
 import { useTerrainProfileGL } from "./hooks/map/useTerrainProfileGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
@@ -138,6 +139,10 @@ export default function MapComponentGL({
     setShowErrorBanner,
     !queryingTerrain,
   )
+
+  // Las de geología del SGC. Van aparte y en un hook diminuto porque llegan ya
+  // dibujadas: no hay que consultarlas por recuadro ni convertir geometrías.
+  useSgcLayersGL(mapRef, mapInstance, layerState)
 
   // Lo cargado sube al panel, que es donde viven el filtro y la tabla: las
   // opciones del filtro se arman con lo que hay, y la tabla necesita además el

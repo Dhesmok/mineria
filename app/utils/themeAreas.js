@@ -1,4 +1,5 @@
-import { ANM_LAYERS } from "./anmLayers"
+import { ANM_LAYERS, anmFillLayerId, anmLineLayerId } from "./anmLayers"
+import { SGC_LAYERS, sgcLayerId } from "./sgcLayers"
 
 /**
  * Las capas del visor, agrupadas por área temática.
@@ -86,12 +87,40 @@ export const AREAS = [
 ]
 
 /**
+ * Las capas de geología, que ya tienen servicio.
+ *
+ * Salen de `SGC_LAYERS` en vez de estar escritas otra vez aquí, por lo mismo que
+ * las de Minería salen de `ANM_LAYERS`: dos listas de lo mismo acaban
+ * contradiciéndose, y quien las lea después no sabrá cuál manda.
+ *
+ * **`raster: true` no es un detalle de implementación, cambia lo que el panel
+ * ofrece.** Estas capas llegan ya dibujadas por el SGC, con su propia simbología
+ * —el amarillo de un cuaternario, el granate de un batolito—, así que el selector
+ * de color no tiene nada que elegir y se apaga. La opacidad sí sirve: es lo que
+ * permite mirar la geología contra la imagen de satélite o contra el relieve.
+ *
+ * Los colores que llevan son solo para el cuadrito del panel, que necesita algo
+ * con lo que distinguir una fila de otra.
+ */
+const SGC_THEME_LAYERS = SGC_LAYERS.map((capa, i) => ({
+  key: capa.key,
+  areaId: "geologia",
+  label: capa.label,
+  hint: capa.hint,
+  scale: capa.scale,
+  year: capa.year,
+  raster: true,
+  pending: false,
+  fillColor: ["#cbb8dd", "#bda6d4", "#a98fc6", "#d6c8e4", "#e2d7ec"][i] ?? "#cbb8dd",
+  lineColor: "#6B4E8A",
+}))
+
+/**
  * Capas todavía sin servicio. Cuando se consiga la dirección pública de una,
  * basta con moverla a su registro correspondiente con `url` o `tenureName` y
  * quitarle `pending`: el resto del visor no necesita enterarse.
  */
 const PENDING_LAYERS = [
-  { key: "planchas", areaId: "geologia", label: "Planchas geológicas", fillColor: "#cbb8dd", lineColor: "#6B4E8A" },
   { key: "simma", areaId: "geologia", label: "Movimientos en masa", fillColor: "#dcc0b6", lineColor: "#8a5b4e" },
   { key: "sismica", areaId: "geologia", label: "Amenaza sísmica", fillColor: "#e8bdb8", lineColor: "#a6564e" },
   { key: "bloques", areaId: "hidrocarburos", label: "Bloques y contratos", fillColor: "#a9cfc5", lineColor: "#2E6B5E" },
@@ -110,6 +139,7 @@ const PENDING_LAYERS = [
  */
 export const THEME_LAYERS = [
   ...ANM_LAYERS.map((layer) => ({ ...layer, areaId: "mineria", pending: false })),
+  ...SGC_THEME_LAYERS,
   ...PENDING_LAYERS,
 ]
 
@@ -135,6 +165,10 @@ export const DEFAULT_ORDER = [
   "anmService",
   "title",
   "historicalTitle",
+  // La geología por debajo de los títulos: es el contexto sobre el que se los
+  // mira, no algo que deba taparlos. Y entre ellas, de más detalle a menos, para
+  // que encender la nacional no borre la plancha.
+  ...SGC_THEME_LAYERS.map((layer) => layer.key).reverse(),
   ...PENDING_LAYERS.map((layer) => layer.key),
 ]
 
@@ -146,3 +180,22 @@ export const initialLayerState = () =>
       { on: false, opacity: 0.6, fillColor: layer.fillColor, lineColor: layer.lineColor },
     ]),
   )
+
+/**
+ * Qué capas del estilo dibujan una clave del panel, de abajo arriba.
+ *
+ * Dos formas distintas bajo una misma lista: las de la ANM llegan como polígonos
+ * y usan dos capas —relleno y contorno, en ese orden para que el borde no quede
+ * tapado por su propio relleno translúcido—, mientras que las del SGC llegan ya
+ * dibujadas y son una sola imagen.
+ *
+ * Existe para que el orden de pintado se resuelva en un solo sitio. La
+ * alternativa —un bucle para la ANM y otro para el SGC— son dos opiniones sobre
+ * qué va encima de qué, y tarde o temprano discrepan.
+ */
+export const styleLayerIdsFor = (key) => {
+  const capa = BY_KEY.get(key)
+  if (!capa || capa.pending) return []
+  if (capa.raster) return [sgcLayerId(key)]
+  return [anmFillLayerId(key), anmLineLayerId(key)]
+}
