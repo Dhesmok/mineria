@@ -12,7 +12,7 @@ import {
 } from "../../utils/anmLayers"
 import { SEARCH_LAYERS } from "../../utils/mapStyles"
 import { buildMapFilter, buildWhereClause } from "../../utils/layerFilters"
-import { layerByKey } from "../../utils/themeAreas"
+import { layerByKey, styleLayerIdsFor } from "../../utils/themeAreas"
 import { bboxOfGeometry } from "../../utils/bboxDownload"
 import { labelElementFor } from "../../utils/mapLabelsGL"
 import { selectVisibleLabels } from "../../utils/labelPlacement"
@@ -398,13 +398,15 @@ export const useMapLayersGL = (
     if (!map || !map.getLayer(SEARCH_LAYERS.fill)) return
 
     ;[...layerOrder].reverse().forEach((key) => {
-      const fill = anmFillLayerId(key)
-      const line = anmLineLayerId(key)
-      if (!map.getLayer(fill)) return
+      // Cada clave del panel puede tener una capa en el estilo o dos: las de la
+      // ANM llegan como polígonos y necesitan relleno y contorno; las del SGC
+      // llegan ya dibujadas y son una sola imagen. El bucle es el mismo para las
+      // dos, y tiene que serlo: el usuario arrastra una lista única y espera que
+      // el orden valga para todo lo que hay en ella.
+      const capas = styleLayerIdsFor(key).filter((id) => map.getLayer(id))
       // El contorno se mueve después que el relleno para quedar sobre él; al
       // revés, el relleno translúcido de la propia capa apagaría su borde.
-      map.moveLayer(fill, SEARCH_LAYERS.fill)
-      map.moveLayer(line, SEARCH_LAYERS.fill)
+      capas.forEach((id) => map.moveLayer(id, SEARCH_LAYERS.fill))
     })
   }, [mapInstance, layerOrder, mapRef])
 

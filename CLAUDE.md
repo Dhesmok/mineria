@@ -66,6 +66,7 @@ app/
     useTerrainGL.js       Relieve, 3D y consulta de altura
     useAreaDownloadGL.js  Descarga por área (ZIP)
     useGeolocationGL.js   GPS y brújula
+    useSgcLayersGL.js     Encender/apagar y graduar las capas de geología
   utils/
     arcgis.js             fetch normalizado contra ArcGIS REST
     tenureLayers.js       Descubrimiento de índices de capa ANM
@@ -77,7 +78,9 @@ app/
     demTiles.js           Qué teselas del modelo de elevación hacen falta y dónde va cada una
     demTileLoader.js      Bajarlas, decodificarlas a alturas y recordarlas
     terrainRaster.js      Horn sobre el mosaico → los píxeles de la capa
+    sgcLayers.js          Catálogo de servicios de geología del SGC
     mapUtils.js, mapLabelsGL.js, drawStyles.js
+  api/sgc/route.js        Intermediario para las teselas del SGC (CORS sin comprobar)
 components/ui/            shadcn
 scripts/
   copy-maplibre-worker.mjs  Copia el worker de MapLibre a public/ (pre-dev y pre-build)
@@ -91,11 +94,23 @@ https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer
   → "Título Vigente", "Solicitud Vigente"
 https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87
 https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3
+https://srvags.sgc.gov.co/arcgis|arcprod/rest/services/...  → geología (ver utils/sgcLayers.js)
 ```
 
 **La ANM sí permite CORS desde el navegador.** No asumas lo mismo de otras
 entidades (IGAC, SGC, IDEAM, ANLA): hay que probar cada una, y si bloquean,
 montar un proxy en una API route de Next.
+
+**Del SGC no se pudo comprobar**, porque el proxy de la máquina de desarrollo
+bloquea `sgc.gov.co`. Por eso sus capas pasan por `app/api/sgc/route.js`, que
+funciona permita CORS o no. Si algún día se comprueba que sí lo permite, quitar
+el intermediario es cambiar una línea de `utils/sgcLayers.js` — y conviene, para
+que las teselas dejen de pasar por nuestro servidor.
+
+**Las capas del SGC van como imagen, no como polígonos**, y es a propósito: su
+simbología *es* el dato —un geólogo reconoce la unidad por el color—, son miles
+de polígonos, y exportar el servicio entero evita nombrar ni un índice de capa.
+Ver la cabecera de `utils/sgcLayers.js`.
 
 ## Trampas conocidas (no las vuelvas a pisar)
 
@@ -186,7 +201,13 @@ montar un proxy en una API route de Next.
     `getCameraAltitude()` **antes de que cargara el terreno**. Medir en el momento
     equivocado da un número correcto de una pregunta distinta.
 
-13. **Antes de sumar una dependencia, mira si ya existe.** El proyecto arrastró
+13. **El SGC tiene tres instancias de ArcGIS** —`/arcgis/`, `/arcprod/` y
+    `/arcpro/`— y el mismo servicio puede vivir en una y no en otra. Y el
+    servicio de estado de la cartografía lleva una errata del propio SGC:
+    `Estado_Catografia_Geologica`, sin la «r». Corregirla al copiarla deja la
+    capa en blanco.
+
+14. **Antes de sumar una dependencia, mira si ya existe.** El proyecto arrastró
     ocho paquetes que ningún `import` usaba. Pero al revés también cuenta:
     `maplibre-contour` (MIT) ya resuelve bajar y decodificar teselas terrarium
     en un *worker* y servirlas por `addProtocol`; si algún día la capa de

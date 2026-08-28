@@ -8,7 +8,7 @@ Hechos también los ajustes de uso (Fase 8), el panel por áreas (Fase 9) y los 
 lectura (Fase 10). Pendiente: recorte de DEM (Fase 5, fuente ya decidida), las
 entidades nuevas (Fase 6, faltan sus direcciones) y filtrar por departamento y
 municipio (Fase 8, falta sondear qué campos traen los servicios).
-**Última actualización:** 2026-08-23
+**Última actualización:** 2026-08-28
 
 ---
 
@@ -1419,3 +1419,51 @@ miran, que es lo que destapó el fallo del instrumento.
 comprobaciones. La cámara sale a 1.516 m sobre el suelo con lomas que suben 1.132
 —antes se quedaba a 425—, el punto que se estaba mirando sigue en el centro con
 1 m de desvío, y subir la exageración a 3× tampoco la entierra.
+
+
+### Geología del SGC — 2026-08-28
+
+Cinco capas nuevas, todas del Servicio Geológico Colombiano, en el área de
+Geología que llevaba desde la Fase 9 con los interruptores apagados.
+
+| capa | escala | servicio |
+|---|---|---|
+| Mapa geológico de Colombia | 1:500.000 (2023) | `Mapa_Geologico_Colombia_V2023` |
+| Geología por departamentos | variable | `Geologia/Geologia_Por_Departamentos` |
+| Planchas geológicas | 1:100.000 (2020) | `arcprod` · `Geologia/Atlas_Geologico_2020` |
+| Estado de la cartografía | 1:100.000 | `Estado_Cartografia_Geologica` |
+| Grilla de planchas | 1:100.000 | `arcprod` · `GrillaIGAC_100k` |
+
+**Van como imagen y no como polígonos**, que es lo contrario de lo que se hace
+con la ANM. Tres razones y las tres pesan: la simbología del SGC *es* el dato —un
+geólogo reconoce una unidad por su color, y repintarla con dos colores nuestros
+convierte un mapa geológico en una mancha—; son miles de polígonos por pantalla;
+y exportando el servicio completo no hay que nombrar ni un índice de capa, que es
+la trampa nº 1 del proyecto. Dentro de «Geología por departamentos», «Fallas
+Geológicas» aparece en la 43, la 60 y la 177 según el departamento: escribir un
+número ahí habría sido elegir un departamento al azar.
+
+**Pasan por una ruta propia, `/api/sgc`.** MapLibre pide las teselas ráster con
+`fetch`, no con una etiqueta `img`, así que están sujetas a CORS. No se pudo
+comprobar si el SGC lo permite —el proxy de esta máquina bloquea `sgc.gov.co`— y
+la ruta propia funciona en los dos casos. La ruta **acepta claves del catálogo, no
+direcciones**: con una URL por parámetro sería un proxy abierto con el que
+cualquiera podría pedir lo que quisiera desde el dominio del visor.
+
+**Cómo se comprobó, sin poder llegar al SGC.** Simulando la frontera correcta: la
+suite de navegador finge `/api/sgc` —que es nuestro— y deja el servidor del Estado
+del otro lado. Cada capa devuelve un color plano distinto, así que se puede
+afirmar cuál se está viendo. Además hay una ruta que vigila que el navegador **no
+llame al SGC por su cuenta**: si alguien deshiciera el intermediario, esa
+comprobación lo diría.
+
+**Dos hallazgos del inventario que conviene no perder.** El SGC tiene tres
+instancias de ArcGIS —`/arcgis/`, `/arcprod/` y `/arcpro/`— y el mismo servicio
+puede vivir en una y no en otra. Y el nombre del servicio de estado de la
+cartografía lleva una errata del propio SGC, `Estado_Catografia_Geologica` sin la
+«r»: corregirla al copiarla deja la capa en blanco.
+
+**Comprobado**: 451 pruebas unitarias (26 nuevas entre el catálogo y la ruta) y
+una suite de navegador de 20 comprobaciones. Lo que **no** se pudo comprobar es
+que los servicios respondan de verdad, ni si permiten CORS: eso hay que verlo con
+la página abierta.
