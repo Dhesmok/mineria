@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
-import { ChevronRight, Filter, GripVertical, Search } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, Filter, GripVertical, Search } from "lucide-react"
 
 import { AREAS, THEME_LAYERS, layerByKey } from "../utils/themeAreas"
 import { darken } from "../utils/colors"
@@ -102,6 +102,85 @@ const LayerSwitch = ({ layer, state, area, disabled, onToggle }) => (
  * rompería justo las dos funciones nuevas —el arrastre pierde el elemento que
  * tenía agarrado y el deslizador de opacidad pierde el foco a media pulsación—.
  */
+/**
+ * La fila, más su lista de subcapas cuando el servicio tiene varias.
+ *
+ * **Existe porque «Geología por departamentos» dibujaba solo Antioquia.** No era
+ * un fallo: el servicio del SGC trae ese departamento encendido de fábrica y los
+ * otros treinta y uno apagados, y nosotros lo estábamos exportando tal cual. La
+ * lista sale del propio servicio —no está escrita aquí— así que enseña lo que él
+ * diga tener, se llame como se llame.
+ *
+ * Se pliega y solo aparece con la capa encendida: son más de treinta filas, y
+ * desplegadas de entrada empujarían el resto del panel fuera de la pantalla.
+ */
+const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, children }) => {
+  const [abierta, setAbierta] = useState(false)
+  const hayQueElegir = Boolean(state?.on) && (subLayers?.length ?? 0) > 0
+
+  if (!hayQueElegir) return children
+
+  const marcadas = chosenSub ?? []
+  return (
+    <>
+      {children}
+      <div className="border-b border-slate-100 bg-slate-50/60">
+        <button
+          type="button"
+          onClick={() => setAbierta((v) => !v)}
+          aria-expanded={abierta}
+          className="flex w-full items-center justify-between gap-2 py-1.5 pl-11 pr-4 text-[11px] text-slate-500 transition-colors hover:text-slate-700"
+        >
+          <span>
+            {marcadas.length === 0
+              ? "Elige qué dibujar"
+              : `${subLayers.filter((g) => g.ids.every((id) => marcadas.includes(id))).length} de ${subLayers.length}`}
+          </span>
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${abierta ? "rotate-180" : ""}`} />
+        </button>
+
+        {abierta && (
+          <div className="max-h-[13rem] overflow-y-auto pb-1.5">
+            {subLayers.map((grupo) => {
+              const puesta = grupo.ids.every((id) => marcadas.includes(id))
+              return (
+                <button
+                  key={grupo.id}
+                  type="button"
+                  onClick={() => onToggleSubLayer?.(layer.key, grupo)}
+                  aria-pressed={puesta}
+                  className="flex w-full items-center gap-2 py-1 pl-11 pr-4 text-left transition-colors hover:bg-white"
+                >
+                  <span
+                    className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border ${
+                      puesta ? "border-slate-800 bg-slate-800" : "border-slate-300"
+                    }`}
+                  >
+                    {puesta && <Check className="h-2.5 w-2.5 text-white" />}
+                  </span>
+                  <span className={`flex-1 truncate text-[11px] ${puesta ? "text-slate-800" : "text-slate-500"}`}>
+                    {grupo.label}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Sin nada marcado, el servicio dibuja lo que él trae encendido —que es
+            justamente el problema que esta lista viene a resolver—, así que
+            conviene decirlo en vez de dejar al usuario preguntándose por qué solo
+            se ve un departamento. */}
+        {marcadas.length === 0 && !abierta && (
+          <p className="pb-1.5 pl-11 pr-4 text-[10px] leading-tight text-slate-400">
+            Sin elegir, el servicio dibuja solo lo que trae por omisión.
+          </p>
+        )}
+      </div>
+    </>
+  )
+}
+
 const LayerRow = ({
   layer,
   state,
@@ -116,7 +195,17 @@ const LayerRow = ({
   onDragStart,
   onDragMove,
   onDragEnd,
+  subLayers,
+  chosenSub,
+  onToggleSubLayer,
 }) => (
+  <SubLayerHost
+    layer={layer}
+    state={state}
+    subLayers={subLayers}
+    chosenSub={chosenSub}
+    onToggleSubLayer={onToggleSubLayer}
+  >
   <div
     ref={(node) => registerRow(layer.key, node)}
     className={`flex h-[38px] items-center gap-2.5 border-b border-slate-100 px-4 transition-colors ${
@@ -189,6 +278,7 @@ const LayerRow = ({
       onToggle={onToggle}
     />
   </div>
+  </SubLayerHost>
 )
 
 /**
@@ -236,6 +326,12 @@ export const LayerPanel = ({
   areaHasFilter,
   onOpenFilters,
   onOpenSearch,
+  // Las subcapas del SGC: qué ofrece cada capa y qué está marcado. Llegan de
+  // fuera porque quien las descubre es el mapa —se las pregunta al servicio al
+  // encender la capa—, no el panel.
+  subLayers = {},
+  chosenSub = {},
+  onToggleSubLayer,
 }) => {
   const [onlyActive, setOnlyActive] = useState(false)
   // Qué área está desplegada. Solo una a la vez: con cuatro áreas abiertas el
@@ -293,6 +389,9 @@ export const LayerPanel = ({
   const filaProps = (layer, index, draggable) => ({
     layer,
     state: layers[layer.key],
+    subLayers: subLayers[layer.key],
+    chosenSub: chosenSub[layer.key],
+    onToggleSubLayer,
     area: AREAS.find((a) => a.id === layer.areaId),
     index,
     draggable,

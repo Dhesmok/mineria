@@ -63,6 +63,11 @@ export default function Component() {
   // Lo que el mapa tiene cargado: atributos para armar el filtro, figuras con su
   // recuadro para la tabla, y qué capas recortó el servicio.
   const [layerData, setLayerData] = useState({ features: [], truncated: [] })
+  // Lo que el servicio del SGC dice tener dentro de cada capa —los treinta y dos
+  // departamentos, por ejemplo— y cuáles están marcados. Se descubre en el mapa,
+  // porque hace falta el mapa para pedirlo, pero se dibuja aquí, bajo su capa:
+  // encender un departamento es parte de encender la capa, no una ventana aparte.
+  const [sgcState, setSgcState] = useState({})
 
   // Qué ventana flotante está abierta y a qué botón se ancla.
   const [filterPopover, setFilterPopover] = useState(null)
@@ -415,6 +420,9 @@ export default function Component() {
             onOpacity={cambiarOpacidad}
             onColor={cambiarColor}
             onReorder={setLayerOrder}
+            subLayers={sgcState.subLayers}
+            chosenSub={sgcState.chosenSub}
+            onToggleSubLayer={sgcState.onToggleSubLayer}
             areaHasFilter={areaHasFilter}
             onOpenFilters={(areaId, el) => setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))}
             onOpenSearch={(areaId, el) => setSearchPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))}
@@ -485,6 +493,7 @@ export default function Component() {
           coordinateSystem={selectedCoordinateSystem}
           filters={filters}
           onLayerData={setLayerData}
+          onSgcState={setSgcState}
           panelOpen={showSidebar}
         />
       </div>

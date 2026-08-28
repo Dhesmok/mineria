@@ -3,11 +3,17 @@ import {
   SGC_KEYS,
   SGC_LAYERS,
   SGC_TILE_SIZE,
+  identifyResultsFrom,
+  legendFrom,
   sgcExportUrl,
+  sgcIdentifyUrl,
   sgcLayerByKey,
   sgcLayerId,
+  sgcLegendUrl,
+  sgcMetaUrl,
   sgcSourceId,
   sgcTileTemplate,
+  subLayersFrom,
 } from "./sgcLayers"
 
 describe("el catálogo del SGC", () => {
@@ -138,5 +144,205 @@ describe("atribución", () => {
     // le dice a quien mira el mapa de dónde salió la geología que está viendo.
     expect(SGC_ATTRIBUTION).toContain("Servicio Geológico Colombiano")
     expect(SGC_ATTRIBUTION).toContain("sgc.gov.co")
+  })
+})
+
+describe("subLayersFrom", () => {
+  /** Un servicio con dos departamentos, cada uno con sus capas dentro. */
+  const departamentos = {
+    layers: [
+      { id: 0, name: "Boyacá", parentLayerId: -1, subLayerIds: [2, 3], defaultVisibility: false },
+      { id: 1, name: "Antioquia", parentLayerId: -1, subLayerIds: [4], defaultVisibility: true },
+      { id: 2, name: "Unidades", parentLayerId: 0, subLayerIds: null },
+      { id: 3, name: "Fallas", parentLayerId: 0, subLayerIds: null },
+      { id: 4, name: "Unidades", parentLayerId: 1, subLayerIds: null },
+    ],
+  }
+
+  it("saca un grupo por departamento con todos sus índices dentro", () => {
+    const grupos = subLayersFrom(departamentos)
+    expect(grupos).toHaveLength(2)
+    expect(grupos.map((g) => g.label)).toEqual(["Antioquia", "Boyacá"])
+    expect(grupos.find((g) => g.label === "Boyacá").ids).toEqual([0, 2, 3])
+  })
+
+  it("dice cuál trae el servicio encendido de fábrica", () => {
+    // Es la explicación de por qué solo se dibujaba Antioquia, y lo que permite
+    // que las casillas arranquen marcadas en lo que de verdad hay en pantalla.
+    const grupos = subLayersFrom(departamentos)
+    expect(grupos.find((g) => g.label === "Antioquia").on).toBe(true)
+    expect(grupos.find((g) => g.label === "Boyacá").on).toBe(false)
+  })
+
+  it("ordena en español, con las tildes en su sitio", () => {
+    const json = {
+      layers: [
+        { id: 0, name: "Ñuble", parentLayerId: -1, subLayerIds: [3] },
+        { id: 1, name: "Nariño", parentLayerId: -1, subLayerIds: [4] },
+        { id: 2, name: "Antioquia", parentLayerId: -1, subLayerIds: [5] },
+        { id: 3, name: "a", parentLayerId: 0 },
+        { id: 4, name: "b", parentLayerId: 1 },
+        { id: 5, name: "c", parentLayerId: 2 },
+      ],
+    }
+    expect(subLayersFrom(json).map((g) => g.label)).toEqual(["Antioquia", "Nariño", "Ñuble"])
+  })
+
+  it("no ofrece elección cuando el servicio es plano o trae un solo grupo", () => {
+    // Un desplegable de un elemento es ruido: esa capa se dibuja entera.
+    expect(subLayersFrom({ layers: [{ id: 0, name: "Geología", parentLayerId: -1 }] })).toEqual([])
+    expect(
+      subLayersFrom({
+        layers: [
+          { id: 0, name: "Todo", parentLayerId: -1, subLayerIds: [1] },
+          { id: 1, name: "Unidades", parentLayerId: 0 },
+        ],
+      }),
+    ).toEqual([])
+  })
+
+  it("aguanta un servicio que no responde lo que se espera", () => {
+    // ArcGIS contesta 200 con un cuerpo de error —la trampa nº 2— y ese cuerpo
+    // llega hasta aquí. Devolver [] deja la capa como estaba; reventar deja la
+    // aplicación en blanco.
+    expect(subLayersFrom(null)).toEqual([])
+    expect(subLayersFrom({ error: { code: 400 } })).toEqual([])
+    expect(subLayersFrom({ layers: [] })).toEqual([])
+  })
+
+  it("no se cuelga si un grupo se referencia a sí mismo", () => {
+    const grupos = subLayersFrom({
+      layers: [
+        { id: 0, name: "A", parentLayerId: -1, subLayerIds: [1] },
+        { id: 1, name: "B", parentLayerId: 0, subLayerIds: [0] },
+        { id: 2, name: "C", parentLayerId: -1, subLayerIds: [3] },
+        { id: 3, name: "D", parentLayerId: 2 },
+      ],
+    })
+    expect(grupos.find((g) => g.label === "A").ids).toEqual([0, 1])
+  })
+})
+
+describe("identifyResultsFrom", () => {
+  it("conserva los campos con contenido y en el orden del servicio", () => {
+    const [resultado] = identifyResultsFrom({
+      results: [
+        {
+          layerName: "Unidades geológicas",
+          value: "K1-Sm",
+          attributes: { Unidad: "K1-Sm", Edad: "Cretácico", Litologia: "Lodolitas" },
+        },
+      ],
+    })
+    expect(resultado.value).toBe("K1-Sm")
+    expect(resultado.attributes.map((a) => a.field)).toEqual(["Unidad", "Edad", "Litologia"])
+  })
+
+  it("tira los campos vacíos y los identificadores internos", () => {
+    // «Null» con mayúscula es lo que escribe ArcGIS en un campo sin dato: sin
+    // quitarlo, la ficha se llena de filas que no dicen nada.
+    const [resultado] = identifyResultsFrom({
+      results: [
+        {
+          layerName: "x",
+          value: "y",
+          attributes: {
+            OBJECTID: "412",
+            "Shape.STArea()": "9000",
+            Edad: "Null",
+            Fuente: "<Null>",
+            Nota: "   ",
+            Unidad: "Q-al",
+            GlobalID: "{ABC}",
+          },
+        },
+      ],
+    })
+    expect(resultado.attributes).toEqual([{ field: "Unidad", value: "Q-al" }])
+  })
+
+  it("devuelve vacío cuando no hay resultados o el cuerpo es un error", () => {
+    expect(identifyResultsFrom({ results: [] })).toEqual([])
+    expect(identifyResultsFrom({ error: { code: 500 } })).toEqual([])
+    expect(identifyResultsFrom(undefined)).toEqual([])
+  })
+})
+
+describe("legendFrom", () => {
+  it("arma el data: URI con el símbolo que manda el servicio", () => {
+    // El símbolo tiene que ser el del propio SGC, no una aproximación nuestra:
+    // en un mapa geológico el color *es* el dato.
+    const leyenda = legendFrom({
+      layers: [
+        {
+          layerId: 4,
+          layerName: "Unidades",
+          legend: [{ label: "Q-al", imageData: "AAAA", contentType: "image/png" }],
+        },
+      ],
+    })
+    expect(leyenda).toEqual([
+      {
+        layerId: 4,
+        layerName: "Unidades",
+        items: [{ label: "Q-al", image: "data:image/png;base64,AAAA" }],
+      },
+    ])
+  })
+
+  it("descarta las capas sin símbolos", () => {
+    const leyenda = legendFrom({
+      layers: [
+        { layerId: 1, layerName: "Vacía", legend: [] },
+        { layerId: 2, layerName: "Sin imagen", legend: [{ label: "x" }] },
+        { layerId: 3, layerName: "Buena", legend: [{ label: "y", imageData: "BB" }] },
+      ],
+    })
+    expect(leyenda.map((c) => c.layerName)).toEqual(["Buena"])
+  })
+
+  it("aguanta un cuerpo que no es una leyenda", () => {
+    expect(legendFrom({ error: {} })).toEqual([])
+    expect(legendFrom(null)).toEqual([])
+  })
+})
+
+describe("direcciones de consulta", () => {
+  it("meta y leyenda solo piden la capa y el modo", () => {
+    expect(sgcMetaUrl("planchas")).toBe("/api/sgc?capa=planchas&modo=meta")
+    expect(sgcLegendUrl("planchas")).toBe("/api/sgc?capa=planchas&modo=leyenda")
+  })
+
+  it("el identify lleva el punto, el recuadro y el tamaño de la pantalla", () => {
+    // Sin el recuadro y el tamaño, ArcGIS no puede convertir la tolerancia en
+    // píxeles a una distancia sobre el terreno, y un clic junto a un contacto
+    // devolvería la unidad equivocada.
+    const url = sgcIdentifyUrl({
+      key: "geologiaNacional",
+      lng: -8358000,
+      lat: 700000.5,
+      bbox: "-1,-2,3,4",
+      width: 800.6,
+      height: 600.2,
+    })
+    expect(url).toContain("modo=identify")
+    expect(url).toContain("punto=-8358000%2C700000.5")
+    expect(url).toContain("tam=801%2C600")
+    expect(url).not.toContain("sub=")
+  })
+
+  it("y las subcapas elegidas, cuando las hay", () => {
+    // Tienen que ser las mismas que se están dibujando: preguntar por todo
+    // devolvería unidades de departamentos que no están en pantalla.
+    const url = sgcIdentifyUrl({
+      key: "geologiaDepartamentos",
+      lng: 1,
+      lat: 2,
+      bbox: "-1,-2,3,4",
+      width: 10,
+      height: 10,
+      sub: [7, 8],
+    })
+    expect(url).toContain("sub=7%2C8")
   })
 })

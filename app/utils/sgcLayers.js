@@ -136,18 +136,156 @@ export const SGC_TILE_SIZE = 512
  *
  * @param {string} bbox el recuadro «oeste,sur,este,norte» en metros de Web Mercator
  */
-export const sgcExportUrl = (service, bbox, size = SGC_TILE_SIZE) =>
+export const sgcExportUrl = (service, bbox, size = SGC_TILE_SIZE, layers = "") =>
   `${service}/export?bbox=${bbox}&bboxSR=3857&imageSR=3857` +
-  `&size=${size},${size}&dpi=96&format=png32&transparent=true&f=image`
+  `&size=${size},${size}&dpi=96&format=png32&transparent=true` +
+  (layers ? `&layers=${layers}` : "") +
+  "&f=image"
 
 /**
  * La plantilla que se le da a MapLibre.
  *
  * `{bbox-epsg-3857}` lo sustituye MapLibre por el recuadro de cada tesela. Es el
  * mismo mecanismo con el que se consumen los servicios WMS.
+ *
+ * `sub` son los índices de las subcapas que hay que dibujar, separados por
+ * comas, cuando la capa tiene subcapas elegibles. Van en la dirección y no en
+ * una llamada aparte porque cambiarlos tiene que hacer que MapLibre vuelva a
+ * pedir las teselas: si la dirección no cambia, se queda con las que ya tiene.
  */
-export const sgcTileTemplate = (key) =>
-  `/api/sgc?capa=${encodeURIComponent(key)}&bbox={bbox-epsg-3857}`
+export const sgcTileTemplate = (key, sub = []) => {
+  const base = `/api/sgc?capa=${encodeURIComponent(key)}&bbox={bbox-epsg-3857}`
+  return sub.length ? `${base}&sub=${sub.join(",")}` : base
+}
+
+/** La dirección de nuestra ruta para preguntarle al servicio qué capas tiene. */
+export const sgcMetaUrl = (key) => `/api/sgc?capa=${encodeURIComponent(key)}&modo=meta`
+
+/** Y para pedirle la leyenda. */
+export const sgcLegendUrl = (key) => `/api/sgc?capa=${encodeURIComponent(key)}&modo=leyenda`
+
+/**
+ * Y para preguntarle qué hay en un punto.
+ *
+ * ArcGIS necesita saber, además del punto, **con qué mapa se está mirando**:
+ * el recuadro y el tamaño en píxeles. Es lo que le permite convertir la
+ * tolerancia —«a cuántos píxeles del clic»— en una distancia sobre el terreno.
+ * Sin eso, un clic al lado de un contacto geológico devolvería la unidad
+ * equivocada o ninguna.
+ */
+export const sgcIdentifyUrl = ({ key, lng, lat, bbox, width, height, sub = [], tolerance = 4 }) => {
+  const params = new URLSearchParams({
+    capa: key,
+    modo: "identify",
+    punto: `${lng},${lat}`,
+    bbox,
+    tam: `${Math.round(width)},${Math.round(height)}`,
+    tol: String(tolerance),
+  })
+  if (sub.length) params.set("sub", sub.join(","))
+  return `/api/sgc?${params}`
+}
+
+/**
+ * Los grupos de primer nivel de un servicio: sus «subcapas elegibles».
+ *
+ * En «Geología por departamentos» cada grupo es un departamento. Se leen del
+ * propio servicio en vez de escribirlos aquí por lo de siempre —los índices del
+ * SGC cambian—, pero también por algo más simple: **no sé cuántos son ni cómo se
+ * llaman.** Desde la máquina donde se escribió esto el SGC está bloqueado, así
+ * que lo único honesto es enseñar lo que el servicio diga de sí mismo.
+ *
+ * Por eso tampoco se filtra por «parece un departamento»: si el servicio agrupa
+ * de otra manera, se verá su agrupación y no una lista inventada.
+ *
+ * `on` es lo que el servicio trae encendido de fábrica, y no es un detalle: es la
+ * explicación de por qué «Geología por departamentos» dibujaba solo Antioquia.
+ * Con ese dato, las casillas pueden arrancar marcadas exactamente en lo que se
+ * está viendo, en vez de vacías bajo un mapa que sí tiene algo pintado.
+ *
+ * @param {Object} serviceJson lo que devuelve `MapServer?f=json`
+ * @returns {Array<{id:number, label:string, ids:number[], on:boolean}>} vacío si no hay grupos
+ */
+export const subLayersFrom = (serviceJson) => {
+  const capas = serviceJson?.layers
+  if (!Array.isArray(capas) || capas.length === 0) return []
+
+  const raiz = capas.filter((capa) => (capa?.parentLayerId ?? -1) < 0)
+  // Un servicio plano —sin grupos— no tiene nada que elegir: se dibuja entero.
+  const grupos = raiz.filter((capa) => Array.isArray(capa?.subLayerIds) && capa.subLayerIds.length)
+  if (grupos.length < 2) return []
+
+  /** Todos los descendientes de un grupo, que es lo que hay que encender. */
+  const descendientes = (id, vistos = new Set()) => {
+    if (vistos.has(id)) return []
+    vistos.add(id)
+    const capa = capas.find((c) => c.id === id)
+    const hijos = capa?.subLayerIds ?? []
+    return [id, ...hijos.flatMap((hijo) => descendientes(hijo, vistos))]
+  }
+
+  return grupos
+    .map((grupo) => ({
+      id: grupo.id,
+      label: String(grupo.name ?? `Grupo ${grupo.id}`),
+      ids: descendientes(grupo.id),
+      on: Boolean(grupo.defaultVisibility),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "es"))
+}
+
+/**
+ * Los atributos de un `identify`, ya limpios y listos para enseñar.
+ *
+ * ArcGIS devuelve mucho ruido: identificadores internos, campos vacíos, formas.
+ * Lo que le sirve a un geólogo son los nombres de campo con contenido — la
+ * unidad, la edad, la litología—, y en el orden en que vengan, que es el que el
+ * SGC eligió al publicar.
+ */
+export const identifyResultsFrom = (json) => {
+  const encontrados = json?.results
+  if (!Array.isArray(encontrados)) return []
+
+  return encontrados.map((resultado) => ({
+    layerName: String(resultado?.layerName ?? ""),
+    value: String(resultado?.value ?? ""),
+    attributes: Object.entries(resultado?.attributes ?? {})
+      .filter(([campo, valor]) => {
+        if (valor === null || valor === undefined) return false
+        const texto = String(valor).trim()
+        // «Null» con mayúscula es literalmente lo que escribe ArcGIS en un campo
+        // vacío. Sin quitarlo, la ficha se llena de filas que no dicen nada.
+        if (texto === "" || texto === "Null" || texto === "<Null>") return false
+        return !/^(objectid|shape|fid|globalid|se_anno)/i.test(campo)
+      })
+      .map(([campo, valor]) => ({ field: campo, value: String(valor) })),
+  }))
+}
+
+/**
+ * La leyenda de un servicio, aplanada.
+ *
+ * @returns {Array<{layerId:number, layerName:string, items:Array<{label:string, image:string}>}>}
+ */
+export const legendFrom = (json) => {
+  const capas = json?.layers
+  if (!Array.isArray(capas)) return []
+
+  return capas
+    .map((capa) => ({
+      layerId: capa?.layerId,
+      layerName: String(capa?.layerName ?? ""),
+      items: (capa?.legend ?? [])
+        .filter((item) => item?.imageData)
+        .map((item) => ({
+          label: String(item?.label ?? "").trim(),
+          // El servicio manda el símbolo en base64. Se arma aquí el `data:` para
+          // que quien lo pinte no tenga que saber de formatos.
+          image: `data:${item?.contentType ?? "image/png"};base64,${item.imageData}`,
+        })),
+    }))
+    .filter((capa) => capa.items.length > 0)
+}
 
 /** La atribución, que las condiciones de uso del SGC exigen mostrar. */
 export const SGC_ATTRIBUTION =

@@ -33,6 +33,7 @@ import { MapMenuItem, MapMenuPanel, MapMenuSeparator } from "./components/MapMen
 import { ImageExport } from "./components/ImageExport"
 import { TerrainQuery } from "./components/TerrainQuery"
 import { TerrainRasterLegend } from "./components/TerrainRasterLegend"
+import { SgcPanel, activeSgcKeys } from "./components/SgcPanel"
 import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
@@ -97,6 +98,7 @@ export default function MapComponentGL({
   coordinateSystem,
   filters,
   onLayerData,
+  onSgcState,
   panelOpen = false,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
@@ -140,9 +142,34 @@ export default function MapComponentGL({
     !queryingTerrain,
   )
 
-  // Las de geología del SGC. Van aparte y en un hook diminuto porque llegan ya
-  // dibujadas: no hay que consultarlas por recuadro ni convertir geometrías.
-  useSgcLayersGL(mapRef, mapInstance, layerState)
+  // Las de geología del SGC. Van aparte porque llegan ya dibujadas: no hay que
+  // consultarlas por recuadro ni convertir geometrías. Lo que sí hace falta es
+  // lo contrario —preguntarle al servicio qué contiene y qué hay en un punto—,
+  // y de eso salen las cinco cosas que devuelve.
+  //
+  // Se apaga mientras está activa la consulta de altura por el mismo motivo que
+  // la ficha de los polígonos: en ese modo el clic significa «mide aquí», y dos
+  // respuestas distintas al mismo toque se leen como un fallo.
+  const {
+    sgcSubLayers,
+    sgcChosenSub,
+    toggleSgcSubLayer,
+    sgcLegends,
+    sgcFeatureInfo,
+    clearSgcFeatureInfo,
+  } = useSgcLayersGL(mapRef, mapInstance, layerState, { enabled: !queryingTerrain })
+
+  // La lista de subcapas sube al panel, que es quien dibuja las casillas. El
+  // hook tiene que vivir aquí —necesita el mapa— pero las casillas van junto a
+  // su capa, en la columna de la izquierda, así que el estado viaja hacia
+  // arriba igual que ya lo hace lo cargado de la ANM.
+  useEffect(() => {
+    onSgcState?.({
+      subLayers: sgcSubLayers,
+      chosenSub: sgcChosenSub,
+      onToggleSubLayer: toggleSgcSubLayer,
+    })
+  }, [sgcSubLayers, sgcChosenSub, toggleSgcSubLayer, onSgcState])
 
   // Lo cargado sube al panel, que es donde viven el filtro y la tabla: las
   // opciones del filtro se arman con lo que hay, y la tabla necesita además el
@@ -631,6 +658,18 @@ export default function MapComponentGL({
         {queryingTerrain && (
           <TerrainQuery result={terrainResult} onClose={toggleTerrainQuery} />
         )}
+
+        {/* La leyenda y la ficha de la geología. Aparece sola al encender una
+            capa del SGC y desaparece al apagarla: mientras no haya geología en
+            pantalla no tiene nada que decir. */}
+        <SgcPanel
+          activeKeys={activeSgcKeys(layerState)}
+          subLayers={sgcSubLayers}
+          chosenSub={sgcChosenSub}
+          legends={sgcLegends}
+          featureInfo={sgcFeatureInfo}
+          onDismiss={clearSgcFeatureInfo}
+        />
 
         {/* La función diferenciadora: dibujar un polígono y salir con los
             archivos de las capas encendidas dentro de esa área. Va en la columna

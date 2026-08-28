@@ -1467,3 +1467,66 @@ cartografía lleva una errata del propio SGC, `Estado_Catografia_Geologica` sin 
 una suite de navegador de 20 comprobaciones. Lo que **no** se pudo comprobar es
 que los servicios respondan de verdad, ni si permiten CORS: eso hay que verlo con
 la página abierta.
+
+### La geología, ahora consultable — 2026-08-28
+
+Lo que se entregó en la entrada anterior dibujaba, y nada más. Fabio lo dijo con
+la frase que resume el problema: *«arrojan imágenes que sin información o
+simbología o pop ups, no sirve para nada prácticamente»*. Tenía razón — un mapa
+geológico del que no se puede saber qué unidad es cada mancha no es un mapa
+geológico, es una textura de colores.
+
+Y traía un segundo síntoma: **«Geología por departamentos» dibujaba solo
+Antioquia**. Resultó no ser un fallo nuestro. El servicio del SGC trae ese
+departamento encendido de fábrica y los otros apagados, y nosotros exportábamos
+el servicio tal cual venía.
+
+**Las tres preguntas que faltaban.** El mismo servicio de ArcGIS que devuelve la
+imagen sabe responder otras tres, y ahora `/api/sgc` las reenvía todas:
+
+| Modo | Qué pregunta | Para qué |
+|---|---|---|
+| `imagen` | el dibujo de un recuadro | lo que ya había |
+| `meta` | qué capas contiene el servicio | la lista de departamentos |
+| `identify` | qué hay en este punto | la ficha del clic |
+| `leyenda` | el símbolo y nombre de cada unidad | la simbología |
+
+Cada parámetro que se concatena se valida antes de salir, porque lo que llegue a
+esa ruta acaba dentro de una petición hecha desde nuestro servidor.
+
+**Los departamentos se descubren, no se escriben.** `subLayersFrom()` lee el árbol
+del servicio y saca un grupo por departamento con todos sus índices dentro —
+unidades, fallas, estructuras—, y de paso lee `defaultVisibility`, que es lo que
+permite que las casillas arranquen marcadas en **lo que de verdad se está
+viendo**. Si arrancaran vacías, la lista diría «ninguno» con Antioquia pintada en
+el mapa, y lo primero que haría cualquiera sería desconfiar de la lista.
+
+No se escriben a mano por la trampa nº 1 —los índices del SGC cambian— y por algo
+más simple: desde esta máquina el SGC está bloqueado, así que lo único honesto es
+enseñar lo que el servicio diga de sí mismo.
+
+**Dos cosas que costaron.** La primera: cambiar qué subcapas se piden **no basta
+con avisarlo**, hay que cambiar la dirección de la tesela. MapLibre las guarda por
+URL y seguiría enseñando Antioquia por mucho que se marcara Boyacá. La segunda:
+la guarda `isStyleLoaded()` que parecía razonable era justo la equivocada —
+devuelve falso mientras cualquier fuente siga cargando, y estas tardan segundos,
+así que la selección no se aplicaba precisamente cuando el SGC iba lento. Las dos
+quedaron anotadas como trampas 15 y 16.
+
+**La tarjeta es una y no dos.** La ficha del punto y la leyenda van juntas, en la
+columna derecha: son dos formas de la misma pregunta —«qué significa esto que
+veo»— y separarlas habría llenado una columna que ya lleva la leyenda de pendiente
+y la ventana del 3D. La ficha arriba, que es lo que se busca tras tocar; la
+leyenda abajo y plegada, que es consulta de fondo. Y la leyenda se filtra por lo
+marcado: con los treinta y dos departamentos serían cientos de filas de las que
+casi ninguna está en pantalla.
+
+**Comprobado**: 494 pruebas unitarias (33 nuevas) y tres suites de navegador —30
+comprobaciones en escritorio, 6 en un teléfono de 412 px y las 20 anteriores, que
+siguen verdes—. En el móvil se midió lo que importa ahí: que la tarjeta quepa
+(240 px de 412 de ancho, 267 de 915 de alto) y que las casillas de departamento
+se puedan tocar con el dedo. Y se miraron las capturas, que es la trampa nº 10:
+en ellas apareció un «1 capas» que ninguna prueba de datos iba a ver.
+
+Sigue sin poderse comprobar que los servicios respondan de verdad ni si permiten
+CORS: eso hay que verlo con la página abierta.

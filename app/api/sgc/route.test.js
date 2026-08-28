@@ -100,3 +100,109 @@ describe("caché", () => {
     expect(cache).toContain("stale-while-revalidate")
   })
 })
+
+/** Una respuesta JSON como la que daría el SGC. */
+const json = (cuerpo) =>
+  Promise.resolve({
+    ok: true,
+    status: 200,
+    body: JSON.stringify(cuerpo),
+    headers: new Headers({ "content-type": "application/json; charset=utf-8" }),
+  })
+
+describe("los modos nuevos", () => {
+  it("pide el árbol de capas del servicio", async () => {
+    global.fetch = jest.fn(() => json({ layers: [] }))
+    const r = await pedir("capa=geologiaDepartamentos&modo=meta")
+
+    expect(r.status).toBe(200)
+    expect(global.fetch.mock.calls[0][0]).toMatch(/\/MapServer\?f=json$/)
+  })
+
+  it("y la leyenda", async () => {
+    global.fetch = jest.fn(() => json({ layers: [] }))
+    await pedir("capa=geologiaNacional&modo=leyenda")
+    expect(global.fetch.mock.calls[0][0]).toMatch(/\/legend\?f=json$/)
+  })
+
+  it("pregunta qué hay en un punto, con el mapa que se está viendo", async () => {
+    // ArcGIS necesita el recuadro y el tamaño en píxeles para traducir la
+    // tolerancia del clic a una distancia sobre el terreno. Sin eso, un clic al
+    // lado de un contacto devolvería la unidad equivocada.
+    global.fetch = jest.fn(() => json({ results: [] }))
+    const r = await pedir(
+      `capa=geologiaNacional&modo=identify&punto=-8400000,700000&bbox=${RECUADRO}&tam=1440,900&tol=4`,
+    )
+
+    expect(r.status).toBe(200)
+    const url = global.fetch.mock.calls[0][0]
+    expect(url).toContain("/identify?")
+    expect(url).toContain("geometry=-8400000,700000")
+    expect(url).toContain(`mapExtent=${RECUADRO}`)
+    expect(url).toContain("imageDisplay=1440,900,96")
+    expect(url).toContain("returnGeometry=false")
+  })
+
+  it("el identify pregunta solo por lo que se está dibujando", async () => {
+    // Con `all` devolvería unidades de departamentos apagados, y la ficha diría
+    // cosas que no están en el mapa.
+    global.fetch = jest.fn(() => json({ results: [] }))
+    await pedir(
+      `capa=geologiaDepartamentos&modo=identify&punto=-8400000,700000&bbox=${RECUADRO}&tam=800,600&sub=4,5,6`,
+    )
+    expect(global.fetch.mock.calls[0][0]).toContain("layers=visible:4,5,6")
+  })
+
+  it("un modo que no existe se rechaza", async () => {
+    expect((await pedir(`capa=planchas&modo=inventado&bbox=${RECUADRO}`)).status).toBe(400)
+  })
+})
+
+describe("qué se valida antes de concatenar", () => {
+  it("las subcapas solo pueden ser dígitos y comas", async () => {
+    // Van a parar dentro de la dirección que sale de nuestro servidor.
+    const malas = ["1;2", "show:1", "1,2)&f=html", "../../", "-1"]
+    for (const sub of malas) {
+      const r = await pedir(`capa=planchas&bbox=${RECUADRO}&sub=${encodeURIComponent(sub)}`)
+      expect(r.status).toBe(400)
+    }
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it("y cuando son válidas se le pasan al servicio", async () => {
+    await pedir(`capa=geologiaDepartamentos&bbox=${RECUADRO}&sub=12,13,14`)
+    expect(global.fetch.mock.calls[0][0]).toContain("layers=show:12,13,14")
+  })
+
+  it("sin subcapas no manda el parámetro, y el servicio dibuja lo suyo", async () => {
+    await pedir(`capa=planchas&bbox=${RECUADRO}`)
+    expect(global.fetch.mock.calls[0][0]).not.toContain("layers=")
+  })
+
+  it("el punto, el tamaño y la tolerancia también se validan", async () => {
+    const base = `capa=planchas&modo=identify&bbox=${RECUADRO}&tam=800,600&tol=4`
+    const casos = [
+      `${base.replace("&tam=800,600", "&tam=ochocientos,600")}&punto=1,2`,
+      `${base}&punto=1,2,3`,
+      `${base.replace("&tol=4", "&tol=999")}&punto=1,2`,
+      `${base.replace("&tol=4", "&tol=-1")}&punto=1,2`,
+      `capa=planchas&modo=identify&punto=1,2&tam=800,600&tol=4`,
+    ]
+    for (const query of casos) {
+      expect((await pedir(query)).status).toBe(400)
+    }
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe("un JSON de error del SGC no se disfraza de dato", () => {
+  it("ni en meta ni en identify", async () => {
+    global.fetch = jest.fn(() =>
+      Promise.resolve({ ok: true, status: 200, body: "<html>", headers: new Headers({ "content-type": "text/html" }) }),
+    )
+    expect((await pedir("capa=planchas&modo=meta")).status).toBe(502)
+    expect(
+      (await pedir(`capa=planchas&modo=identify&punto=1,2&bbox=${RECUADRO}&tam=800,600&tol=4`)).status,
+    ).toBe(502)
+  })
+})
