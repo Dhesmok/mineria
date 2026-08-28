@@ -66,7 +66,7 @@ app/
     useTerrainGL.js       Relieve, 3D y consulta de altura
     useAreaDownloadGL.js  Descarga por área (ZIP)
     useGeolocationGL.js   GPS y brújula
-    useSgcLayersGL.js     Encender/apagar y graduar las capas de geología
+    useSgcLayersGL.js     Geología: encender, elegir departamento, consultar un punto
   utils/
     arcgis.js             fetch normalizado contra ArcGIS REST
     tenureLayers.js       Descubrimiento de índices de capa ANM
@@ -78,9 +78,10 @@ app/
     demTiles.js           Qué teselas del modelo de elevación hacen falta y dónde va cada una
     demTileLoader.js      Bajarlas, decodificarlas a alturas y recordarlas
     terrainRaster.js      Horn sobre el mosaico → los píxeles de la capa
-    sgcLayers.js          Catálogo de servicios de geología del SGC
+    sgcLayers.js          Catálogo del SGC, direcciones y lectura de sus respuestas
     mapUtils.js, mapLabelsGL.js, drawStyles.js
-  api/sgc/route.js        Intermediario para las teselas del SGC (CORS sin comprobar)
+  components/SgcPanel.jsx   Leyenda del SGC y ficha del punto tocado
+  api/sgc/route.js        Intermediario del SGC: teselas, árbol de capas, identify y leyenda
 components/ui/            shadcn
 scripts/
   copy-maplibre-worker.mjs  Copia el worker de MapLibre a public/ (pre-dev y pre-build)
@@ -111,6 +112,14 @@ que las teselas dejen de pasar por nuestro servidor.
 simbología *es* el dato —un geólogo reconoce la unidad por el color—, son miles
 de polígonos, y exportar el servicio entero evita nombrar ni un índice de capa.
 Ver la cabecera de `utils/sgcLayers.js`.
+
+**Pero una imagen sola no es una capa: es un adorno.** Para que sirva hacen falta
+las otras tres preguntas que el mismo servicio responde, y por eso `/api/sgc`
+tiene cuatro modos y no uno: `meta` (qué contiene el servicio), `identify` (qué
+hay en este punto) y `leyenda` (qué significa cada color), además de la imagen. Si
+mañana se suma otra entidad que publique en ArcGIS, esos cuatro son el mínimo — se
+comprobó por las malas, con cinco capas de geología que dibujaban manchas que no
+se podían consultar.
 
 ## Trampas conocidas (no las vuelvas a pisar)
 
@@ -212,6 +221,31 @@ Ver la cabecera de `utils/sgcLayers.js`.
     `maplibre-contour` (MIT) ya resuelve bajar y decodificar teselas terrarium
     en un *worker* y servirlas por `addProtocol`; si algún día la capa de
     pendiente pasa a teselas, es el sitio por donde empezar a mirar.
+
+15. **Un servicio de ArcGIS trae encendida solo una parte de lo que tiene.**
+    «Geología por departamentos» dibujaba únicamente Antioquia, y parecía un
+    fallo nuestro: no lo era, es lo que el SGC trae por omisión y nosotros lo
+    exportábamos tal cual. Se arregla leyendo `defaultVisibility` del árbol de
+    capas y ofreciendo el resto — nunca escribiendo la lista a mano, que es la
+    trampa nº 1.
+
+    Y **al cambiar qué subcapas se piden hay que cambiar la dirección de la
+    tesela**: MapLibre las guarda por URL, así que con la misma dirección sigue
+    enseñando las que ya tenía por mucho que se marque otro departamento. Por eso
+    la selección viaja dentro de la URL.
+
+16. **`map.isStyleLoaded()` no sirve para esperar a estas capas.** Devuelve falso
+    mientras *cualquier* fuente siga cargando, y las del SGC tardan segundos: una
+    guarda con eso deja el cambio sin aplicar justo cuando el servicio va lento,
+    que es siempre. La condición correcta es que exista la fuente. Es la misma
+    trampa que obligó a escuchar `styledata` en vez de `load` al arrancar el mapa.
+
+17. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
+    cosas.** `mapbox-gl-draw` cancela el `touchend`, y sin él el navegador no
+    genera el clic de compatibilidad. Todo lo que responda a tocar el mapa se
+    engancha por partida doble: `map.on("click", …)` y `onMapTap(map, …)` de
+    `utils/tapGesture`. Y el manejador recibe **`{point, lngLat}`**, como el de
+    MapLibre — no un par de números.
 
 ## Convenciones
 
