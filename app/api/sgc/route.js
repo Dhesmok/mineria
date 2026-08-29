@@ -112,6 +112,14 @@ export const GET = async (request) => {
   const seleccion = sub ? `show:${sub}` : ""
 
   try {
+    if (modo === "campos") {
+      // Una subcapa concreta, y solo una: es la ficha de esa capa lo que se
+      // pide —cómo se llama cada campo y qué significa cada código—, no la del
+      // servicio entero.
+      if (!sub || !/^\d+$/.test(sub)) return error("Subcapa inválida.", 400)
+      return await reenviarJson(`${capa.service}/${sub}?f=json`, CACHE_METADATOS)
+    }
+
     if (modo === "meta") {
       return await reenviarJson(`${capa.service}?f=json`, CACHE_METADATOS)
     }

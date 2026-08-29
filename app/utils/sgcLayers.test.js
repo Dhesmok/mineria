@@ -3,6 +3,8 @@ import {
   SGC_KEYS,
   SGC_LAYERS,
   defaultSubSelection,
+  describeValue,
+  fieldInfoFrom,
   identifyResultsFrom,
   legendFrom,
   sgcExportUrl,
@@ -14,15 +16,26 @@ import {
   sgcLegendUrl,
   sgcMetaUrl,
   linkPartsOf,
+  nombreDeDepartamento,
   sgcSourceId,
   shortLinkText,
   subLayersFrom,
 } from "./sgcLayers"
 
 describe("el catálogo del SGC", () => {
-  it("trae las cinco capas de geología, sin repetir clave", () => {
-    expect(SGC_LAYERS).toHaveLength(5)
-    expect(new Set(SGC_KEYS).size).toBe(5)
+  it("trae las cuatro capas de geología, sin repetir clave", () => {
+    // Eran cinco. La grilla de planchas del IGAC se quitó: iba desfasada
+    // respecto al estado de la cartografía, y dos retículas que dicen cosas
+    // distintas sobre la misma plancha es peor que ninguna.
+    expect(SGC_LAYERS).toHaveLength(4)
+    expect(new Set(SGC_KEYS).size).toBe(4)
+  })
+
+  it("los nombres caben en la fila del panel", () => {
+    // «Mapa geológico de Colombia» se leía «Mapa geológico de Colo…», que no
+    // distingue nada de «Mapa geológico…» de al lado. El encabezado del área ya
+    // dice GEOLOGÍA · SGC; lo que hace falta en la fila es la escala.
+    SGC_LAYERS.forEach(({ label }) => expect(label.length).toBeLessThanOrEqual(25))
   })
 
   it("todas apuntan al SGC y a ningún otro sitio", () => {
@@ -57,6 +70,14 @@ describe("el catálogo del SGC", () => {
     const nacional = sgcLayerByKey("geologiaNacional")
     expect(nacional.year).toBe(2023)
     expect(nacional.service).toContain("V2023")
+  })
+
+  it("el mapa nacional no se despieza", () => {
+    // Tiene dos capas dentro, pero no son dos temas independientes sino las dos
+    // mitades de un mismo dibujo: encender solo una deja el mapa a medias o en
+    // blanco. Ofrecer esa elección era ofrecer una forma de romperlo.
+    expect(sgcLayerByKey("geologiaNacional").selectable).toBe(false)
+    expect(sgcLayerByKey("geologiaDepartamentos").selectable).not.toBe(false)
   })
 
   it("una clave que no existe no devuelve nada", () => {
@@ -130,7 +151,7 @@ describe("sgcImageUrl", () => {
   it("pide una sola imagen del recuadro que se está viendo", () => {
     // Y no teselas: con teselas, ArcGIS rotula cada una por separado y el número
     // de cada cuadrícula de la grilla salía escrito cuatro veces.
-    const url = sgcImageUrl({ key: "grillaPlanchas", bbox: [-1, -2, 3, 4], width: 800, height: 600 })
+    const url = sgcImageUrl({ key: "planchas", bbox: [-1, -2, 3, 4], width: 800, height: 600 })
     expect(url).toMatch(/^\/api\/sgc\?/)
     expect(url).toContain("bbox=-1%2C-2%2C3%2C4")
     expect(url).toContain("tam=800%2C600")
@@ -478,5 +499,173 @@ describe("shortLinkText", () => {
   it("aguanta algo que no es una dirección analizable", () => {
     const raro = `http://${"x".repeat(80)}`
     expect(shortLinkText(raro).length).toBeLessThanOrEqual(26)
+  })
+})
+
+describe("qué se enciende de fábrica dentro de un departamento", () => {
+  const conLimites = {
+    layers: [
+      { id: 0, name: "Antioquia", parentLayerId: -1, subLayerIds: [1, 2, 3, 4], defaultVisibility: true },
+      { id: 1, name: "Geología_UCG", parentLayerId: 0, defaultVisibility: true },
+      { id: 2, name: "Fallas geológicas", parentLayerId: 0, defaultVisibility: true },
+      { id: 3, name: "Límite municipal", parentLayerId: 0, defaultVisibility: true },
+      { id: 4, name: "Límite departamental", parentLayerId: 0, defaultVisibility: true },
+      { id: 5, name: "Boyacá", parentLayerId: -1, subLayerIds: [6], defaultVisibility: false },
+      { id: 6, name: "Geología_UCG", parentLayerId: 5, defaultVisibility: true },
+    ],
+  }
+
+  it("los límites municipales y departamentales quedan apagados", () => {
+    // Encendidos de partida tapan la geología con una malla de líneas negras
+    // justo cuando lo que se quiere ver es el color de las unidades.
+    expect(defaultSubSelection(subLayersFrom(conLimites))).toEqual([1, 2])
+  })
+
+  it("pero siguen en la lista, para encenderlos a mano", () => {
+    const antioquia = subLayersFrom(conLimites).find((g) => g.label === "Antioquia")
+    expect(antioquia.children.map((h) => h.label)).toContain("Límite municipal")
+    expect(antioquia.ids).toEqual([1, 2, 3, 4])
+  })
+
+  it("no se apaga una capa de geología por llevar «departamental» en el nombre", () => {
+    // La regla busca «límite» y «municipio», no la palabra suelta: hay capas de
+    // geología que la llevan, y apagarlas sería apagar el dato.
+    const grupos = subLayersFrom({
+      layers: [
+        { id: 0, name: "Antioquia", parentLayerId: -1, subLayerIds: [1], defaultVisibility: true },
+        { id: 1, name: "Geología departamental", parentLayerId: 0, defaultVisibility: true },
+        { id: 2, name: "Boyacá", parentLayerId: -1, subLayerIds: [3], defaultVisibility: true },
+        { id: 3, name: "Geología", parentLayerId: 2, defaultVisibility: true },
+      ],
+    })
+    expect(defaultSubSelection(grupos)).toEqual([1, 3])
+  })
+
+  it("los rótulos se encienden aunque el servicio los traiga apagados", () => {
+    // Sin ellos hay que ir a clic por unidad, que es justo lo que sobra.
+    const grupos = subLayersFrom({
+      layers: [
+        { id: 0, name: "Antioquia", parentLayerId: -1, subLayerIds: [1, 2], defaultVisibility: true },
+        { id: 1, name: "Geología", parentLayerId: 0, defaultVisibility: true },
+        { id: 2, name: "Anotación de unidades", parentLayerId: 0, defaultVisibility: false },
+        { id: 3, name: "Boyacá", parentLayerId: -1, subLayerIds: [4], defaultVisibility: false },
+        { id: 4, name: "Geología", parentLayerId: 3, defaultVisibility: false },
+      ],
+    })
+    expect(defaultSubSelection(grupos)).toEqual([1, 2])
+  })
+})
+
+describe("departamentos repetidos", () => {
+  const guajira = {
+    layers: [
+      { id: 0, name: "La Guajira 2015", parentLayerId: -1, subLayerIds: [1], defaultVisibility: false },
+      { id: 1, name: "Geología", parentLayerId: 0 },
+      { id: 2, name: "Guajira 2020", parentLayerId: -1, subLayerIds: [3], defaultVisibility: false },
+      { id: 3, name: "Geología", parentLayerId: 2 },
+      { id: 4, name: "Cesar", parentLayerId: -1, subLayerIds: [5], defaultVisibility: false },
+      { id: 5, name: "Geología", parentLayerId: 4 },
+    ],
+  }
+
+  it("se queda el levantamiento más reciente", () => {
+    // Salían los dos y no había forma de saber cuál era cuál.
+    const grupos = subLayersFrom(guajira)
+    expect(grupos).toHaveLength(2)
+    expect(grupos.find((g) => /Guajira/.test(g.label)).ids).toEqual([3])
+  })
+
+  it("y el nombre va sin el año", () => {
+    // El año no ayuda a encontrar el departamento en una lista de treinta y dos.
+    expect(subLayersFrom(guajira).map((g) => g.label)).toEqual(["Cesar", "Guajira"])
+  })
+
+  it("nombreDeDepartamento quita el año y los adornos que lo acompañan", () => {
+    expect(nombreDeDepartamento("Norte de Santander (2019)")).toBe("Norte de Santander")
+    expect(nombreDeDepartamento("Valle_del_Cauca_2020")).toBe("Valle del Cauca")
+    expect(nombreDeDepartamento("Chocó")).toBe("Chocó")
+  })
+})
+
+describe("los códigos de la base de datos", () => {
+  it("los números internos de ArcGIS no llegan a la ficha", () => {
+    // `UCG_P_` y `UCG_P_ID` ocupaban dos de las cuatro filas y no decían nada.
+    const [resultado] = identifyResultsFrom({
+      results: [{ layerName: "Geología_UCG", value: "Qal", attributes: {
+        UCG_P_: "445", UCG_P_ID: "450", COD: "Qal",
+      } }],
+    })
+    expect(resultado.attributes).toEqual([{ field: "COD", value: "Qal" }])
+  })
+
+  it("pero un campo con nombre de identificador y valor de texto sí es un dato", () => {
+    // Las dos condiciones juntas —nombre de identificador *y* valor numérico—,
+    // porque un `COD_ID` que vale «Qal» es información.
+    const [resultado] = identifyResultsFrom({
+      results: [{ layerName: "x", value: "y", attributes: { COD_ID: "Qal" } }],
+    })
+    expect(resultado.attributes).toEqual([{ field: "COD_ID", value: "Qal" }])
+  })
+
+  it("conserva el índice de la capa, que es la llave para traducirlos", () => {
+    const [resultado] = identifyResultsFrom({
+      results: [{ layerId: 12, layerName: "x", value: "y", attributes: { COD: "Qal" } }],
+    })
+    expect(resultado.layerId).toBe(12)
+  })
+})
+
+describe("fieldInfoFrom", () => {
+  const capa = {
+    fields: [
+      { name: "COD", alias: "Unidad geológica" },
+      { name: "EDAD", alias: "EDAD" },
+    ],
+    drawingInfo: {
+      renderer: {
+        field1: "COD",
+        uniqueValueInfos: [
+          { value: "Qal", label: "Depósitos aluviales" },
+          { value: "Kium", label: "Cuarzomonzonita de Amagá" },
+          { value: "Xx", label: "" },
+        ],
+      },
+    },
+  }
+
+  it("saca la tabla que empareja cada código con su descripción", () => {
+    // Es la que ArcGIS usa para elegir el color, así que no hay que inventarse
+    // ningún diccionario nuestro.
+    expect(fieldInfoFrom(capa).meanings).toEqual({
+      Qal: "Depósitos aluviales",
+      Kium: "Cuarzomonzonita de Amagá",
+    })
+  })
+
+  it("y los nombres que el servicio le puso a cada campo", () => {
+    // Solo los que aportan algo: un alias igual al nombre interno es ruido.
+    expect(fieldInfoFrom(capa).aliases).toEqual({ COD: "Unidad geológica" })
+  })
+
+  it("aguanta una capa sin simbología o un cuerpo de error", () => {
+    expect(fieldInfoFrom({ error: {} })).toEqual({ field: "", aliases: {}, meanings: {} })
+    expect(fieldInfoFrom(null).meanings).toEqual({})
+  })
+})
+
+describe("describeValue", () => {
+  it("acompaña el código, no lo sustituye", () => {
+    // El código es lo que aparece en los informes y en los mapas impresos:
+    // quitarlo sería quitar información.
+    expect(describeValue("Qal", { Qal: "Depósitos aluviales" })).toBe("Qal — Depósitos aluviales")
+  })
+
+  it("sin diccionario deja el valor tal cual", () => {
+    expect(describeValue("Qal", undefined)).toBe("Qal")
+    expect(describeValue("Qal", {})).toBe("Qal")
+  })
+
+  it("no repite cuando el significado es el propio código", () => {
+    expect(describeValue("Qal", { Qal: "Qal" })).toBe("Qal")
   })
 })

@@ -169,7 +169,7 @@ describe("panel de capas por áreas", () => {
 
     // Geología ya está conectada al SGC, así que sus interruptores funcionan.
     await openArea(user, "Geología")
-    expect(screen.getByRole("switch", { name: "Planchas geológicas 1:100.000" })).toBeEnabled()
+    expect(screen.getByRole("switch", { name: "Planchas 1:100.000" })).toBeEnabled()
     expect(screen.getByRole("switch", { name: "Movimientos en masa" })).toBeDisabled()
 
     // Las que siguen sin dirección pública, apagadas.
@@ -187,7 +187,7 @@ describe("panel de capas por áreas", () => {
 
     await openArea(user, "Geología")
     expect(screen.queryByRole("switch", { name: "Títulos Vigentes" })).not.toBeInTheDocument()
-    expect(screen.getByRole("switch", { name: "Planchas geológicas 1:100.000" })).toBeInTheDocument()
+    expect(screen.getByRole("switch", { name: "Planchas 1:100.000" })).toBeInTheDocument()
   })
 
   it("la lupa solo está habilitada en Minería", async () => {

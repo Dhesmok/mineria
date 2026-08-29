@@ -193,7 +193,7 @@ describe("qué se valida antes de concatenar", () => {
   it("y una imagen se pide del tamaño que se pidió, no de uno fijo", async () => {
     // Es lo que permite pedir una sola imagen del trozo visible en vez de una
     // rejilla de teselas cuadradas, que es lo que repetía los rótulos.
-    await pedir(`capa=grillaPlanchas&bbox=${RECUADRO}&tam=1440,900`)
+    await pedir(`capa=planchas&bbox=${RECUADRO}&tam=1440,900`)
     expect(global.fetch.mock.calls[0][0]).toContain("size=1440,900")
   })
 

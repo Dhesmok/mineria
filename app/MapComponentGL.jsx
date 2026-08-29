@@ -156,6 +156,7 @@ export default function MapComponentGL({
     toggleSgcSubLayer,
     sgcLegends,
     sgcFeatureInfo,
+    sgcFieldInfo,
     clearSgcFeatureInfo,
   } = useSgcLayersGL(mapRef, mapInstance, layerState, { enabled: !queryingTerrain })
 
@@ -668,6 +669,7 @@ export default function MapComponentGL({
           chosenSub={sgcChosenSub}
           legends={sgcLegends}
           featureInfo={sgcFeatureInfo}
+          fieldInfo={sgcFieldInfo}
           onDismiss={clearSgcFeatureInfo}
         />
 

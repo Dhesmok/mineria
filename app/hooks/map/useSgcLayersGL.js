@@ -3,14 +3,17 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   SGC_LAYERS,
   defaultSubSelection,
+  fieldInfoFrom,
   identifyResultsFrom,
   legendFrom,
   sgcIdentifyUrl,
   sgcLayerId,
   sgcLegendUrl,
   sgcMetaUrl,
+  sgcFieldsUrl,
   sgcImageSize,
   sgcImageUrl,
+  sgcLayerByKey,
   sgcSourceId,
   subLayersFrom,
 } from "../../utils/sgcLayers"
@@ -99,6 +102,8 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
   const [legends, setLegends] = useState({})
   /** Lo que devolvió el último clic: `null`, `{loading:true}` o los resultados. */
   const [featureInfo, setFeatureInfo] = useState(null)
+  /** `{"capa:indice": {aliases, meanings}}` — cómo leer los campos de cada capa. */
+  const [fieldInfo, setFieldInfo] = useState({})
 
   const chosenRef = useRef(chosenSub)
   chosenRef.current = chosenSub
@@ -137,7 +142,11 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
         traducir: subLayersFrom,
         pedidas: metaPedida.current,
         vivo,
-        guardar: (grupos) => {
+        guardar: (descubiertos) => {
+          // Un servicio marcado como no despiezable se dibuja entero: ver
+          // `selectable` en el catálogo y el caso del mapa nacional, cuyas dos
+          // capas internas son las dos mitades de un mismo dibujo.
+          const grupos = sgcLayerByKey(key)?.selectable === false ? [] : descubiertos
           setSubLayers((actual) => ({ ...actual, [key]: grupos }))
           // Las casillas arrancan marcadas en lo que el servicio ya dibuja. Si
           // arrancaran vacías, la lista diría «ninguno» con Antioquia pintada en
@@ -304,6 +313,30 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
   const clearFeatureInfo = useCallback(() => setFeatureInfo(null), [])
 
   /**
+   * Pide, una sola vez por capa, cómo se llaman sus campos y qué significan sus
+   * códigos.
+   *
+   * Es lo que convierte `COD: Qal` en «Unidad: Qal — Depósitos aluviales». La
+   * tabla la publica el propio servicio en la simbología de la capa, así que no
+   * hay ningún diccionario nuestro que mantener.
+   */
+  const camposPedidos = useRef(new Set())
+  const pedirLosCampos = useCallback(async (clave, resultado) => {
+    if (camposPedidos.current.has(clave)) return
+    camposPedidos.current.add(clave)
+    try {
+      const respuesta = await fetch(sgcFieldsUrl(resultado.layerKey, resultado.layerId))
+      if (!respuesta.ok) throw new Error(String(respuesta.status))
+      // El `await` fuera de la función que actualiza el estado: dentro sería un
+      // `await` en una función que no es asíncrona, y eso no compila.
+      const ficha = fieldInfoFrom(await respuesta.json())
+      setFieldInfo((actual) => ({ ...actual, [clave]: ficha }))
+    } catch {
+      camposPedidos.current.delete(clave)
+    }
+  }, [])
+
+  /**
    * El clic sobre el mapa: preguntar al SGC qué hay ahí.
    *
    * Se pregunta a **todas** las capas del SGC encendidas y se juntan las
@@ -356,10 +389,16 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
           }),
         )
 
-        setFeatureInfo({
-          loading: false,
-          lngLat: [punto.lng, punto.lat],
-          results: respuestas.flat(),
+        const resultados = respuestas.flat()
+        setFeatureInfo({ loading: false, lngLat: [punto.lng, punto.lat], results: resultados })
+
+        // Y ahora, qué significan esos códigos. Va después y por separado a
+        // propósito: la ficha ya está en pantalla con lo que el servicio
+        // devolvió, y esto solo la mejora cuando llega. Si el servicio no
+        // contesta, se queda el código pelado, que es lo que había.
+        resultados.forEach((resultado) => {
+          if (resultado.layerId === null) return
+          pedirLosCampos(fieldInfoKey(resultado.layerKey, resultado.layerId), resultado)
         })
       } finally {
         clearTimeout(reloj)
@@ -377,7 +416,7 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
       mapInstance.off("click", alTocar)
       quitarToque()
     }
-  }, [mapInstance, mapRef])
+  }, [mapInstance, mapRef, pedirLosCampos])
 
   return {
     sgcSubLayers: subLayers,
@@ -385,6 +424,7 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
     toggleSgcSubLayer: toggleSubLayer,
     sgcLegends: legends,
     sgcFeatureInfo: featureInfo,
+    sgcFieldInfo: fieldInfo,
     clearSgcFeatureInfo: clearFeatureInfo,
   }
 }
@@ -397,6 +437,9 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
  * los sistemas colombianos. Meter 3857 allí obligaría a explicar por qué el visor
  * habla de un sistema que no le sirve a ningún dato del país.
  */
+/** La llave con la que se guarda la ficha de campos de una capa. */
+export const fieldInfoKey = (capa, indice) => `${capa}:${indice}`
+
 const mercator = (lng, lat) => {
   const x = (lng * 20037508.34) / 180
   const y =

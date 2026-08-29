@@ -1585,3 +1585,68 @@ petición de imagen por vista, con la proporción del recuadro al 0,00 % de
 desvío—; 4 con la cámara inclinada, donde el recuadro pedido crece 1,91× y no se
 dispara; y 6 en un teléfono de 412 px. Sigue sin poderse comprobar que los
 servicios del SGC respondan de verdad.
+
+### Nueve arreglos sobre la geología — 2026-08-29
+
+Fabio probó la tanda anterior y trajo nueve cosas. Van por orden de qué las
+causaba, que no es el orden en que las contó.
+
+**Lo que era una decisión mal tomada por nosotros.**
+
+- *Los límites municipales y departamentales encendidos de fábrica.* Tapaban la
+  geología con una malla de líneas negras justo cuando lo que se quiere ver es el
+  color de las unidades. Ahora arrancan apagados aunque el servicio los traiga
+  encendidos, y siguen en la lista para encenderlos a mano. Es una de las dos
+  únicas veces que no se hace caso al servicio; la otra son los rótulos, que se
+  encienden aunque él los traiga apagados. Las dos por lo mismo.
+- *La grilla de planchas iba desfasada respecto al estado de la cartografía.* Dos
+  retículas que dicen cosas distintas sobre la misma plancha es peor que ninguna:
+  se quitó.
+- *«La Guajira» aparecía dos veces*, con dos levantamientos. Se queda el más
+  reciente y el año desaparece del nombre — no ayuda a encontrar un departamento
+  en una lista de treinta y dos.
+- *El mapa nacional ofrecía dos subcapas y encender una lo rompía.* No son dos
+  temas independientes sino las dos mitades de un mismo dibujo. El catálogo tiene
+  ahora un `selectable: false` para los servicios que no se despiezan.
+- *Los nombres no cabían.* «Mapa geológico de Colombia» se leía «Mapa geológico de
+  Colo…», que no distingue nada. El encabezado ya dice GEOLOGÍA · SGC; lo que hace
+  falta en la fila es la escala.
+
+**Lo que faltaba por hacer.**
+
+- *Los códigos.* `UCG_P_ 445 · UCG_P_ID 450 · COD Qal` eran tres filas de las que
+  dos eran fontanería de ArcGIS y la tercera un código pelado. Ahora los números
+  internos no llegan a la ficha —se van los campos que acaban en `_` o `_ID` **y
+  además** valen un número, las dos condiciones juntas— y `Qal` se enseña como
+  «Qal — Depósitos aluviales», con la tabla que el propio servicio publica en su
+  simbología. Y el campo con el nombre que el SGC le puso, no con el interno.
+- *El panel, redimensionable.* Se arrastra el borde derecho y el de abajo, y el
+  tamaño se recuerda. Los topes están en `utils/panelSize.js` con su porqué.
+
+**Dos bugs de verdad, y los dos del mismo tipo.**
+
+- *La barra de opacidad perdía el valor* si se soltaba el ratón fuera de ella. Es
+  un control gobernado por React: mientras React reconstruye la lista y MapLibre
+  repinta llegan más movimientos, y si el último cae en ese hueco y el ratón se
+  suelta fuera, ese valor se pierde. Ahora, mientras se arrastra manda el
+  navegador, y el «soltar» se escucha en la ventana entera.
+- *El tirador del panel no funcionaba*, y ahí hubo dos capas de causa. La primera:
+  capturar el puntero en el propio tirador, que es lo que recomienda la
+  documentación, no servía. La segunda, que solo apareció al probarlo con la
+  lista desplegada: **la barra de desplazamiento del panel se lleva el clic**. El
+  tirador estaba montado sobre el borde derecho, donde sale la barra en cuanto el
+  contenido crece — funcionaba con el panel corto y dejaba de funcionar justo
+  cuando hacía falta agrandarlo. Va por fuera del panel.
+
+**Lo que no se pudo arreglar: los rótulos sobre el mapa.** Si el servicio no trae
+capas de anotación, no hay parámetro que los haga aparecer: ArcGIS dibuja lo que
+el SGC configuró al publicar. Lo que sí se hizo es encender por defecto cualquier
+subcapa que parezca de rótulos, y que la ficha diga el nombre de la unidad y no
+solo su código, que era el motivo real de tener que ir a clic por unidad.
+
+**Comprobado**: 546 pruebas unitarias (36 suites) y cuatro suites de navegador —24
+comprobaciones de esta tanda, 24 de la anterior, 6 en teléfono—. Dos fallos los
+encontraron las propias pruebas al escribirlas: `Valle_del_Cauca_2020` no perdía
+el año porque el guion bajo cuenta como letra y la búsqueda no encontraba dónde
+empezaba, y `Number(null)` es cero —un ajuste corrupto dejaba el panel clavado en
+su ancho mínimo en vez de en el de fábrica—.

@@ -57,11 +57,30 @@ export const sgcLayerId = (key) => `${SGC_LAYER_PREFIX}${key}`
  *
  * El orden es de menos a más detalle, que es como se usan: primero el nacional
  * para situarse, después la plancha.
+ *
+ * **Los nombres son cortos a propósito.** En la fila del panel caben unos
+ * veinticinco caracteres antes de que el nombre se corte con puntos suspensivos,
+ * y «Mapa geológico de Colombia» se leía «Mapa geológico de Colo…», que no
+ * distingue nada. El encabezado del área ya dice «GEOLOGÍA · SGC», así que
+ * repetirlo en cada fila era gastar el ancho en lo que ya se sabe. Lo que hace
+ * falta ahí es la escala, que es lo que diferencia una capa de la otra.
+ *
+ * **La grilla de planchas del IGAC estuvo aquí y se quitó**: iba desfasada
+ * respecto al estado de la cartografía, y dos retículas que dicen cosas
+ * distintas sobre la misma plancha es peor que ninguna.
+ *
+ * `selectable: false` marca los servicios que no se despiezan — ver
+ * `geologiaNacional`.
  */
 export const SGC_LAYERS = [
   {
     key: "geologiaNacional",
-    label: "Mapa geológico de Colombia",
+    label: "Geología 1:500.000",
+    // Este servicio no se despieza. Tiene dos capas dentro, pero no son dos
+    // temas independientes sino las dos mitades de un mismo dibujo: encender
+    // solo una deja el mapa a medias o en blanco. Ofrecer esa elección era
+    // ofrecer una forma de romperlo.
+    selectable: false,
     service:
       "https://srvags.sgc.gov.co/arcgis/rest/services/Mapa_Geologico_Colombia/Mapa_Geologico_Colombia_V2023/MapServer",
     scale: "1:500.000",
@@ -70,7 +89,7 @@ export const SGC_LAYERS = [
   },
   {
     key: "geologiaDepartamentos",
-    label: "Geología por departamentos",
+    label: "Geología departamental",
     service:
       "https://srvags.sgc.gov.co/arcgis/rest/services/Geologia/Geologia_Por_Departamentos/MapServer",
     scale: "variable",
@@ -79,7 +98,7 @@ export const SGC_LAYERS = [
   },
   {
     key: "planchas",
-    label: "Planchas geológicas 1:100.000",
+    label: "Planchas 1:100.000",
     service:
       "https://srvags.sgc.gov.co/arcprod/rest/services/Geologia/Atlas_Geologico_2020/MapServer",
     scale: "1:100.000",
@@ -88,7 +107,7 @@ export const SGC_LAYERS = [
   },
   {
     key: "estadoCartografia",
-    label: "Estado de la cartografía",
+    label: "Estado cartográfico",
     service:
       "https://srvags.sgc.gov.co/arcgis/rest/services/Estado_Cartografia_Geologica/Estado_Catografia_Geologica/MapServer",
     scale: "1:100.000",
@@ -98,14 +117,6 @@ export const SGC_LAYERS = [
     // escala menor. Sin ella, un vacío de información y un terreno homogéneo se
     // ven exactamente igual.
     hint: "Qué planchas tienen cartografía publicada y cuáles no. Sirve para saber si un vacío es geología o es falta de dato.",
-  },
-  {
-    key: "grillaPlanchas",
-    label: "Grilla de planchas",
-    service: "https://srvags.sgc.gov.co/arcprod/rest/services/GrillaIGAC_100k/MapServer",
-    scale: "1:100.000",
-    year: null,
-    hint: "La retícula de planchas del IGAC con su número. Para nombrar la plancha en la que cae un área.",
   },
 ]
 
@@ -248,6 +259,54 @@ export const sgcIdentifyUrl = ({ key, lng, lat, bbox, width, height, sub = [], t
  * @param {Object} serviceJson lo que devuelve `MapServer?f=json`
  * @returns {Array<{id:number, label:string, ids:number[], on:boolean}>} vacío si no hay grupos
  */
+/**
+ * Lo que es un límite administrativo y no geología.
+ *
+ * Dentro de cada departamento el SGC mete, además de las unidades y las fallas,
+ * el límite municipal y el departamental. Son útiles de vez en cuando, pero
+ * encendidos de partida tapan la geología con una malla de líneas negras justo
+ * cuando lo que se quiere ver es el color de las unidades. Siguen ahí, en la
+ * lista, para encenderlos a mano.
+ *
+ * No se busca la palabra «departamental» suelta: hay capas de geología que la
+ * llevan en el nombre, y apagarlas sería apagar el dato.
+ */
+const ES_LIMITE = /l[ií]mite|municipi|frontera|divisi[óo]n\s+pol[ií]tica/i
+
+/** Y lo que son rótulos, que es lo contrario: sin ellos hay que ir a clic por unidad. */
+const ES_ETIQUETA = /anotaci|etiqueta|r[óo]tulo|label|texto|nomencla/i
+
+/**
+ * El año que un departamento lleva pegado al nombre, si lo lleva.
+ *
+ * «La Guajira» aparece dos veces en el servicio, con dos levantamientos de años
+ * distintos. Enseñar los dos obliga a elegir sin criterio, y el año en el nombre
+ * no ayuda a nadie a encontrar su departamento en una lista de treinta y dos.
+ */
+const anioDe = (nombre) => {
+  const encontrado = String(nombre).match(/\b(19|20)\d{2}\b/)
+  return encontrado ? Number(encontrado[0]) : null
+}
+
+/** El nombre sin el año ni los adornos que lo acompañan. */
+export const nombreDeDepartamento = (nombre) =>
+  String(nombre)
+    // Los separadores primero, y el año después. Al revés no funciona con
+    // `Valle_del_Cauca_2020`: el guion bajo cuenta como letra, así que el año no
+    // empieza donde una palabra empieza y la búsqueda no lo encuentra.
+    .replace(/[()[\]{}_·.,-]+/g, " ")
+    .replace(/\b(19|20)\d{2}\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+
+/** Para comparar «La Guajira» con «Guajira» sin que el artículo estorbe. */
+const claveDe = (nombre) =>
+  nombreDeDepartamento(nombre)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^(la|el|los|las)\s+/, "")
+
 export const subLayersFrom = (serviceJson) => {
   const capas = serviceJson?.layers
   if (!Array.isArray(capas) || capas.length === 0) return []
@@ -301,24 +360,44 @@ export const subLayersFrom = (serviceJson) => {
 
   const nombreDe = (capa, respaldo) => String(capa?.name ?? respaldo)
 
-  return grupos
-    .map((grupo) => {
-      const dentro = hojas(grupo.id).map((capa) => ({
-        id: capa.id,
-        label: nombreDe(capa, `Capa ${capa.id}`),
-        ids: [capa.id],
-        on: visibleDeFabrica(capa),
-      }))
+  const armados = grupos.map((grupo) => {
+    const nombre = nombreDe(grupo, `Grupo ${grupo.id}`)
+    const dentro = hojas(grupo.id).map((capa) => {
+      const etiqueta = nombreDe(capa, `Capa ${capa.id}`)
       return {
-        id: grupo.id,
-        label: nombreDe(grupo, `Grupo ${grupo.id}`),
-        // Lo que se le pide al servicio para este grupo son sus hojas.
-        ids: dentro.map((hoja) => hoja.id),
-        on: Boolean(grupo.defaultVisibility),
-        children: dentro,
+        id: capa.id,
+        label: etiqueta,
+        ids: [capa.id],
+        // Los límites, apagados aunque el servicio los traiga encendidos; los
+        // rótulos, encendidos aunque no los traiga. Son las dos únicas veces que
+        // no se hace caso al servicio, y las dos por lo mismo: lo que se quiere
+        // ver es la geología.
+        on: ES_LIMITE.test(etiqueta)
+          ? false
+          : ES_ETIQUETA.test(etiqueta) || visibleDeFabrica(capa),
       }
     })
-    .sort((a, b) => a.label.localeCompare(b.label, "es"))
+    return {
+      id: grupo.id,
+      label: nombreDeDepartamento(nombre) || nombre,
+      year: anioDe(nombre),
+      // Lo que se le pide al servicio para este grupo son sus hojas.
+      ids: dentro.map((hoja) => hoja.id),
+      on: Boolean(grupo.defaultVisibility),
+      children: dentro,
+    }
+  })
+
+  // Un departamento repetido se queda con su levantamiento más reciente. Sin
+  // esto, «La Guajira» salía dos veces y no había forma de saber cuál era cuál.
+  const porNombre = new Map()
+  armados.forEach((grupo) => {
+    const clave = claveDe(grupo.label)
+    const previo = porNombre.get(clave)
+    if (!previo || (grupo.year ?? 0) > (previo.year ?? 0)) porNombre.set(clave, grupo)
+  })
+
+  return [...porNombre.values()].sort((a, b) => a.label.localeCompare(b.label, "es"))
 }
 
 /** Las subcapas que hay que dibujar de fábrica, leídas del propio servicio. */
@@ -333,11 +412,42 @@ export const defaultSubSelection = (grupos) =>
  * unidad, la edad, la litología—, y en el orden en que vengan, que es el que el
  * SGC eligió al publicar.
  */
+/**
+ * Campos que son fontanería de la base de datos y no dicen nada.
+ *
+ * Además de los de siempre —`OBJECTID`, `Shape`—, los servicios del SGC arrastran
+ * pares como `UCG_P_` y `UCG_P_ID`, que son números internos de su base de datos
+ * de ArcGIS. En la ficha ocupaban dos de las cuatro filas y no informaban de
+ * nada. Se van los que **acaban en `_` o en `_ID` y además valen un número**: las
+ * dos condiciones juntas, porque un campo llamado `COD_ID` con valor `Qal` sí es
+ * un dato.
+ */
+const CAMPO_INTERNO = /^(objectid|shape|fid|globalid|se_anno)/i
+const CAMPO_DE_BASE = /(_id|_)$/i
+
+/**
+ * Traduce un valor con su significado, cuando se conoce.
+ *
+ * `Qal` es lo que guarda la base de datos; «Depósitos aluviales» es lo que un
+ * geólogo quiere leer. Lo segundo lo publica el propio servicio en la simbología
+ * de la capa —cada color lleva su valor y su descripción—, así que no hay que
+ * inventarse ningún diccionario: se pide y se cruza. Ver el modo `campos` de
+ * `/api/sgc`.
+ */
+export const describeValue = (valor, diccionario) => {
+  const texto = String(valor)
+  const significado = diccionario?.[texto]
+  return significado && significado !== texto ? `${texto} — ${significado}` : texto
+}
+
 export const identifyResultsFrom = (json) => {
   const encontrados = json?.results
   if (!Array.isArray(encontrados)) return []
 
   const limpios = encontrados.map((resultado) => ({
+    // El índice de la capa se conserva porque es la llave con la que se le pide
+    // al servicio qué significan sus códigos.
+    layerId: Number.isInteger(resultado?.layerId) ? resultado.layerId : null,
     layerName: String(resultado?.layerName ?? ""),
     value: String(resultado?.value ?? ""),
     attributes: Object.entries(resultado?.attributes ?? {})
@@ -347,7 +457,8 @@ export const identifyResultsFrom = (json) => {
         // «Null» con mayúscula es literalmente lo que escribe ArcGIS en un campo
         // vacío. Sin quitarlo, la ficha se llena de filas que no dicen nada.
         if (texto === "" || texto === "Null" || texto === "<Null>") return false
-        return !/^(objectid|shape|fid|globalid|se_anno)/i.test(campo)
+        if (CAMPO_INTERNO.test(campo)) return false
+        return !(CAMPO_DE_BASE.test(campo) && /^\d+$/.test(texto))
       })
       .map(([campo, valor]) => ({ field: campo, value: String(valor) })),
   }))
@@ -471,3 +582,43 @@ export const legendFrom = (json) => {
 /** La atribución, que las condiciones de uso del SGC exigen mostrar. */
 export const SGC_ATTRIBUTION =
   '<a href="https://www.sgc.gov.co">Servicio Geológico Colombiano</a>'
+
+/**
+ * Lo que hace legible una ficha: cómo se llama cada campo y qué significa cada
+ * código.
+ *
+ * Las dos cosas las publica el propio servicio en `MapServer/<capa>?f=json`:
+ *
+ * - `fields[].alias` es el nombre que el SGC le puso al campo para enseñarlo.
+ *   Suele ser el mismo críptico que el interno, y por eso solo se usa cuando de
+ *   verdad aporta algo distinto.
+ * - `drawingInfo.renderer.uniqueValueInfos` es la tabla que empareja cada valor
+ *   con su descripción, porque es la que usa ArcGIS para elegir el color. Ahí
+ *   está lo que convierte `Qal` en «Depósitos aluviales».
+ *
+ * @returns {{field: string, aliases: Object, meanings: Object}}
+ */
+export const fieldInfoFrom = (layerJson) => {
+  const renderer = layerJson?.drawingInfo?.renderer
+  const aliases = {}
+  for (const campo of layerJson?.fields ?? []) {
+    const nombre = campo?.name
+    const alias = campo?.alias
+    if (nombre && alias && alias !== nombre) aliases[nombre] = String(alias)
+  }
+
+  const meanings = {}
+  for (const info of renderer?.uniqueValueInfos ?? []) {
+    // `value` puede venir con varios campos separados por comas cuando el
+    // servicio pinta por más de uno; se guarda tal cual y ya cruzará o no.
+    const valor = info?.value
+    const etiqueta = String(info?.label ?? "").trim()
+    if (valor !== undefined && valor !== null && etiqueta) meanings[String(valor)] = etiqueta
+  }
+
+  return { field: String(renderer?.field1 ?? ""), aliases, meanings }
+}
+
+/** La dirección de nuestra ruta para pedir eso. */
+export const sgcFieldsUrl = (key, layerId) =>
+  `/api/sgc?capa=${encodeURIComponent(key)}&modo=campos&sub=${Number(layerId)}`

@@ -40,7 +40,7 @@ describe("themeAreas", () => {
       cuenta[l.areaId] = (cuenta[l.areaId] ?? 0) + 1
       return cuenta
     }, {})
-    expect(porArea).toEqual({ mineria: 4, geologia: 5 })
+    expect(porArea).toEqual({ mineria: 4, geologia: 4 })
   })
 
   it("cada capa viva sabe de dónde saca sus datos, de una forma u otra", () => {

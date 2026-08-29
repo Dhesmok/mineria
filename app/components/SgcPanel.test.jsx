@@ -82,7 +82,7 @@ describe("la tarjeta de geología", () => {
     // De qué capa salió importa tanto como el dato: con el mapa nacional y una
     // plancha encendidas a la vez, dos respuestas distintas al mismo punto no
     // son una contradicción, son dos escalas.
-    expect(screen.getByText(/Mapa geológico de Colombia/)).toBeInTheDocument()
+    expect(screen.getByText(/Geología 1:500\.000/)).toBeInTheDocument()
   })
 
   it("distingue «no hay dato aquí» de «no he preguntado»", () => {
@@ -217,5 +217,67 @@ describe("la simbología", () => {
     )
     await user.click(screen.getByRole("button", { name: /Simbología/ }))
     expect(screen.getByText(/no devolvió simbología/)).toBeInTheDocument()
+  })
+})
+
+describe("los códigos de la base de datos", () => {
+  /**
+   * Lo que devolvía la ficha era esto:
+   *
+   *     UCG_P_ 445 · UCG_P_ID 450 · COD Qal
+   *
+   * Tres filas, dos de ellas números internos de ArcGIS, y la única con dato
+   * decía «Qal» sin más. Un geólogo sabe qué es Qal, pero el visor puede
+   * decirlo: el propio servicio publica esa tabla en su simbología.
+   */
+  const conCodigo = {
+    loading: false,
+    results: [
+      {
+        layerKey: "geologiaDepartamentos",
+        layerId: 12,
+        layerName: "Geología_UCG",
+        value: "Qal",
+        attributes: [{ field: "COD", value: "Qal" }],
+      },
+    ],
+  }
+
+  it("enseña el nombre del campo que el servicio publica, no el interno", () => {
+    render(
+      <SgcPanel
+        activeKeys={["geologiaDepartamentos"]}
+        featureInfo={conCodigo}
+        fieldInfo={{ "geologiaDepartamentos:12": { aliases: { COD: "Unidad" }, meanings: {} } }}
+      />,
+    )
+    expect(screen.getByText("Unidad")).toBeInTheDocument()
+    expect(screen.queryByText("COD")).not.toBeInTheDocument()
+  })
+
+  it("y el significado del código junto al código", () => {
+    render(
+      <SgcPanel
+        activeKeys={["geologiaDepartamentos"]}
+        featureInfo={conCodigo}
+        fieldInfo={{
+          "geologiaDepartamentos:12": {
+            aliases: {},
+            meanings: { Qal: "Depósitos aluviales" },
+          },
+        }}
+      />,
+    )
+    // El código no se sustituye, se acompaña: es lo que aparece en los informes
+    // y en los mapas impresos, así que quitarlo sería quitar información.
+    expect(screen.getByText("Qal — Depósitos aluviales")).toBeInTheDocument()
+  })
+
+  it("sin diccionario, la ficha es exactamente la de antes", () => {
+    // El significado llega en una segunda petición. Si el servicio no contesta,
+    // se queda el código pelado: peor que con, nunca peor que antes.
+    render(<SgcPanel activeKeys={["geologiaDepartamentos"]} featureInfo={conCodigo} />)
+    expect(screen.getByText("COD")).toBeInTheDocument()
+    expect(screen.getAllByText("Qal").length).toBeGreaterThan(0)
   })
 })
