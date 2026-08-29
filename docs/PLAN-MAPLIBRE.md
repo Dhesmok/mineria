@@ -1530,3 +1530,58 @@ en ellas apareció un «1 capas» que ninguna prueba de datos iba a ver.
 
 Sigue sin poderse comprobar que los servicios respondan de verdad ni si permiten
 CORS: eso hay que verlo con la página abierta.
+
+### Cinco arreglos sobre la geología — 2026-08-29
+
+Fabio probó lo anterior y trajo cinco cosas. Todas eran ciertas.
+
+**1. Los enlaces de la ficha eran texto plano.** «Estado de la cartografía»
+devuelve la memoria explicativa de cada plancha como una dirección, y había que
+copiarla a mano. Ahora se separan los trozos que son direcciones —`linkPartsOf`,
+que es una regla y por eso está probada aparte— y se enseñan recortadas
+(`sgc.gov.co/…/146.pdf`) con el destino completo en el `title`. El recorte tiene
+un porqué medido: la columna del valor son unos 150 px, y con el tope que puse
+primero las direcciones seguían saliendo en tres renglones.
+
+**2. La tarjeta se quedaba puesta diciendo «toca el mapa».** Ocupaba sitio
+permanentemente para no decir nada. Ahora sale al tocar y se va con la equis, que
+es lo que pidió: le gustaba el diseño, no el comportamiento.
+
+**3. Dentro de cada departamento hay más capas, y no se podían apagar.** El SGC
+publica unidades, fallas, municipios y drenajes dentro de cada uno. Ahora
+`subLayersFrom` devuelve el árbol de dos niveles y el panel deja marcar cualquiera
+de los dos; un departamento a medias se enseña a medias, con una raya en vez de
+una marca.
+
+**4. La información salía repetida en la ficha.** La causa estaba en lo que se le
+pedía al servicio: **el grupo y su contenido a la vez**, y ArcGIS devuelve
+entonces la misma unidad dos veces. Se arregló en la raíz —solo se piden las
+hojas— y además se descartan los duplicados exactos, por si un servicio publica la
+misma geometría en dos capas suyas.
+
+**5. Los rótulos de la grilla salían cuatro veces por cuadrícula.** Este era el de
+fondo. No era un ajuste que faltara: **con teselas no tiene arreglo**. ArcGIS
+dibuja cada imagen sin saber nada de las de al lado, así que coloca el rótulo en
+cada una, y una cuadrícula que toca cuatro teselas sale rotulada cuatro veces. La
+solución es pedir **una sola imagen del rectángulo visible**, que es lo que hace
+el propio visor del SGC. De paso son menos idas y venidas: antes eran entre cuatro
+y nueve peticiones por pantalla a un servidor que tarda segundos; ahora una. Lo
+que se pierde es el reaprovechamiento al mover el mapa, y para un servicio lento y
+con rótulos sale a cuenta.
+
+Y el cuadrito de color de las capas ráster ya no está apagado sino ausente: gris
+seguía pareciendo un botón.
+
+**Lo que costó, y no salió en ninguna prueba de datos.** MapLibre no admite
+`attribution` en una fuente de tipo `image`, y ponérselo **invalida el estilo
+entero**: las cinco capas del SGC desaparecían del mapa. Los 513 tests seguían en
+verde; hizo falta abrir el navegador y leer la consola. La atribución del SGC vive
+ahora en una fuente vacía de tipo `geojson` con una capa que no dibuja nada, que
+sí la admite y que MapLibre enseña solo mientras haya geología encendida.
+
+**Comprobado**: 518 pruebas unitarias (5 suites de navegador). En escritorio, 24
+comprobaciones nuevas —incluida la que mide el arreglo de los rótulos: *una*
+petición de imagen por vista, con la proporción del recuadro al 0,00 % de
+desvío—; 4 con la cámara inclinada, donde el recuadro pedido crece 1,91× y no se
+dispara; y 6 en un teléfono de 412 px. Sigue sin poderse comprobar que los
+servicios del SGC respondan de verdad.

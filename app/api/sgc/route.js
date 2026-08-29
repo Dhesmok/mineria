@@ -1,4 +1,4 @@
-import { SGC_TILE_SIZE, sgcExportUrl, sgcLayerByKey } from "../../utils/sgcLayers"
+import { SGC_MAX_IMAGE_PX as MAX_PX, sgcExportUrl, sgcLayerByKey } from "../../utils/sgcLayers"
 
 /**
  * El intermediario para las capas de geología del SGC.
@@ -23,7 +23,13 @@ import { SGC_TILE_SIZE, sgcExportUrl, sgcLayerByKey } from "../../utils/sgcLayer
  * nuestro servidor.
  */
 
-/** Cuánto se guarda una imagen antes de volver a pedirla. Una semana. */
+/**
+ * Cuánto se guarda una imagen antes de volver a pedirla. Una semana.
+ *
+ * Ayuda menos que cuando esto servía teselas —ahora cada vista pide su propio
+ * recuadro, y dos vistas rara vez coinciden al metro—, pero volver a un sitio
+ * donde ya se estuvo sí acierta, y la geología no cambia de un día para otro.
+ */
 const CACHE_IMAGEN = 60 * 60 * 24 * 7
 
 /**
@@ -140,9 +146,15 @@ export const GET = async (request) => {
     if (modo !== "imagen") return error("Modo desconocido.", 400)
 
     const bbox = params.get("bbox")
+    const tam = params.get("tam")
     if (!bbox || !RECUADRO.test(bbox)) return error("Recuadro inválido.", 400)
+    if (!tam || !TAMANO.test(tam)) return error("Tamaño inválido.", 400)
+    // El tope también aquí, y no solo en quien arma la dirección: esta ruta es
+    // pública, y una petición de 20.000 píxeles de lado la pagaría el SGC.
+    if (tam.split(",").some((n) => Number(n) < 1 || Number(n) > MAX_PX))
+      return error("Tamaño fuera de rango.", 400)
 
-    const respuesta = await alSgc(sgcExportUrl(capa.service, bbox, SGC_TILE_SIZE, seleccion))
+    const respuesta = await alSgc(sgcExportUrl(capa.service, bbox, tam, seleccion))
     if (!respuesta.ok) return error(`El servicio del SGC respondió ${respuesta.status}.`, 502)
 
     const tipo = respuesta.headers.get("content-type") ?? ""

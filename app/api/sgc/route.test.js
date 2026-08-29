@@ -26,13 +26,13 @@ beforeEach(() => {
 
 describe("qué acepta", () => {
   it("sirve una capa del catálogo", async () => {
-    const r = await pedir(`capa=geologiaNacional&bbox=${RECUADRO}`)
+    const r = await pedir(`capa=geologiaNacional&bbox=${RECUADRO}&tam=800,600`)
     expect(r.status).toBe(200)
     expect(r.headers.get("content-type")).toBe("image/png")
   })
 
   it("y pide al SGC la dirección del catálogo, no la que llegue de fuera", async () => {
-    await pedir(`capa=geologiaNacional&bbox=${RECUADRO}`)
+    await pedir(`capa=geologiaNacional&bbox=${RECUADRO}&tam=800,600`)
     const pedida = global.fetch.mock.calls[0][0]
     expect(pedida).toContain(SGC_LAYERS[0].service)
     expect(pedida).toContain(`bbox=${RECUADRO}`)
@@ -42,12 +42,12 @@ describe("qué acepta", () => {
     // **Es lo que impide que esto sea un proxy abierto.** Sin esta puerta,
     // cualquiera podría pedir lo que quisiera desde el dominio del visor, y el
     // tráfico saldría con nuestro nombre.
-    expect((await pedir(`capa=otra&bbox=${RECUADRO}`)).status).toBe(400)
-    expect((await pedir(`bbox=${RECUADRO}`)).status).toBe(400)
+    expect((await pedir(`capa=otra&bbox=${RECUADRO}&tam=800,600`)).status).toBe(400)
+    expect((await pedir(`bbox=${RECUADRO}&tam=800,600`)).status).toBe(400)
   })
 
   it("no deja colar una dirección disfrazada de clave", async () => {
-    const r = await pedir(`capa=${encodeURIComponent("https://otro.sitio/x")}&bbox=${RECUADRO}`)
+    const r = await pedir(`capa=${encodeURIComponent("https://otro.sitio/x")}&bbox=${RECUADRO}&tam=800,600`)
     expect(r.status).toBe(400)
     expect(global.fetch).not.toHaveBeenCalled()
   })
@@ -57,13 +57,13 @@ describe("qué acepta", () => {
     // servidor. Ahí no puede entrar nada más que números.
     const malos = ["", "1,2,3", "1,2,3,4,5", "a,b,c,d", "1,2,3,&layers=show:1", "1,2,3,4;drop"]
     for (const bbox of malos) {
-      expect((await pedir(`capa=planchas&bbox=${encodeURIComponent(bbox)}`)).status).toBe(400)
+      expect((await pedir(`capa=planchas&bbox=${encodeURIComponent(bbox)}&tam=800,600`)).status).toBe(400)
     }
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
   it("acepta recuadros con decimales y negativos, que es lo que manda MapLibre", async () => {
-    const r = await pedir("capa=planchas&bbox=-8400000.5,600000.25,-8300000,700000")
+    const r = await pedir("capa=planchas&bbox=-8400000.5,600000.25,-8300000,700000&tam=800,600")
     expect(r.status).toBe(200)
   })
 })
@@ -73,7 +73,7 @@ describe("cuando el SGC falla", () => {
     global.fetch = jest.fn(() =>
       Promise.resolve({ ok: false, status: 500, headers: new Headers() }),
     )
-    expect((await pedir(`capa=planchas&bbox=${RECUADRO}`)).status).toBe(502)
+    expect((await pedir(`capa=planchas&bbox=${RECUADRO}&tam=800,600`)).status).toBe(502)
   })
 
   it("un JSON de error con código 200 tampoco", async () => {
@@ -81,12 +81,12 @@ describe("cuando el SGC falla", () => {
     // proyecto, la misma que ya costó una tanda con la ANM. Sin mirar el tipo de
     // contenido, MapLibre recibiría un JSON donde espera un PNG.
     global.fetch = jest.fn(() => imagen("application/json"))
-    expect((await pedir(`capa=planchas&bbox=${RECUADRO}`)).status).toBe(502)
+    expect((await pedir(`capa=planchas&bbox=${RECUADRO}&tam=800,600`)).status).toBe(502)
   })
 
   it("y si tarda demasiado, se corta", async () => {
     global.fetch = jest.fn(() => Promise.reject(Object.assign(new Error("x"), { name: "AbortError" })))
-    expect((await pedir(`capa=planchas&bbox=${RECUADRO}`)).status).toBe(504)
+    expect((await pedir(`capa=planchas&bbox=${RECUADRO}&tam=800,600`)).status).toBe(504)
   })
 })
 
@@ -95,7 +95,7 @@ describe("caché", () => {
     // Un mapa geológico no cambia de una semana a otra, y el servidor del SGC es
     // público y lento: cada tesela que sirva la caché es una que no tiene que
     // dibujar él.
-    const cache = (await pedir(`capa=planchas&bbox=${RECUADRO}`)).headers.get("cache-control")
+    const cache = (await pedir(`capa=planchas&bbox=${RECUADRO}&tam=800,600`)).headers.get("cache-control")
     expect(cache).toContain("s-maxage=604800")
     expect(cache).toContain("stale-while-revalidate")
   })
@@ -163,20 +163,38 @@ describe("qué se valida antes de concatenar", () => {
     // Van a parar dentro de la dirección que sale de nuestro servidor.
     const malas = ["1;2", "show:1", "1,2)&f=html", "../../", "-1"]
     for (const sub of malas) {
-      const r = await pedir(`capa=planchas&bbox=${RECUADRO}&sub=${encodeURIComponent(sub)}`)
+      const r = await pedir(`capa=planchas&bbox=${RECUADRO}&sub=${encodeURIComponent(sub)}&tam=800,600`)
       expect(r.status).toBe(400)
     }
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
   it("y cuando son válidas se le pasan al servicio", async () => {
-    await pedir(`capa=geologiaDepartamentos&bbox=${RECUADRO}&sub=12,13,14`)
+    await pedir(`capa=geologiaDepartamentos&bbox=${RECUADRO}&sub=12,13,14&tam=800,600`)
     expect(global.fetch.mock.calls[0][0]).toContain("layers=show:12,13,14")
   })
 
   it("sin subcapas no manda el parámetro, y el servicio dibuja lo suyo", async () => {
-    await pedir(`capa=planchas&bbox=${RECUADRO}`)
+    await pedir(`capa=planchas&bbox=${RECUADRO}&tam=800,600`)
     expect(global.fetch.mock.calls[0][0]).not.toContain("layers=")
+  })
+
+  it("el tamaño de la imagen también, y con tope", async () => {
+    // Esta ruta es pública: sin tope, una petición de veinte mil píxeles de lado
+    // la acabaría pagando el servidor del SGC.
+    const malos = ["800", "800,alto", "0,600", "9000,9000", "-5,-5"]
+    for (const tam of malos) {
+      const r = await pedir(`capa=planchas&bbox=${RECUADRO}&tam=${encodeURIComponent(tam)}`)
+      expect(r.status).toBe(400)
+    }
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it("y una imagen se pide del tamaño que se pidió, no de uno fijo", async () => {
+    // Es lo que permite pedir una sola imagen del trozo visible en vez de una
+    // rejilla de teselas cuadradas, que es lo que repetía los rótulos.
+    await pedir(`capa=grillaPlanchas&bbox=${RECUADRO}&tam=1440,900`)
+    expect(global.fetch.mock.calls[0][0]).toContain("size=1440,900")
   })
 
   it("el punto, el tamaño y la tolerancia también se validan", async () => {

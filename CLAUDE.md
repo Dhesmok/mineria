@@ -80,8 +80,8 @@ app/
     terrainRaster.js      Horn sobre el mosaico → los píxeles de la capa
     sgcLayers.js          Catálogo del SGC, direcciones y lectura de sus respuestas
     mapUtils.js, mapLabelsGL.js, drawStyles.js
-  components/SgcPanel.jsx   Leyenda del SGC y ficha del punto tocado
-  api/sgc/route.js        Intermediario del SGC: teselas, árbol de capas, identify y leyenda
+  components/SgcPanel.jsx   Ficha del punto tocado y leyenda del SGC
+  api/sgc/route.js        Intermediario del SGC: imagen, árbol de capas, identify y leyenda
 components/ui/            shadcn
 scripts/
   copy-maplibre-worker.mjs  Copia el worker de MapLibre a public/ (pre-dev y pre-build)
@@ -106,7 +106,7 @@ montar un proxy en una API route de Next.
 bloquea `sgc.gov.co`. Por eso sus capas pasan por `app/api/sgc/route.js`, que
 funciona permita CORS o no. Si algún día se comprueba que sí lo permite, quitar
 el intermediario es cambiar una línea de `utils/sgcLayers.js` — y conviene, para
-que las teselas dejen de pasar por nuestro servidor.
+que sus imágenes dejen de pasar por nuestro servidor.
 
 **Las capas del SGC van como imagen, no como polígonos**, y es a propósito: su
 simbología *es* el dato —un geólogo reconoce la unidad por el color—, son miles
@@ -120,6 +120,12 @@ hay en este punto) y `leyenda` (qué significa cada color), además de la imagen
 mañana se suma otra entidad que publique en ArcGIS, esos cuatro son el mínimo — se
 comprobó por las malas, con cinco capas de geología que dibujaban manchas que no
 se podían consultar.
+
+**Y la imagen es una por vista, no una rejilla de teselas.** ArcGIS dibuja cada
+imagen que le piden sin saber nada de las de al lado, así que rotula cada una por
+separado: la grilla de planchas escribía el número de cada cuadrícula cuatro
+veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
+`utils/sgcLayers.js`.
 
 ## Trampas conocidas (no las vuelvas a pisar)
 

@@ -2,17 +2,20 @@ import {
   SGC_ATTRIBUTION,
   SGC_KEYS,
   SGC_LAYERS,
-  SGC_TILE_SIZE,
+  defaultSubSelection,
   identifyResultsFrom,
   legendFrom,
   sgcExportUrl,
   sgcIdentifyUrl,
+  sgcImageSize,
+  sgcImageUrl,
   sgcLayerByKey,
   sgcLayerId,
   sgcLegendUrl,
   sgcMetaUrl,
+  linkPartsOf,
   sgcSourceId,
-  sgcTileTemplate,
+  shortLinkText,
   subLayersFrom,
 } from "./sgcLayers"
 
@@ -67,7 +70,7 @@ describe("sgcExportUrl", () => {
   const recuadro = "-8400000,600000,-8300000,700000"
 
   it("pide la imagen en Web Mercator, que es lo que dibuja MapLibre", () => {
-    const url = sgcExportUrl(servicio, recuadro)
+    const url = sgcExportUrl(servicio, recuadro, "800,600")
     expect(url).toContain("bboxSR=3857")
     expect(url).toContain("imageSR=3857")
     expect(url).toContain(`bbox=${recuadro}`)
@@ -77,7 +80,7 @@ describe("sgcExportUrl", () => {
     // Transparente porque una capa geológica se mira encima del satélite o del
     // relieve. Y png32 y no png porque las unidades geológicas usan muchos
     // colores, y la paleta de 256 los destroza sin avisar.
-    const url = sgcExportUrl(servicio, recuadro)
+    const url = sgcExportUrl(servicio, recuadro, "800,600")
     expect(url).toContain("transparent=true")
     expect(url).toContain("format=png32")
     expect(url).toContain("f=image")
@@ -88,43 +91,62 @@ describe("sgcExportUrl", () => {
     // «Fallas Geológicas» está en la 43, la 60 y la 177 según el departamento:
     // escribir un número aquí sería elegir un departamento al azar.
     SGC_LAYERS.forEach(({ service }) => {
-      expect(sgcExportUrl(service, recuadro)).not.toMatch(/layers=/)
+      expect(sgcExportUrl(service, recuadro, "800,600")).not.toMatch(/layers=/)
     })
   })
 
-  it("el tamaño que pide es el mismo que declara la fuente", () => {
-    // Si no coincidieran, el servicio devolvería una imagen de otro tamaño y
-    // MapLibre la estiraría: el mapa saldría borroso y ligeramente desplazado,
-    // que es de las cosas más difíciles de ver mirando una captura.
-    expect(sgcExportUrl(servicio, recuadro)).toContain(`size=${SGC_TILE_SIZE},${SGC_TILE_SIZE}`)
+  it("pasa el tamaño tal cual se lo dan", () => {
+    expect(sgcExportUrl(servicio, recuadro, "800,600")).toContain("size=800,600")
   })
 })
 
-describe("sgcTileTemplate", () => {
-  it("pasa por la ruta propia y no por el SGC directamente", () => {
-    // MapLibre pide las teselas ráster con `fetch`, así que están sujetas a
-    // CORS. No se pudo comprobar si el SGC lo permite —el proxy del entorno de
-    // desarrollo bloquea sgc.gov.co—, y la ruta propia funciona en los dos casos.
-    const plantilla = sgcTileTemplate("geologiaNacional")
-    expect(plantilla).toMatch(/^\/api\/sgc\?/)
-    expect(plantilla).not.toContain("sgc.gov.co")
+describe("sgcImageSize", () => {
+  it("guarda la proporción exacta del recuadro", () => {
+    // Si el tamaño no guarda la proporción del recuadro, ArcGIS ensancha el
+    // recuadro por su cuenta para que cuadren: la imagen acaba cubriendo un
+    // trozo de terreno distinto del que se pidió y el mapa sale desplazado sin
+    // que nada falle. Es de lo más difícil de ver en una captura.
+    const [w, h] = sgcImageSize([0, 0, 2000, 1000], [1440, 900])
+    expect(w / h).toBeCloseTo(2, 2)
   })
 
-  it("nombra la capa por clave, no por dirección", () => {
-    // Es lo que impide que la ruta acabe siendo un proxy abierto: con una URL
-    // como parámetro, cualquiera podría pedir lo que quisiera desde el dominio
-    // del visor.
-    const plantilla = sgcTileTemplate("geologiaNacional")
-    expect(plantilla).toContain("capa=geologiaNacional")
-    expect(plantilla).not.toMatch(/url=|https?%3A/)
+  it("no se pasa del tope ni por ancho ni por alto", () => {
+    expect(sgcImageSize([0, 0, 100000, 100], [9000, 9000], 2048)[0]).toBe(2048)
+    // Un recuadro muy alto y estrecho: el que se pasa es el alto, y hay que
+    // recortar por ahí. Sin esta rama, se pedían diez mil píxeles de alto.
+    const [w, h] = sgcImageSize([0, 0, 100, 100000], [2048, 2048], 2048)
+    expect(h).toBe(2048)
+    expect(w).toBeLessThanOrEqual(2048)
   })
 
-  it("deja el hueco del recuadro que rellena MapLibre", () => {
-    expect(sgcTileTemplate("planchas")).toContain("{bbox-epsg-3857}")
+  it("aguanta un recuadro degenerado sin devolver cero", () => {
+    // Un tamaño de cero píxeles hace que ArcGIS conteste un error, y llega como
+    // «la capa no se ve» sin más pista.
+    expect(sgcImageSize([0, 0, 0, 0], [800, 600])).toEqual([1, 1])
+  })
+})
+
+describe("sgcImageUrl", () => {
+  it("pide una sola imagen del recuadro que se está viendo", () => {
+    // Y no teselas: con teselas, ArcGIS rotula cada una por separado y el número
+    // de cada cuadrícula de la grilla salía escrito cuatro veces.
+    const url = sgcImageUrl({ key: "grillaPlanchas", bbox: [-1, -2, 3, 4], width: 800, height: 600 })
+    expect(url).toMatch(/^\/api\/sgc\?/)
+    expect(url).toContain("bbox=-1%2C-2%2C3%2C4")
+    expect(url).toContain("tam=800%2C600")
+    expect(url).not.toContain("{bbox")
   })
 
-  it("escapa la clave", () => {
-    expect(sgcTileTemplate("a b&c=d")).toContain("capa=a%20b%26c%3Dd")
+  it("nombra la capa por clave y nunca por dirección", () => {
+    // Es lo que impide que la ruta acabe siendo un proxy abierto.
+    const url = sgcImageUrl({ key: "geologiaNacional", bbox: [1, 2, 3, 4], width: 10, height: 10 })
+    expect(url).toContain("capa=geologiaNacional")
+    expect(url).not.toMatch(/url=|https?%3A/)
+  })
+
+  it("lleva las subcapas elegidas cuando las hay", () => {
+    const url = sgcImageUrl({ key: "geologiaDepartamentos", bbox: [1, 2, 3, 4], width: 10, height: 10, sub: [4, 7] })
+    expect(url).toContain("sub=4%2C7")
   })
 })
 
@@ -159,11 +181,24 @@ describe("subLayersFrom", () => {
     ],
   }
 
-  it("saca un grupo por departamento con todos sus índices dentro", () => {
+  it("saca un grupo por departamento con las capas que lleva dentro", () => {
     const grupos = subLayersFrom(departamentos)
     expect(grupos).toHaveLength(2)
     expect(grupos.map((g) => g.label)).toEqual(["Antioquia", "Boyacá"])
-    expect(grupos.find((g) => g.label === "Boyacá").ids).toEqual([0, 2, 3])
+    expect(grupos.find((g) => g.label === "Boyacá").children.map((h) => h.label)).toEqual([
+      "Unidades",
+      "Fallas",
+    ])
+  })
+
+  it("pide solo las hojas, nunca el grupo que las contiene", () => {
+    // Pedirle a ArcGIS un grupo *y* su contenido devuelve la misma unidad dos
+    // veces, y la ficha la enseñaba repetida. Además son las hojas las que
+    // tienen nombre propio —«Fallas», «Municipios»—, que es lo único que se
+    // puede ofrecer para apagar por separado.
+    const boyaca = subLayersFrom(departamentos).find((g) => g.label === "Boyacá")
+    expect(boyaca.ids).toEqual([2, 3])
+    expect(boyaca.ids).not.toContain(boyaca.id)
   })
 
   it("dice cuál trae el servicio encendido de fábrica", () => {
@@ -172,6 +207,21 @@ describe("subLayersFrom", () => {
     const grupos = subLayersFrom(departamentos)
     expect(grupos.find((g) => g.label === "Antioquia").on).toBe(true)
     expect(grupos.find((g) => g.label === "Boyacá").on).toBe(false)
+  })
+
+  it("una hoja encendida dentro de un grupo apagado no cuenta como visible", () => {
+    // ArcGIS marca la visibilidad capa por capa, y una hoja encendida dentro de
+    // un grupo apagado no se dibuja. Sin esta cuenta, las casillas arrancaban
+    // marcadas en cosas que no estaban en pantalla.
+    const grupos = subLayersFrom({
+      layers: [
+        { id: 0, name: "Antioquia", parentLayerId: -1, subLayerIds: [1], defaultVisibility: true },
+        { id: 1, name: "Unidades", parentLayerId: 0, defaultVisibility: true },
+        { id: 2, name: "Boyacá", parentLayerId: -1, subLayerIds: [3], defaultVisibility: false },
+        { id: 3, name: "Unidades", parentLayerId: 2, defaultVisibility: true },
+      ],
+    })
+    expect(defaultSubSelection(grupos)).toEqual([1])
   })
 
   it("ordena en español, con las tildes en su sitio", () => {
@@ -210,7 +260,7 @@ describe("subLayersFrom", () => {
     expect(subLayersFrom({ layers: [] })).toEqual([])
   })
 
-  it("no se cuelga si un grupo se referencia a sí mismo", () => {
+  it("no se cuelga si un grupo se referencia a sí mismo, y deja algo que encender", () => {
     const grupos = subLayersFrom({
       layers: [
         { id: 0, name: "A", parentLayerId: -1, subLayerIds: [1] },
@@ -219,7 +269,8 @@ describe("subLayersFrom", () => {
         { id: 3, name: "D", parentLayerId: 2 },
       ],
     })
-    expect(grupos.find((g) => g.label === "A").ids).toEqual([0, 1])
+    expect(grupos.find((g) => g.label === "A").ids.length).toBeGreaterThan(0)
+    expect(grupos.find((g) => g.label === "C").ids).toEqual([3])
   })
 })
 
@@ -344,5 +395,88 @@ describe("direcciones de consulta", () => {
       sub: [7, 8],
     })
     expect(url).toContain("sub=7%2C8")
+  })
+})
+
+describe("linkPartsOf", () => {
+  it("convierte una dirección suelta en un enlace", () => {
+    // El servicio de estado de la cartografía devuelve direcciones —la memoria
+    // explicativa de una plancha—, y como texto plano obligan a copiarlas a mano.
+    expect(linkPartsOf("https://www2.sgc.gov.co/plancha/123.pdf")).toEqual([
+      { text: "https://www2.sgc.gov.co/plancha/123.pdf", href: "https://www2.sgc.gov.co/plancha/123.pdf" },
+    ])
+  })
+
+  it("separa el texto de la dirección cuando vienen juntos", () => {
+    const partes = linkPartsOf("Memoria: https://sgc.gov.co/a.pdf (2020)")
+    expect(partes.map((p) => p.text)).toEqual(["Memoria: ", "https://sgc.gov.co/a.pdf", " (2020)"])
+    expect(partes.filter((p) => p.href)).toHaveLength(1)
+  })
+
+  it("deja fuera el punto final, que es de la frase y no de la dirección", () => {
+    // Con el punto dentro, el enlace lleva a una página que no existe.
+    const [, enlace] = linkPartsOf("Ver https://sgc.gov.co/a.pdf.")
+    expect(enlace.href).toBe("https://sgc.gov.co/a.pdf")
+  })
+
+  it("encuentra varias en el mismo campo", () => {
+    const partes = linkPartsOf("http://a.co/1 y http://b.co/2")
+    expect(partes.filter((p) => p.href).map((p) => p.href)).toEqual(["http://a.co/1", "http://b.co/2"])
+  })
+
+  it("un texto sin direcciones sale de una pieza y sin enlace", () => {
+    expect(linkPartsOf("Cuarzomonzonita de Amagá")).toEqual([{ text: "Cuarzomonzonita de Amagá" }])
+    expect(linkPartsOf("")).toEqual([{ text: "" }])
+  })
+})
+
+describe("identifyResultsFrom, sin repetidos", () => {
+  it("dos respuestas idénticas se enseñan una vez", () => {
+    // La ficha enseñaba la misma unidad dos veces. Dos filas idénticas no
+    // informan de nada: informan de un fallo que no existe.
+    const repetido = { layerName: "Unidades", value: "Q-al", attributes: { Unidad: "Q-al" } }
+    expect(identifyResultsFrom({ results: [repetido, repetido] })).toHaveLength(1)
+  })
+
+  it("pero dos unidades distintas de la misma capa siguen siendo dos", () => {
+    const json = { results: [
+      { layerName: "Unidades", value: "Q-al", attributes: { Unidad: "Q-al" } },
+      { layerName: "Unidades", value: "K1-Sm", attributes: { Unidad: "K1-Sm" } },
+    ] }
+    expect(identifyResultsFrom(json)).toHaveLength(2)
+  })
+})
+
+describe("shortLinkText", () => {
+  it("una dirección corta se enseña entera", () => {
+    expect(shortLinkText("https://sgc.gov.co/a")).toBe("https://sgc.gov.co/a")
+  })
+
+  it("cabe en el ancho de la tarjeta", () => {
+    // La columna del valor mide unos 150 px a 11 px de letra: ahí caben
+    // veintitantos caracteres. Con el tope de más, el recorte no servía de nada
+    // y las direcciones seguían saliendo en tres renglones.
+    expect(shortLinkText("https://www2.sgc.gov.co/plancha/146.pdf").length).toBeLessThanOrEqual(26)
+  })
+
+  it("una larga se resume en el sitio y el archivo", () => {
+    // En una columna de quince ems, la dirección entera ocupa tres renglones
+    // partidos por la mitad de las palabras, y lo que se lee no es nada.
+    expect(shortLinkText("https://www2.sgc.gov.co/publicaciones/planchas/146.pdf")).toBe(
+      "sgc.gov.co/…/146.pdf",
+    )
+  })
+
+  it("el enlace en sí no se toca: solo cambia lo que se lee", () => {
+    // Lo que se recorta es el texto. El destino sigue siendo el que mandó el
+    // servicio, y va en el `title` y en el href.
+    const largo = "https://www2.sgc.gov.co/publicaciones/planchas/146.pdf"
+    expect(shortLinkText(largo)).not.toBe(largo)
+    expect(largo.startsWith("https://")).toBe(true)
+  })
+
+  it("aguanta algo que no es una dirección analizable", () => {
+    const raro = `http://${"x".repeat(80)}`
+    expect(shortLinkText(raro).length).toBeLessThanOrEqual(26)
   })
 })
