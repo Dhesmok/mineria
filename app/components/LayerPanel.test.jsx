@@ -174,7 +174,10 @@ describe("las capas de dentro de un departamento", () => {
     await desplegar({ chosenSub: { geologiaDepartamentos: [3] } })
     const antioquia = screen.getByRole("button", { name: "Antioquia" })
     expect(antioquia).toHaveAttribute("aria-pressed", "false")
-    expect(screen.getByRole("button", { name: /a medias/ })).toBeInTheDocument()
+    // El resumen cuenta departamentos dibujados, no completos: con los límites
+    // apagados de fábrica ninguno lo está nunca, y «0 de 32 · 32 a medias» no
+    // informa de nada.
+    expect(screen.getByRole("button", { name: /^1 de 3$/ })).toBeInTheDocument()
   })
 
   it("no ofrece abrir un departamento con una sola capa dentro", async () => {

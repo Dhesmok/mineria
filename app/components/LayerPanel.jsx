@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Check, ChevronDown, ChevronRight, Filter, GripVertical, Search } from "lucide-react"
 
 import { AREAS, THEME_LAYERS, layerByKey } from "../utils/themeAreas"
@@ -214,8 +214,12 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
   if (!hayQueElegir) return children
 
   const marcadas = chosenSub ?? []
-  const completos = subLayers.filter((g) => estadoDe(g.ids, marcadas) === "todo").length
-  const aMedias = subLayers.filter((g) => estadoDe(g.ids, marcadas) === "parte").length
+  // Cuántos departamentos se están dibujando, no cuántos están completos. Con
+  // los límites municipales apagados de fábrica —que es lo correcto: tapan la
+  // geología— ningún departamento está nunca «completo», así que contar eso
+  // habría dejado un «0 de 32 · 32 a medias» permanente que no informa de nada.
+  // Que a uno le falte algo se ve en su propia casilla, con la raya.
+  const dibujados = subLayers.filter((g) => estadoDe(g.ids, marcadas) !== "nada").length
 
   return (
     <>
@@ -228,9 +232,7 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
           className="flex w-full items-center justify-between gap-2 py-1.5 pl-11 pr-4 text-[11px] text-slate-500 transition-colors hover:text-slate-700"
         >
           <span>
-            {completos === 0 && aMedias === 0
-              ? "Elige qué dibujar"
-              : `${completos} de ${subLayers.length}${aMedias ? ` · ${aMedias} a medias` : ""}`}
+            {dibujados === 0 ? "Elige qué dibujar" : `${dibujados} de ${subLayers.length}`}
           </span>
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${abierta ? "rotate-180" : ""}`} />
         </button>
@@ -257,6 +259,77 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
         )}
       </div>
     </>
+  )
+}
+
+/**
+ * La barra de opacidad de una capa.
+ *
+ * **Por qué no es un `input` a secas, que es lo que era.** Al arrastrarla rápido
+ * y soltar el ratón *fuera* de la barra, el valor que quedaba no era el elegido:
+ * la capa podía verse a media transparencia con la barra puesta del todo a la
+ * derecha, o no verse.
+ *
+ * La causa es de las que solo se dan cuando algo va lento. Es un control
+ * gobernado por React: lo que se ve es el valor del estado, no el del navegador.
+ * Cada movimiento manda un valor nuevo, y mientras React reconstruye la lista y
+ * MapLibre repinta —con el mapa cargado, eso son milisegundos de sobra— llegan
+ * más movimientos. Si el último cae en ese hueco y encima el ratón se suelta
+ * fuera, ese valor se pierde y en pantalla queda el penúltimo.
+ *
+ * El arreglo son dos cosas. Mientras se arrastra manda el navegador —el valor se
+ * guarda aquí al lado y la barra deja de esperar a nadie—, y al soltar se lee del
+ * propio elemento el valor final y se manda. Y el «soltar» se escucha **en toda
+ * la ventana**, que es lo que arregla el caso de soltar fuera: el `pointerup` de
+ * un elemento no se dispara si el dedo ya no está encima, pero el del documento
+ * sí.
+ */
+const OpacitySlider = ({ layer, state, onOpacity }) => {
+  // `null` significa «no se está arrastrando»: entonces manda el estado.
+  const [arrastrando, setArrastrando] = useState(null)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (arrastrando === null) return
+
+    const soltar = () => {
+      const valor = Number(inputRef.current?.value)
+      setArrastrando(null)
+      if (Number.isFinite(valor)) onOpacity(layer.key, valor / 100)
+    }
+
+    // `pointercancel` también: en el móvil, un gesto que el navegador decide
+    // convertir en desplazamiento cancela el puntero sin soltarlo, y sin esto la
+    // barra se quedaba creyendo que seguía arrastrándose.
+    window.addEventListener("pointerup", soltar)
+    window.addEventListener("pointercancel", soltar)
+    return () => {
+      window.removeEventListener("pointerup", soltar)
+      window.removeEventListener("pointercancel", soltar)
+    }
+  }, [arrastrando, layer.key, onOpacity])
+
+  const valor = arrastrando ?? Math.round(state.opacity * 100)
+
+  return (
+    <input
+      ref={inputRef}
+      type="range"
+      min="0"
+      max="100"
+      value={valor}
+      onPointerDown={() => setArrastrando(Math.round(state.opacity * 100))}
+      onChange={(event) => {
+        const nuevo = Number(event.target.value)
+        // Se guarda aquí *y* se manda fuera: aquí para que la barra siga al dedo
+        // sin esperar, y fuera para que el mapa cambie mientras se arrastra, que
+        // es como se elige una transparencia.
+        if (arrastrando !== null) setArrastrando(nuevo)
+        onOpacity(layer.key, nuevo / 100)
+      }}
+      aria-label={`Opacidad de ${layer.label}`}
+      className="panel-opacidad w-[62px] shrink-0"
+    />
   )
 }
 
@@ -340,15 +413,7 @@ const LayerRow = ({
     {/* La barra reserva su sitio aunque la capa esté apagada: si apareciera y
         desapareciera, la lista entera daría un salto en cada interruptor. */}
     {state.on ? (
-      <input
-        type="range"
-        min="0"
-        max="100"
-        value={Math.round(state.opacity * 100)}
-        onChange={(event) => onOpacity(layer.key, Number(event.target.value) / 100)}
-        aria-label={`Opacidad de ${layer.label}`}
-        className="panel-opacidad w-[62px] shrink-0"
-      />
+      <OpacitySlider layer={layer} state={state} onOpacity={onOpacity} />
     ) : (
       <span className="w-[62px] shrink-0" />
     )}

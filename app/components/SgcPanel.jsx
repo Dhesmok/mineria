@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react"
 import { ChevronDown, X } from "lucide-react"
 
-import { SGC_LAYERS, linkPartsOf, sgcLayerByKey, shortLinkText } from "../utils/sgcLayers"
+import {
+  SGC_LAYERS,
+  describeValue,
+  linkPartsOf,
+  sgcLayerByKey,
+  shortLinkText,
+} from "../utils/sgcLayers"
 
 /**
  * Lo que hace legible un mapa geológico: la ficha del punto y la leyenda.
@@ -39,7 +45,14 @@ const ALTO_LEYENDA = "14rem"
  */
 const Atributo = ({ field, value }) => (
   <div className="flex items-baseline gap-2 py-[3px]">
-    <span className="w-[38%] shrink-0 truncate text-[10px] uppercase tracking-wide text-slate-400" title={field}>
+    {/* El nombre del campo se parte en dos líneas antes que cortarse con puntos
+        suspensivos: «Unidad geológica» se quedaba en «UNIDAD GEO…», que no dice
+        cuál de los dos campos es. Y en el teléfono no hay ratón que pasar por
+        encima para leer el `title`. */}
+    <span
+      className="w-[38%] shrink-0 break-words text-[10px] uppercase leading-tight tracking-wide text-slate-400"
+      title={field}
+    >
       {field}
     </span>
     <span className="min-w-0 flex-1 break-words text-[11px] leading-snug text-slate-700">
@@ -65,7 +78,15 @@ const Atributo = ({ field, value }) => (
   </div>
 )
 
-export const SgcPanel = ({ activeKeys, subLayers, chosenSub, legends, featureInfo, onDismiss }) => {
+export const SgcPanel = ({
+  activeKeys,
+  subLayers,
+  chosenSub,
+  legends,
+  featureInfo,
+  fieldInfo,
+  onDismiss,
+}) => {
   const [leyendaAbierta, setLeyendaAbierta] = useState(false)
 
   // Cada consulta nueva llega con la leyenda plegada. Si se quedara abierta de
@@ -132,9 +153,19 @@ export const SgcPanel = ({ activeKeys, subLayers, chosenSub, legends, featureInf
                 {sgcLayerByKey(resultado.layerKey)?.label ?? resultado.layerKey}
                 {resultado.layerName ? ` · ${resultado.layerName}` : ""}
               </p>
-              {resultado.attributes.map((atributo) => (
-                <Atributo key={atributo.field} {...atributo} />
-              ))}
+              {/* Los códigos, con su significado cuando el servicio lo publica:
+                  «Qal» pasa a «Qal — Depósitos aluviales». Y el nombre del campo,
+                  con el alias que el SGC le puso para enseñarlo. */}
+              {resultado.attributes.map((atributo) => {
+                const ficha = fieldInfo?.[`${resultado.layerKey}:${resultado.layerId}`]
+                return (
+                  <Atributo
+                    key={atributo.field}
+                    field={ficha?.aliases?.[atributo.field] ?? atributo.field}
+                    value={describeValue(atributo.value, ficha?.meanings)}
+                  />
+                )
+              })}
             </div>
           ))}
         </div>

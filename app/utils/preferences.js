@@ -26,6 +26,14 @@ import { BASEMAPS, DEFAULT_BASEMAP } from "./basemaps"
 import { CRS_LIST, SOURCE_CRS } from "./crs"
 import { DEFAULT_ORDER, initialLayerState, THEME_LAYERS } from "./themeAreas"
 import { COMPASS_SIZE_DEFAULT, COMPASS_SIZE_MAX, COMPASS_SIZE_MIN } from "./compassSize"
+import {
+  PANEL_HEIGHT_DEFAULT,
+  PANEL_HEIGHT_MAX,
+  PANEL_HEIGHT_MIN,
+  PANEL_WIDTH_DEFAULT,
+  PANEL_WIDTH_MAX,
+  PANEL_WIDTH_MIN,
+} from "./panelSize"
 
 /**
  * La clave lleva versión.
@@ -48,6 +56,8 @@ export const defaultPreferences = () => ({
   layers: initialLayerState(),
   layerOrder: [...DEFAULT_ORDER],
   compassSize: COMPASS_SIZE_DEFAULT,
+  panelWidth: PANEL_WIDTH_DEFAULT,
+  panelHeight: PANEL_HEIGHT_DEFAULT,
 })
 
 const dentroDelRango = (valor, min, max, porOmision) => {
@@ -110,6 +120,8 @@ export const sanitizePreferences = (raw) => {
     layers,
     layerOrder: sanitizeOrder(raw.layerOrder),
     compassSize: dentroDelRango(raw.compassSize, COMPASS_SIZE_MIN, COMPASS_SIZE_MAX, base.compassSize),
+    panelWidth: dentroDelRango(raw.panelWidth, PANEL_WIDTH_MIN, PANEL_WIDTH_MAX, base.panelWidth),
+    panelHeight: dentroDelRango(raw.panelHeight, PANEL_HEIGHT_MIN, PANEL_HEIGHT_MAX, base.panelHeight),
   }
 }
 

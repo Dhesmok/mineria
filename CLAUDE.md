@@ -79,9 +79,10 @@ app/
     demTileLoader.js      Bajarlas, decodificarlas a alturas y recordarlas
     terrainRaster.js      Horn sobre el mosaico → los píxeles de la capa
     sgcLayers.js          Catálogo del SGC, direcciones y lectura de sus respuestas
+    panelSize.js          Topes del panel de capas, que se puede redimensionar
     mapUtils.js, mapLabelsGL.js, drawStyles.js
   components/SgcPanel.jsx   Ficha del punto tocado y leyenda del SGC
-  api/sgc/route.js        Intermediario del SGC: imagen, árbol de capas, identify y leyenda
+  api/sgc/route.js        Intermediario del SGC: imagen, árbol de capas, campos, identify y leyenda
 components/ui/            shadcn
 scripts/
   copy-maplibre-worker.mjs  Copia el worker de MapLibre a public/ (pre-dev y pre-build)
@@ -115,11 +116,20 @@ Ver la cabecera de `utils/sgcLayers.js`.
 
 **Pero una imagen sola no es una capa: es un adorno.** Para que sirva hacen falta
 las otras tres preguntas que el mismo servicio responde, y por eso `/api/sgc`
-tiene cuatro modos y no uno: `meta` (qué contiene el servicio), `identify` (qué
-hay en este punto) y `leyenda` (qué significa cada color), además de la imagen. Si
-mañana se suma otra entidad que publique en ArcGIS, esos cuatro son el mínimo — se
+tiene cinco modos y no uno: `meta` (qué contiene el servicio), `identify` (qué hay
+en este punto), `leyenda` (qué significa cada color) y `campos` (cómo se llama
+cada campo y qué significa cada código), además de la imagen. Si mañana se suma
+otra entidad que publique en ArcGIS, esos son el mínimo — se
 comprobó por las malas, con cinco capas de geología que dibujaban manchas que no
 se podían consultar.
+
+**Los códigos que devuelve ArcGIS no se enseñan pelados.** Una ficha que dice
+`COD: Qal` obliga a saberse la tabla de memoria. El propio servicio publica esa
+tabla en la simbología de cada capa —`MapServer/<capa>?f=json`, en
+`drawingInfo.renderer.uniqueValueInfos`—, así que `Qal` se enseña como «Qal —
+Depósitos aluviales» sin ningún diccionario nuestro que mantener. El código no se
+sustituye, se acompaña: es lo que aparece en los informes y en los mapas
+impresos.
 
 **Y la imagen es una por vista, no una rejilla de teselas.** ArcGIS dibuja cada
 imagen que le piden sin saber nada de las de al lado, así que rotula cada una por
@@ -246,7 +256,20 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     que es siempre. La condición correcta es que exista la fuente. Es la misma
     trampa que obligó a escuchar `styledata` en vez de `load` al arrancar el mapa.
 
-17. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
+17. **Un control que se arrastra escucha el «soltar» en la ventana, no en sí
+    mismo.** La barra de opacidad perdía el valor elegido si se soltaba el ratón
+    fuera de ella, y el tirador del panel no funcionaba en absoluto con el
+    puntero capturado. Los dos se arreglaron igual: `window.addEventListener`
+    para `pointerup` y `pointercancel`, y leer el valor final del propio
+    elemento. Un `pointerup` colgado del control no llega si el dedo ya no está
+    encima.
+
+    Y **la barra de desplazamiento se lleva el clic**: el tirador del panel
+    estaba montado sobre su borde derecho, donde aparece la barra en cuanto la
+    lista crece. Funcionaba con el panel corto y dejaba de funcionar justo cuando
+    hacía falta agrandarlo. Va por fuera, con `left-full`.
+
+18. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
     cosas.** `mapbox-gl-draw` cancela el `touchend`, y sin él el navegador no
     genera el clic de compatibilidad. Todo lo que responda a tocar el mapa se
     engancha por partida doble: `map.on("click", …)` y `onMapTap(map, …)` de

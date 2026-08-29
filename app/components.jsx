@@ -16,6 +16,12 @@ import { CrsPicker } from "./components/CrsPicker"
 import { ExpedientSearch } from "./components/ExpedientSearch"
 import { matchesFilters } from "./utils/layerFilters"
 import { readPreferences, writePreferences } from "./utils/preferences"
+import {
+  PANEL_HEIGHT_DEFAULT,
+  PANEL_WIDTH_DEFAULT,
+  heightFromPointer,
+  widthFromPointer,
+} from "./utils/panelSize"
 
 // `ssr: false` es obligatorio: MapLibre necesita el objeto `window` y una
 // tarjeta gráfica, y ninguno de los dos existe cuando Next genera la página en
@@ -68,6 +74,12 @@ export default function Component() {
   // porque hace falta el mapa para pedirlo, pero se dibuja aquí, bajo su capa:
   // encender un departamento es parte de encender la capa, no una ventana aparte.
   const [sgcState, setSgcState] = useState({})
+  // Cuánto mide el panel. Se puede arrastrar el borde derecho y el de abajo,
+  // porque con un departamento desplegado la lista no cabe en los 350 px de
+  // fábrica y los nombres se cortan. Ver `utils/panelSize.js`.
+  const [panelWidth, setPanelWidth] = useState(PANEL_WIDTH_DEFAULT)
+  const [panelHeight, setPanelHeight] = useState(PANEL_HEIGHT_DEFAULT)
+  const panelRef = useRef(null)
 
   // Qué ventana flotante está abierta y a qué botón se ancla.
   const [filterPopover, setFilterPopover] = useState(null)
@@ -111,6 +123,8 @@ export default function Component() {
     setSelectedCoordinateSystem(prefs.crs)
     setLayers(prefs.layers)
     setLayerOrder(prefs.layerOrder)
+    setPanelWidth(prefs.panelWidth)
+    setPanelHeight(prefs.panelHeight)
     setPrefsCargadas(true)
   }, [])
 
@@ -132,6 +146,48 @@ export default function Component() {
   useEffect(() => {
     if (prefsCargadas) writePreferences({ crs: selectedCoordinateSystem })
   }, [selectedCoordinateSystem, prefsCargadas])
+
+  useEffect(() => {
+    if (prefsCargadas) writePreferences({ panelWidth, panelHeight })
+  }, [panelWidth, panelHeight, prefsCargadas])
+
+  /**
+   * Arrastrar un borde del panel.
+   *
+   * Se escucha en la ventana y no en el propio tirador. La primera versión
+   * capturaba el puntero en el tirador, que es lo que recomienda la
+   * documentación, y no funcionaba: el arrastre no movía nada. En la ventana
+   * funciona siempre y además resuelve solo el caso de soltar el ratón lejos del
+   * borde —encima del mapa, o fuera de la página—, que es donde un arrastre se
+   * quedaba pegado. Es el mismo arreglo que necesitó la barra de opacidad, y por
+   * el mismo motivo.
+   *
+   * El ancho se mide desde el borde izquierdo del panel y no por lo que se ha
+   * movido el ratón: así, si el puntero se pasa de los topes y vuelve, el borde
+   * vuelve con él en vez de quedarse descolgado. Ver `utils/panelSize.js`.
+   */
+  const arrastrarBorde = useCallback((eje) => (evento) => {
+    evento.preventDefault()
+    const caja = panelRef.current?.getBoundingClientRect()
+    if (!caja) return
+
+    const mover = (e) => {
+      if (eje === "ancho") setPanelWidth(widthFromPointer(e.clientX, caja.left))
+      else setPanelHeight(heightFromPointer(e.clientY, caja.top, window.innerHeight))
+    }
+    const soltar = () => {
+      window.removeEventListener("pointermove", mover)
+      window.removeEventListener("pointerup", soltar)
+      window.removeEventListener("pointercancel", soltar)
+      document.body.style.userSelect = ""
+    }
+    // Sin esto, arrastrar selecciona el texto del panel de paso y queda todo
+    // azul hasta el siguiente clic.
+    document.body.style.userSelect = "none"
+    window.addEventListener("pointermove", mover)
+    window.addEventListener("pointerup", soltar)
+    window.addEventListener("pointercancel", soltar)
+  }, [])
 
   const filtroDe = useCallback(
     (areaId) => areaFilters[areaId] ?? { selections: {}, areaRange: null },
@@ -357,15 +413,26 @@ export default function Component() {
             : "translate-y-[calc(100%-2.75rem)] md:translate-y-0 md:-translate-x-[calc(100%-0.5rem)]"
         }`}
       >
+      {/* El panel y sus dos tiradores. El envoltorio existe solo para que los
+          tiradores puedan colocarse sobre los bordes: dentro del panel se
+          desplazarían con el contenido, porque el panel se desplaza por dentro. */}
       <div
+        className="relative flex w-full min-w-0 md:w-auto"
+        style={{ "--panel-ancho": `${panelWidth}px`, "--panel-alto": `${panelHeight * 100}vh` }}
+      >
+      <div
+        ref={panelRef}
         // El alto máximo con desplazamiento interno no es un adorno: el panel
         // crece cada vez que se le añade algo, y al añadirle el campo de
         // coordenadas su fila de botones bajó hasta meterse debajo de los
         // controles del mapa, que quedaban por encima e impedían pulsarla. Con
         // un tope, el panel se desplaza por dentro en vez de invadir la
-        // pantalla. Los 5rem de abajo son para la escala y la lectura del
-        // cursor, que viven en esa esquina.
-        className="flex max-h-[75vh] w-full flex-col overflow-y-auto overflow-x-hidden rounded-t-xl bg-white shadow-lg md:max-h-[calc(100vh-5rem)] md:w-[350px] md:rounded-xl"
+        // pantalla.
+        //
+        // En pantalla grande las dos medidas las pone el usuario arrastrando los
+        // bordes; en el teléfono no, porque ahí el panel es una hoja que sube
+        // desde abajo y no hay borde libre que agarrar.
+        className="flex max-h-[75vh] w-full flex-col overflow-y-auto overflow-x-hidden rounded-t-xl bg-white shadow-lg md:max-h-[var(--panel-alto)] md:w-[var(--panel-ancho)] md:rounded-xl"
       >
         <div className="p-4 space-y-4">
           {/* El buscador de expedientes se mudó a la lupa del área de Minería.
@@ -456,6 +523,40 @@ export default function Component() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Los tiradores de los bordes. Delgados y sin color hasta que se pasa por
+          encima: un panel con marco grueso pesa en pantalla, y esto solo hace
+          falta cuando hace falta. El área que responde al ratón es más ancha que
+          la raya que se ve, porque acertarle a tres píxeles es un ejercicio de
+          puntería.
+
+          Van **por fuera** del panel —`left-full`, `top-full`— y no montados
+          sobre su borde, que es lo primero que probé. Cuando el panel tiene
+          contenido de sobra le sale barra de desplazamiento, y la barra se queda
+          con el clic aunque encima haya otra cosa: el tirador funcionaba con el
+          panel corto y dejaba de funcionar en cuanto la lista crecía, que es
+          justo cuando hace falta agrandarlo. */}
+      <span
+        onPointerDown={arrastrarBorde("ancho")}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Ancho del panel"
+        title="Arrastra para cambiar el ancho del panel"
+        className="absolute inset-y-0 left-full hidden w-2.5 cursor-col-resize touch-none md:block"
+      >
+        <span className="pointer-events-none absolute inset-y-3 left-0.5 w-1 rounded-full bg-transparent transition-colors hover:bg-slate-300" />
+      </span>
+      <span
+        onPointerDown={arrastrarBorde("alto")}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Alto del panel"
+        title="Arrastra para cambiar el alto del panel"
+        className="absolute inset-x-0 top-full hidden h-2.5 cursor-row-resize touch-none md:block"
+      >
+        <span className="pointer-events-none absolute inset-x-3 top-0.5 h-1 rounded-full bg-transparent transition-colors hover:bg-slate-300" />
+      </span>
       </div>
 
         {/* La pestaña. Va fuera de la caja que se desplaza por dentro, para que
