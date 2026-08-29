@@ -1,123 +1,143 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ChevronDown, X } from "lucide-react"
 
-import { SGC_LAYERS, sgcLayerByKey } from "../utils/sgcLayers"
+import { SGC_LAYERS, linkPartsOf, sgcLayerByKey, shortLinkText } from "../utils/sgcLayers"
 
 /**
- * Lo que hace legible un mapa geológico: la leyenda y la ficha del punto.
+ * Lo que hace legible un mapa geológico: la ficha del punto y la leyenda.
  *
  * **Por qué existe.** Las capas del SGC llegan dibujadas, con su simbología. Eso
  * es lo correcto —el color *es* el dato— pero solo hasta cierto punto: sin
  * leyenda son manchas bonitas, y sin poder preguntarle a una mancha qué unidad
- * es, no se puede trabajar con ellas. Un visor que enseña geología y no deja
- * consultarla no sirve para lo que se abre.
+ * es, no se puede trabajar con ellas.
  *
- * **Una sola tarjeta y no dos**, con las dos cosas dentro. Son dos preguntas del
- * mismo tipo —«qué significa esto que veo»— y separarlas en dos ventanas
- * flotantes habría llenado la columna derecha, que ya lleva la leyenda de
- * pendiente y la ventana del 3D.
+ * **Aparece al tocar el mapa y se cierra con la equis.** La primera versión la
+ * dejaba puesta mientras hubiera una capa de geología encendida, diciendo «toca
+ * el mapa». Ocupaba sitio permanentemente para no decir nada: una tarjeta que
+ * está siempre deja de leerse. Ahora se comporta como cualquier ficha —sale
+ * cuando hay algo que enseñar y se va cuando estorba—.
  *
- * **La ficha va arriba y la leyenda abajo.** El orden es el de la atención:
- * después de tocar el mapa, lo que se busca es la respuesta; la leyenda es
- * consulta de fondo y por eso viene plegada.
+ * **Una sola tarjeta y no dos**, con la ficha y la leyenda dentro. Son dos
+ * preguntas del mismo tipo —«qué significa esto que veo»— y separarlas en dos
+ * ventanas habría llenado la columna derecha, que ya lleva la leyenda de
+ * pendiente y la ventana del 3D. La ficha va arriba porque es lo que se busca
+ * después de tocar; la leyenda es consulta de fondo y por eso viene plegada.
  */
 
 /** Cuánto puede crecer la leyenda antes de hacerse desplazable. */
 const ALTO_LEYENDA = "14rem"
 
-/** Una fila de la ficha: nombre del campo y su valor. */
+/**
+ * Una fila de la ficha: nombre del campo y su valor, con los enlaces vivos.
+ *
+ * El servicio de estado de la cartografía devuelve direcciones —la memoria
+ * explicativa de una plancha, su publicación—, y como texto plano obligan a
+ * copiarlas a mano. `linkPartsOf` decide qué trozo es una dirección; aquí solo
+ * se pinta.
+ */
 const Atributo = ({ field, value }) => (
   <div className="flex items-baseline gap-2 py-[3px]">
     <span className="w-[38%] shrink-0 truncate text-[10px] uppercase tracking-wide text-slate-400" title={field}>
       {field}
     </span>
-    <span className="flex-1 text-[11px] leading-snug text-slate-700">{value}</span>
+    <span className="min-w-0 flex-1 break-words text-[11px] leading-snug text-slate-700">
+      {linkPartsOf(value).map((parte, i) =>
+        parte.href ? (
+          <a
+            key={i}
+            href={parte.href}
+            target="_blank"
+            // `noreferrer` además de `noopener`: la página que se abre no tiene
+            // por qué saber desde dónde se llegó.
+            rel="noopener noreferrer"
+            title={parte.href}
+            className="break-all font-medium text-blue-600 underline decoration-blue-300 underline-offset-2 transition-colors hover:text-blue-700 hover:decoration-blue-500"
+          >
+            {shortLinkText(parte.text)}
+          </a>
+        ) : (
+          <span key={i}>{parte.text}</span>
+        ),
+      )}
+    </span>
   </div>
 )
 
 export const SgcPanel = ({ activeKeys, subLayers, chosenSub, legends, featureInfo, onDismiss }) => {
   const [leyendaAbierta, setLeyendaAbierta] = useState(false)
 
-  if (activeKeys.length === 0) return null
+  // Cada consulta nueva llega con la leyenda plegada. Si se quedara abierta de
+  // la consulta anterior, la respuesta —que es lo que se acaba de pedir— saldría
+  // empujada fuera de la pantalla por doscientas filas de simbología.
+  useEffect(() => {
+    if (featureInfo?.loading) setLeyendaAbierta(false)
+  }, [featureInfo?.loading])
 
-  const resultados = featureInfo?.results ?? []
-  const consultando = Boolean(featureInfo?.loading)
+  // Sin consulta no hay tarjeta: es un popup, no un panel fijo.
+  if (!featureInfo) return null
+
+  const resultados = featureInfo.results ?? []
+  const consultando = Boolean(featureInfo.loading)
 
   /**
    * Qué leyendas se enseñan.
    *
    * Solo las de las subcapas elegidas cuando hay elección: con «Geología por
    * departamentos» y Antioquia marcada, la leyenda de los otros treinta y un
-   * departamentos sería una lista de doscientas filas de las que ninguna está en
-   * pantalla.
-   *
-   * Sin nada marcado no se filtra, porque entonces el servicio dibuja lo que
-   * trae de fábrica y la leyenda completa es lo único que se corresponde con eso.
+   * departamentos sería una lista de cientos de filas de las que ninguna está en
+   * pantalla. Y sin nada marcado, ninguna: esa capa no está dibujando nada, así
+   * que una leyenda ahí describiría algo que no se ve.
    */
   const leyendaVisible = activeKeys.flatMap((key) => {
     const elegidas = chosenSub?.[key] ?? []
     const tieneElección = (subLayers?.[key]?.length ?? 0) > 0
     return (legends?.[key] ?? [])
-      .filter((capa) => !tieneElección || elegidas.length === 0 || elegidas.includes(capa.layerId))
+      .filter((capa) => !tieneElección || elegidas.includes(capa.layerId))
       .map((capa) => ({ ...capa, key }))
   })
 
   return (
     <div className="w-[min(15rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-      <p className="flex items-baseline justify-between gap-2 border-b border-slate-100 bg-slate-50 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
-        <span>Geología</span>
-        <span className="shrink-0 text-[10px] font-normal text-slate-400">SGC</span>
-      </p>
+      <div className="flex items-baseline justify-between gap-2 border-b border-slate-100 bg-slate-50 px-2.5 py-1.5">
+        <p className="text-[11px] font-medium text-slate-600">
+          {consultando ? "Consultando…" : "En este punto"}
+        </p>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Cerrar la consulta"
+          className="-mr-1 shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-600"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
-      {/* La ficha del punto tocado. */}
-      {featureInfo ? (
-        <div className="border-b border-slate-100">
-          <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2">
-            <span className="text-[11px] font-medium text-slate-700">
-              {consultando ? "Consultando…" : "En este punto"}
-            </span>
-            <button
-              type="button"
-              onClick={onDismiss}
-              aria-label="Cerrar la consulta"
-              className="-mr-1 shrink-0 rounded p-1 text-slate-400 transition-colors hover:text-slate-600"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          {!consultando && resultados.length === 0 ? (
-            // Decirlo, y no dejar la tarjeta vacía: «no hay dato aquí» y «la
-            // consulta falló» se ven igual si no se distinguen, y la primera es
-            // una respuesta legítima —hay huecos de cartografía—.
-            <p className="px-2.5 pb-2 pt-1 text-[11px] leading-snug text-slate-500">
-              No hay unidades cartografiadas en este punto para las capas encendidas.
-            </p>
-          ) : (
-            <div className="max-h-[16rem] overflow-y-auto px-2.5 pb-2 pt-1">
-              {resultados.map((resultado, i) => (
-                <div key={`${resultado.layerKey}-${i}`} className={i > 0 ? "mt-2.5 border-t border-slate-100 pt-2" : ""}>
-                  <p className="text-[11px] font-medium leading-snug text-slate-800">
-                    {resultado.value || resultado.layerName}
-                  </p>
-                  <p className="mb-1 text-[10px] text-slate-400">
-                    {sgcLayerByKey(resultado.layerKey)?.label ?? resultado.layerKey}
-                    {resultado.layerName ? ` · ${resultado.layerName}` : ""}
-                  </p>
-                  {resultado.attributes.map((atributo) => (
-                    <Atributo key={atributo.field} {...atributo} />
-                  ))}
-                </div>
+      {!consultando && resultados.length === 0 ? (
+        // Decirlo, y no dejar la tarjeta vacía: «no hay dato aquí» y «la consulta
+        // falló» se ven igual si no se distinguen, y la primera es una respuesta
+        // legítima —hay huecos de cartografía—.
+        <p className="px-2.5 py-2 text-[11px] leading-snug text-slate-500">
+          No hay unidades cartografiadas en este punto para las capas encendidas.
+        </p>
+      ) : (
+        <div className="max-h-[16rem] overflow-y-auto px-2.5 py-2">
+          {resultados.map((resultado, i) => (
+            <div key={`${resultado.layerKey}-${i}`} className={i > 0 ? "mt-2.5 border-t border-slate-100 pt-2" : ""}>
+              <p className="text-[11px] font-medium leading-snug text-slate-800">
+                {resultado.value || resultado.layerName}
+              </p>
+              <p className="mb-1 text-[10px] text-slate-400">
+                {sgcLayerByKey(resultado.layerKey)?.label ?? resultado.layerKey}
+                {resultado.layerName ? ` · ${resultado.layerName}` : ""}
+              </p>
+              {resultado.attributes.map((atributo) => (
+                <Atributo key={atributo.field} {...atributo} />
               ))}
             </div>
-          )}
+          ))}
         </div>
-      ) : (
-        <p className="border-b border-slate-100 px-2.5 py-2 text-[11px] leading-snug text-slate-500">
-          Toca el mapa para ver qué unidad geológica hay en un punto.
-        </p>
       )}
 
       {/* La leyenda, plegada. */}
@@ -125,7 +145,7 @@ export const SgcPanel = ({ activeKeys, subLayers, chosenSub, legends, featureInf
         type="button"
         onClick={() => setLeyendaAbierta((abierta) => !abierta)}
         aria-expanded={leyendaAbierta}
-        className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] text-slate-600 transition-colors hover:bg-slate-50"
+        className="flex w-full items-center justify-between gap-2 border-t border-slate-100 px-2.5 py-1.5 text-[11px] text-slate-600 transition-colors hover:bg-slate-50"
       >
         <span>Simbología</span>
         <span className="flex items-center gap-1.5 text-[10px] text-slate-400">

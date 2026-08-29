@@ -2,17 +2,21 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import {
   SGC_LAYERS,
+  defaultSubSelection,
   identifyResultsFrom,
   legendFrom,
   sgcIdentifyUrl,
   sgcLayerId,
   sgcLegendUrl,
   sgcMetaUrl,
+  sgcImageSize,
+  sgcImageUrl,
   sgcSourceId,
-  sgcTileTemplate,
   subLayersFrom,
 } from "../../utils/sgcLayers"
+import { SGC_ATTRIBUTION_LAYER_ID } from "../../utils/mapStyles"
 import { onMapTap } from "../../utils/tapGesture"
+import { debounce } from "@/lib/utils"
 
 /**
  * Las capas de geología del SGC sobre el mapa.
@@ -42,6 +46,25 @@ import { onMapTap } from "../../utils/tapGesture"
 
 /** Cuánto se espera tras un clic antes de dar la consulta por perdida. */
 const IDENTIFY_TIMEOUT_MS = 15000
+
+/**
+ * Cuánto se espera a que el usuario suelte el mapa antes de pedir la imagen.
+ *
+ * Sin esta pausa, arrastrar el mapa lanzaría una petición por cada parada
+ * intermedia a un servidor que tarda segundos en contestar.
+ */
+const REDIBUJO_MS = 350
+
+/**
+ * Un píxel transparente, para dejar una capa en blanco sin pedir nada.
+ *
+ * Una fuente de tipo `image` no se puede vaciar: solo se le puede dar otra
+ * imagen. Esta es la forma de decir «aquí no va nada» sin ir a buscar un archivo.
+ */
+const PIXEL_TRANSPARENTE =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+/** La marca que se guarda para no volver a vaciar una capa ya vacía. */
+const VACIA = "vacia"
 
 /**
  * Pide algo a nuestra ruta y lo pasa por un traductor, una sola vez por capa.
@@ -81,6 +104,8 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
   chosenRef.current = chosenSub
   const stateRef = useRef(layerState)
   stateRef.current = layerState
+  const subsRef = useRef(subLayers)
+  subsRef.current = subLayers
   const enabledRef = useRef(enabled)
   enabledRef.current = enabled
 
@@ -120,9 +145,7 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
           // lista. Solo la primera vez: después manda lo que el usuario haya
           // tocado.
           setChosenSub((actual) =>
-            actual[key]
-              ? actual
-              : { ...actual, [key]: grupos.filter((g) => g.on).flatMap((g) => g.ids) },
+            actual[key] ? actual : { ...actual, [key]: defaultSubSelection(grupos) },
           )
         },
       })
@@ -158,46 +181,102 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
       // con la opacidad vieja durante un instante.
       map.setPaintProperty(id, "raster-opacity", estado?.opacity ?? 0.6)
     })
+
+    // La atribución del SGC se enciende con la primera capa suya y se apaga con
+    // la última. Va por su cuenta porque MapLibre no admite `attribution` en una
+    // fuente de imagen: ver la nota en `mapStyles.js`.
+    if (map.getLayer(SGC_ATTRIBUTION_LAYER_ID)) {
+      map.setLayoutProperty(
+        SGC_ATTRIBUTION_LAYER_ID,
+        "visibility",
+        SGC_LAYERS.some(({ key }) => layerState?.[key]?.on) ? "visible" : "none",
+      )
+    }
   }, [mapInstance, layerState, mapRef])
 
   /**
-   * Cambiar de subcapas obliga a rehacer la fuente, no basta con avisar.
+   * Pedirle al servicio la imagen del trozo que se está viendo.
    *
-   * MapLibre guarda las teselas por su dirección. Si se cambia lo que se pide sin
-   * cambiar la dirección, sigue enseñando las que ya tenía: el mapa se quedaría
-   * en Antioquia por mucho que se marcara Boyacá. Por eso la selección viaja
-   * dentro de la URL y aquí se sustituye la fuente entera.
+   * Una por capa encendida y por vista, no una rejilla de teselas. El motivo está
+   * en `sgcImageUrl`: con teselas, ArcGIS rotula cada una por separado y los
+   * números salían repetidos —la grilla de planchas escribía el de cada
+   * cuadrícula cuatro veces—.
    *
-   * Y solo cuando la dirección cambia de verdad: `setTiles` tira lo que la
-   * fuente tuviera cargado, así que llamarlo con la misma dirección haría
-   * parpadear las otras cuatro capas cada vez que se marca un departamento.
+   * Se vuelve a pedir cuando cambia lo que se ve o lo que se ha marcado, y solo
+   * si la dirección resultante es distinta de la que ya está puesta: sin esa
+   * comparación, marcar un departamento haría parpadear las otras cuatro capas.
    */
   const huellaSeleccion = JSON.stringify(chosenSub)
-  // Se arranca con lo que `mapStyles` ya dejó puesto —la plantilla sin
-  // selección—, para que la primera pasada no recargue las cinco fuentes
-  // poniéndoles exactamente la dirección que ya tenían.
-  const puestas = useRef(
-    Object.fromEntries(SGC_LAYERS.map(({ key }) => [key, sgcTileTemplate(key)])),
-  )
-  useEffect(() => {
+  const puestas = useRef({})
+
+  const repintar = useCallback(() => {
     const map = mapRef.current
     // La condición es que exista la fuente, no `isStyleLoaded()`: ese devuelve
     // falso mientras alguna fuente siga cargando, y estas capas tardan segundos
-    // en responder. Esperarlo dejaría la selección sin aplicar justo cuando el
-    // SGC va lento, que es siempre. Es la misma trampa que obligó a escuchar
+    // en responder. Esperarlo dejaría el cambio sin aplicar justo cuando el SGC
+    // va lento, que es siempre. Es la misma trampa que obligó a escuchar
     // `styledata` en vez de `load` al arrancar el mapa.
     if (!map) return
 
+    const limites = map.getBounds()
+    const [oeste, sur] = mercator(limites.getWest(), limites.getSouth())
+    const [este, norte] = mercator(limites.getEast(), limites.getNorth())
+    const recuadro = [oeste, sur, este, norte]
+    const lienzo = map.getCanvas()
+    const [ancho, alto] = sgcImageSize(recuadro, [lienzo.width, lienzo.height])
+
+    // Las cuatro esquinas en el orden que espera MapLibre: NO, NE, SE, SO.
+    const esquinas = [
+      [limites.getWest(), limites.getNorth()],
+      [limites.getEast(), limites.getNorth()],
+      [limites.getEast(), limites.getSouth()],
+      [limites.getWest(), limites.getSouth()],
+    ]
+
     SGC_LAYERS.forEach(({ key }) => {
       const fuente = map.getSource(sgcSourceId(key))
-      if (!fuente?.setTiles) return
+      if (!fuente?.updateImage) return
+      // Una capa apagada no pide nada. Es lo que hace que declarar las cinco
+      // desde el arranque no cueste ni una petición.
+      if (!stateRef.current?.[key]?.on) return
 
-      const plantilla = sgcTileTemplate(key, chosenSub[key] ?? [])
-      if (puestas.current[key] === plantilla) return
-      puestas.current[key] = plantilla
-      fuente.setTiles([plantilla])
+      const elegidas = chosenRef.current[key] ?? []
+      // Desmarcarlo todo tiene que dejar la capa en blanco. Sin esta salida, una
+      // petición sin subcapas hace que el servicio dibuje las suyas de fábrica:
+      // el usuario desmarca los treinta y dos departamentos y reaparece
+      // Antioquia, que es exactamente lo contrario de lo que pidió.
+      if ((subsRef.current[key]?.length ?? 0) > 0 && elegidas.length === 0) {
+        if (puestas.current[key] === VACIA) return
+        puestas.current[key] = VACIA
+        fuente.updateImage({ url: PIXEL_TRANSPARENTE, coordinates: esquinas })
+        return
+      }
+
+      const url = sgcImageUrl({
+        key,
+        bbox: recuadro,
+        width: ancho,
+        height: alto,
+        sub: elegidas,
+      })
+      if (puestas.current[key] === url) return
+      puestas.current[key] = url
+      fuente.updateImage({ url, coordinates: esquinas })
     })
-  }, [mapInstance, huellaSeleccion, chosenSub, mapRef])
+  }, [mapRef])
+
+  /** Al mover el mapa, pero cuando pare: cada imagen tarda segundos en llegar. */
+  useEffect(() => {
+    if (!mapInstance) return
+    const alParar = debounce(repintar, REDIBUJO_MS)
+    mapInstance.on("moveend", alParar)
+    return () => mapInstance.off("moveend", alParar)
+  }, [mapInstance, repintar])
+
+  /** Y al encender una capa, apagarla o cambiar qué subcapas se quieren ver. */
+  useEffect(() => {
+    repintar()
+  }, [mapInstance, huellaEncendidas, huellaSeleccion, repintar])
 
   /**
    * Apagar la última capa de geología borra la respuesta del último clic.

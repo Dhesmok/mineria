@@ -117,13 +117,12 @@ export const sgcLayerByKey = (key) => BY_KEY.get(key)
 export const SGC_KEYS = SGC_LAYERS.map((layer) => layer.key)
 
 /**
- * Tamaño de la tesela que se le pide al servicio.
+ * Cuánto puede medir, como mucho, la imagen que se pide.
  *
- * 512 y no 256: son cuatro veces menos peticiones para la misma pantalla, y
- * estos servicios responden lento —dibujan un mapa entero por petición—, así que
- * lo que importa es el número de idas y venidas, no el peso de cada una.
+ * ArcGIS rechaza tamaños grandes y estos servicios ya van lentos de por sí. Dos
+ * mil píxeles cubren una pantalla 4K con holgura.
  */
-export const SGC_TILE_SIZE = 512
+export const SGC_MAX_IMAGE_PX = 2048
 
 /**
  * La dirección real del servicio para un recuadro.
@@ -134,28 +133,71 @@ export const SGC_TILE_SIZE = 512
  * `transparent=true` para que se vea el mapa de fondo por debajo, que es como se
  * usa una capa geológica: encima de la imagen o del relieve.
  *
+ * **El tamaño tiene que guardar la misma proporción que el recuadro.** Si no,
+ * ArcGIS ensancha el recuadro por su cuenta para que cuadren, y la imagen acaba
+ * cubriendo un trozo de terreno distinto del que se pidió: el mapa sale
+ * desplazado sin que nada falle.
+ *
  * @param {string} bbox el recuadro «oeste,sur,este,norte» en metros de Web Mercator
+ * @param {string} size «ancho,alto» en píxeles
  */
-export const sgcExportUrl = (service, bbox, size = SGC_TILE_SIZE, layers = "") =>
+export const sgcExportUrl = (service, bbox, size, layers = "") =>
   `${service}/export?bbox=${bbox}&bboxSR=3857&imageSR=3857` +
-  `&size=${size},${size}&dpi=96&format=png32&transparent=true` +
+  `&size=${size}&dpi=96&format=png32&transparent=true` +
   (layers ? `&layers=${layers}` : "") +
   "&f=image"
 
 /**
- * La plantilla que se le da a MapLibre.
+ * Qué tamaño de imagen pedir para un recuadro y una pantalla.
  *
- * `{bbox-epsg-3857}` lo sustituye MapLibre por el recuadro de cada tesela. Es el
- * mismo mecanismo con el que se consumen los servicios WMS.
- *
- * `sub` son los índices de las subcapas que hay que dibujar, separados por
- * comas, cuando la capa tiene subcapas elegibles. Van en la dirección y no en
- * una llamada aparte porque cambiarlos tiene que hacer que MapLibre vuelva a
- * pedir las teselas: si la dirección no cambia, se queda con las que ya tiene.
+ * Devuelve `[ancho, alto]` en píxeles, con la proporción exacta del recuadro y
+ * sin pasarse del tope. Es función pura y está aparte porque es justo la cuenta
+ * que, hecha a ojo, descoloca el mapa.
  */
-export const sgcTileTemplate = (key, sub = []) => {
-  const base = `/api/sgc?capa=${encodeURIComponent(key)}&bbox={bbox-epsg-3857}`
-  return sub.length ? `${base}&sub=${sub.join(",")}` : base
+export const sgcImageSize = (bboxMeters, screenPx, max = SGC_MAX_IMAGE_PX) => {
+  const [oeste, sur, este, norte] = bboxMeters
+  const ancho = Math.abs(este - oeste)
+  const alto = Math.abs(norte - sur)
+  if (!(ancho > 0) || !(alto > 0)) return [1, 1]
+
+  const proporcion = ancho / alto
+  let w = Math.min(Math.max(Math.round(screenPx?.[0] ?? max), 1), max)
+  let h = Math.max(Math.round(w / proporcion), 1)
+  if (h > max) {
+    h = max
+    w = Math.max(Math.round(h * proporcion), 1)
+  }
+  return [w, h]
+}
+
+/**
+ * La dirección de **una sola imagen** para el trozo de mapa que se está viendo.
+ *
+ * ## Por qué una imagen y no teselas, que es lo que había
+ *
+ * Porque los rótulos salían repetidos. La grilla de planchas escribía el número
+ * de cada cuadrícula cuatro veces, una por cada tesela que la tocaba: ArcGIS
+ * dibuja cada imagen que le piden sin saber nada de las de al lado, así que
+ * coloca el rótulo en cada una. Con teselas eso no tiene arreglo — no es un
+ * ajuste que falte, es que la pregunta está mal hecha.
+ *
+ * Pidiendo una sola imagen del rectángulo visible, el servicio rotula una vez,
+ * que es lo que hace su propio visor. De paso son menos idas y venidas: antes
+ * eran entre cuatro y nueve peticiones por pantalla a un servidor que tarda
+ * segundos.
+ *
+ * Lo que se pierde: al mover el mapa hay que volver a pedirla entera, mientras
+ * que las teselas que seguían en pantalla se reaprovechaban. Para un servicio
+ * lento y con rótulos, sale a cuenta.
+ */
+export const sgcImageUrl = ({ key, bbox, width, height, sub = [] }) => {
+  const params = new URLSearchParams({
+    capa: key,
+    bbox: bbox.join(","),
+    tam: `${Math.round(width)},${Math.round(height)}`,
+  })
+  if (sub.length) params.set("sub", sub.join(","))
+  return `/api/sgc?${params}`
 }
 
 /** La dirección de nuestra ruta para preguntarle al servicio qué capas tiene. */
@@ -210,29 +252,78 @@ export const subLayersFrom = (serviceJson) => {
   const capas = serviceJson?.layers
   if (!Array.isArray(capas) || capas.length === 0) return []
 
+  const porId = new Map(capas.map((capa) => [capa?.id, capa]))
   const raiz = capas.filter((capa) => (capa?.parentLayerId ?? -1) < 0)
   // Un servicio plano —sin grupos— no tiene nada que elegir: se dibuja entero.
   const grupos = raiz.filter((capa) => Array.isArray(capa?.subLayerIds) && capa.subLayerIds.length)
   if (grupos.length < 2) return []
 
-  /** Todos los descendientes de un grupo, que es lo que hay que encender. */
-  const descendientes = (id, vistos = new Set()) => {
+  /**
+   * Las **hojas** de un grupo: las capas que de verdad dibujan algo.
+   *
+   * Solo las hojas, y no también el grupo que las contiene, por dos razones. La
+   * primera es la ficha: pedirle a ArcGIS el grupo *y* su contenido devuelve la
+   * misma unidad dos veces, y la ficha la enseñaba repetida. La segunda es que
+   * son las hojas las que tienen nombre propio —«Fallas», «Municipios»— y por
+   * tanto lo único que se puede ofrecer para encender y apagar por separado.
+   */
+  const hojas = (id, vistos = new Set()) => {
     if (vistos.has(id)) return []
     vistos.add(id)
-    const capa = capas.find((c) => c.id === id)
-    const hijos = capa?.subLayerIds ?? []
-    return [id, ...hijos.flatMap((hijo) => descendientes(hijo, vistos))]
+    const capa = porId.get(id)
+    if (!capa) return []
+    const hijos = capa.subLayerIds ?? []
+    if (!hijos.length) return [capa]
+    const dentro = hijos.flatMap((hijo) => hojas(hijo, vistos))
+    // Si un grupo no llega a ninguna hoja —porque el servicio se referencia a sí
+    // mismo, que pasa— se usa el grupo. Mejor pedirle al servicio algo de más que
+    // dejar un departamento sin nada que encender.
+    return dentro.length ? dentro : [capa]
   }
 
+  /**
+   * Si una capa se dibuja de fábrica hay que mirar también a sus padres: ArcGIS
+   * marca la visibilidad capa por capa, y una hoja encendida dentro de un grupo
+   * apagado no se ve. Sin esta cuenta, las casillas arrancaban marcadas en cosas
+   * que no estaban en pantalla.
+   */
+  const visibleDeFabrica = (capa) => {
+    let actual = capa
+    const vistos = new Set()
+    while (actual && !vistos.has(actual.id)) {
+      if (!actual.defaultVisibility) return false
+      vistos.add(actual.id)
+      const padre = actual.parentLayerId
+      actual = padre >= 0 ? porId.get(padre) : null
+    }
+    return true
+  }
+
+  const nombreDe = (capa, respaldo) => String(capa?.name ?? respaldo)
+
   return grupos
-    .map((grupo) => ({
-      id: grupo.id,
-      label: String(grupo.name ?? `Grupo ${grupo.id}`),
-      ids: descendientes(grupo.id),
-      on: Boolean(grupo.defaultVisibility),
-    }))
+    .map((grupo) => {
+      const dentro = hojas(grupo.id).map((capa) => ({
+        id: capa.id,
+        label: nombreDe(capa, `Capa ${capa.id}`),
+        ids: [capa.id],
+        on: visibleDeFabrica(capa),
+      }))
+      return {
+        id: grupo.id,
+        label: nombreDe(grupo, `Grupo ${grupo.id}`),
+        // Lo que se le pide al servicio para este grupo son sus hojas.
+        ids: dentro.map((hoja) => hoja.id),
+        on: Boolean(grupo.defaultVisibility),
+        children: dentro,
+      }
+    })
     .sort((a, b) => a.label.localeCompare(b.label, "es"))
 }
+
+/** Las subcapas que hay que dibujar de fábrica, leídas del propio servicio. */
+export const defaultSubSelection = (grupos) =>
+  grupos.flatMap((grupo) => (grupo.children ?? []).filter((h) => h.on).map((h) => h.id))
 
 /**
  * Los atributos de un `identify`, ya limpios y listos para enseñar.
@@ -246,7 +337,7 @@ export const identifyResultsFrom = (json) => {
   const encontrados = json?.results
   if (!Array.isArray(encontrados)) return []
 
-  return encontrados.map((resultado) => ({
+  const limpios = encontrados.map((resultado) => ({
     layerName: String(resultado?.layerName ?? ""),
     value: String(resultado?.value ?? ""),
     attributes: Object.entries(resultado?.attributes ?? {})
@@ -260,6 +351,96 @@ export const identifyResultsFrom = (json) => {
       })
       .map(([campo, valor]) => ({ field: campo, value: String(valor) })),
   }))
+
+  /**
+   * Y fuera los repetidos.
+   *
+   * La ficha enseñaba la misma unidad dos veces. La causa de raíz —pedirle al
+   * servicio un grupo y su contenido a la vez— está arreglada en
+   * `subLayersFrom`, pero un servicio puede publicar la misma geometría en dos
+   * capas suyas y devolverla dos veces igualmente. Dos filas idénticas no
+   * informan de nada: informan de un fallo que no existe.
+   */
+  const vistos = new Set()
+  return limpios.filter((resultado) => {
+    const huella = JSON.stringify(resultado)
+    if (vistos.has(huella)) return false
+    vistos.add(huella)
+    return true
+  })
+}
+
+/** Lo que ArcGIS considera una dirección web dentro del valor de un campo. */
+const ENLACE = /https?:\/\/[^\s<>"')]+/gi
+
+/**
+ * Parte el valor de un campo en trozos de texto y enlaces.
+ *
+ * **Por qué.** El servicio de estado de la cartografía devuelve direcciones —la
+ * memoria explicativa de una plancha, su publicación— y como texto plano no
+ * sirven de nada: hay que copiarlas a mano. Se separan aquí, y no en el
+ * componente, porque decidir qué es un enlace es una regla, no una decoración, y
+ * conviene poder probarla.
+ *
+ * Se recorta la puntuación final —un punto o una coma pegados al cierre son del
+ * texto, no de la dirección— salvo si cierra un paréntesis que la dirección
+ * abrió.
+ *
+ * @returns {Array<{text: string, href?: string}>}
+ */
+export const linkPartsOf = (value) => {
+  const texto = String(value ?? "")
+  const partes = []
+  let ultimo = 0
+
+  for (const encontrado of texto.matchAll(ENLACE)) {
+    const bruto = encontrado[0]
+    const limpio = bruto.replace(/[.,;:]+$/, "")
+    const inicio = encontrado.index
+
+    if (inicio > ultimo) partes.push({ text: texto.slice(ultimo, inicio) })
+    partes.push({ text: limpio, href: limpio })
+    ultimo = inicio + limpio.length
+  }
+
+  if (ultimo < texto.length) partes.push({ text: texto.slice(ultimo) })
+  return partes.length ? partes : [{ text: texto }]
+}
+
+/**
+ * Cómo se enseña una dirección larga en una tarjeta estrecha.
+ *
+ * `https://www2.sgc.gov.co/publicaciones/planchas/146.pdf` en una columna de
+ * quince ems ocupa tres renglones partidos por la mitad de las palabras, y lo
+ * que se lee no es nada. Lo que de verdad informa son dos cosas: de qué sitio es
+ * y qué archivo es. El resto va al `title` y al propio enlace, que no se toca.
+ *
+ * El tope son veintiséis caracteres porque la columna del valor mide unos 150 px
+ * a 11 px de letra, y ahí caben veintitantos. Se midió en una captura: con
+ * cuarenta y dos, que era lo primero que puse, las direcciones seguían saliendo
+ * en tres renglones y el recorte no servía de nada.
+ *
+ * Se recorta solo si hace falta: una dirección corta se enseña entera.
+ */
+export const shortLinkText = (href, max = 26) => {
+  const texto = String(href ?? "")
+  if (texto.length <= max) return texto
+
+  // Se recorta al final pase lo que pase: hay direcciones con un nombre de
+  // archivo interminable, y una de ellas volvería a ocupar los tres renglones
+  // que esto viene a evitar.
+  const recortar = (t) => (t.length <= max ? t : `${t.slice(0, max - 1)}…`)
+
+  try {
+    const { hostname, pathname } = new URL(texto)
+    const sitio = hostname.replace(/^www\d*\./, "")
+    const ultimo = pathname.split("/").filter(Boolean).pop()
+    return recortar(ultimo ? `${sitio}/…/${ultimo}` : sitio)
+  } catch {
+    // Una dirección que no se deja analizar se recorta a lo bruto: peor eso que
+    // romper la ficha por un valor raro del servicio.
+    return recortar(texto)
+  }
 }
 
 /**

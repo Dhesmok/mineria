@@ -29,10 +29,8 @@ import {
 import {
   SGC_ATTRIBUTION,
   SGC_LAYERS,
-  SGC_TILE_SIZE,
   sgcLayerId,
   sgcSourceId,
-  sgcTileTemplate,
 } from "./sgcLayers"
 
 /** Centro y zoom iniciales, los mismos del visor Leaflet pero en orden [lon, lat]. */
@@ -124,15 +122,18 @@ export const DERIVATIVE_LAYER_ID = "terrain-derivative-layer"
 const TRANSPARENT_PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
+/** Las cuatro esquinas del mundo, en el orden que pide MapLibre: NO, NE, SE, SO. */
+const MUNDO_ENTERO = [
+  [-180, 85],
+  [180, 85],
+  [180, -85],
+  [-180, -85],
+]
+
 const DERIVATIVE_SOURCE = {
   type: "image",
   url: TRANSPARENT_PIXEL,
-  coordinates: [
-    [-180, 85],
-    [180, 85],
-    [180, -85],
-    [-180, -85],
-  ],
+  coordinates: MUNDO_ENTERO,
 }
 
 const derivativeLayer = () => ({
@@ -176,30 +177,63 @@ const hillshadeLayer = () => ({
 })
 
 /**
- * Las capas de geología del SGC: una fuente ráster y una capa por servicio.
+ * Las capas de geología del SGC: una imagen y una capa por servicio.
  *
  * Van **por debajo de la capa de pendiente y de los títulos mineros**, y por
  * encima del mapa de fondo. Es el sitio que les corresponde por lo que son: el
  * contexto geológico sobre el que se miran los títulos, no algo que deba
  * taparlos. Quien quiera lo contrario lo consigue arrastrando en el panel.
  *
- * Como el resto, se declaran ocultas desde el arranque. Una capa ráster oculta no
- * pide ni una tesela, así que declararlas todas no cuesta nada — y evita tener
- * que reconstruir el estilo al encender una, que es lo que borraría lo dibujado
- * por el usuario.
+ * **Una imagen del trozo visible y no teselas**, que es lo que había. Con
+ * teselas, ArcGIS rotulaba una vez por cada una: el número de cada cuadrícula de
+ * la grilla de planchas salía escrito cuatro veces, porque cuatro teselas la
+ * tocaban y el servicio dibuja cada imagen sin saber nada de las de al lado. Ver
+ * `sgcImageUrl` en `utils/sgcLayers.js`.
+ *
+ * Nacen con un píxel transparente, como la capa de pendiente: una fuente de tipo
+ * `image` exige imagen y coordenadas al declararla, y así se dice «todavía nada»
+ * sin pedirle un archivo a nadie. Quien las llena es `useSgcLayersGL`.
+ *
+ * **La atribución no cabe aquí, y eso costó un rato.** MapLibre solo acepta
+ * `attribution` en las fuentes de tipo tesela; ponérselo a una de imagen invalida
+ * el estilo **entero** —no solo esa fuente— y el mapa se queda sin capas. No se
+ * vio en ninguna prueba de datos: hizo falta abrir el navegador y leer la
+ * consola. Por eso la atribución del SGC va por su cuenta, más abajo.
  */
 const sgcSources = () =>
   Object.fromEntries(
     SGC_LAYERS.map((capa) => [
       sgcSourceId(capa.key),
-      {
-        type: "raster",
-        tiles: [sgcTileTemplate(capa.key)],
-        tileSize: SGC_TILE_SIZE,
-        attribution: SGC_ATTRIBUTION,
-      },
+      { type: "image", url: TRANSPARENT_PIXEL, coordinates: MUNDO_ENTERO },
     ]),
   )
+
+/**
+ * Dónde vive entonces la atribución del SGC.
+ *
+ * En una fuente vacía de tipo `geojson`, que sí la admite, con una capa encima
+ * que no dibuja nada. Suena a rodeo y lo es, pero el resultado es el correcto:
+ * MapLibre solo enseña la atribución de las fuentes que alguna capa visible está
+ * usando, así que aparece exactamente cuando hay geología del SGC en pantalla y
+ * desaparece al apagarla. Y las condiciones de uso de sus datos la exigen.
+ */
+export const SGC_ATTRIBUTION_SOURCE_ID = "sgc-atribucion"
+export const SGC_ATTRIBUTION_LAYER_ID = "sgc-atribucion-capa"
+
+const sgcAttributionSource = () => ({
+  [SGC_ATTRIBUTION_SOURCE_ID]: {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+    attribution: SGC_ATTRIBUTION,
+  },
+})
+
+const sgcAttributionLayer = () => ({
+  id: SGC_ATTRIBUTION_LAYER_ID,
+  type: "circle",
+  source: SGC_ATTRIBUTION_SOURCE_ID,
+  layout: { visibility: "none" },
+})
 
 const sgcLayers = () =>
   SGC_LAYERS.map((capa) => ({
@@ -209,7 +243,7 @@ const sgcLayers = () =>
     layout: { visibility: "none" },
     // La opacidad de partida es la misma que la de las capas de la ANM, y la
     // maneja el deslizador del panel. `raster-fade-duration` en cero porque
-    // estas teselas tardan segundos en llegar y el desvanecido encima las hacía
+    // estas imágenes tardan segundos en llegar y el desvanecido encima las hacía
     // parecer más lentas todavía.
     paint: { "raster-opacity": 0.6, "raster-fade-duration": 0 },
   }))
@@ -236,6 +270,7 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
     [DERIVATIVE_SOURCE_ID]: DERIVATIVE_SOURCE,
     ...sgcSources(),
+    ...sgcAttributionSource(),
     ...anmSources(),
   },
   layers: [
@@ -246,6 +281,7 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
     ...sgcLayers(),
+    sgcAttributionLayer(),
     derivativeLayer(),
     ...anmLayers(),
     ...searchLayers(),

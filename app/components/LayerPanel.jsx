@@ -103,6 +103,99 @@ const LayerSwitch = ({ layer, state, area, disabled, onToggle }) => (
  * tenía agarrado y el deslizador de opacidad pierde el foco a media pulsación—.
  */
 /**
+ * Una casilla de subcapa: un departamento, o una de las capas que lleva dentro.
+ *
+ * El mismo componente para los dos niveles porque es la misma acción —marcar lo
+ * que se quiere ver— y solo cambian la sangría y el peso de la letra. Un
+ * departamento a medias no se dibuja ni marcado ni vacío: se enseña a medias,
+ * que es la verdad y es lo que invita a desplegarlo.
+ */
+const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={estado === "todo"}
+    className={`flex w-full items-center gap-2 py-1 pr-4 text-left transition-colors hover:bg-white ${sangria}`}
+  >
+    <span
+      className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border ${
+        estado === "nada" ? "border-slate-300" : "border-slate-800 bg-slate-800"
+      }`}
+    >
+      {estado === "todo" && <Check className="h-2.5 w-2.5 text-white" />}
+      {estado === "parte" && <span className="h-[2px] w-[7px] rounded-full bg-white" />}
+    </span>
+    <span
+      className={`min-w-0 flex-1 truncate text-[11px] ${
+        estado === "nada" ? "text-slate-500" : "text-slate-800"
+      } ${fuerte ? "font-medium" : ""}`}
+    >
+      {label}
+    </span>
+    {children}
+  </button>
+)
+
+/** Cuántas de las hojas de un grupo están marcadas: todo, nada o parte. */
+const estadoDe = (ids, marcadas) => {
+  const puestas = ids.filter((id) => marcadas.includes(id)).length
+  if (puestas === 0) return "nada"
+  return puestas === ids.length ? "todo" : "parte"
+}
+
+/**
+ * Un departamento con sus capas dentro.
+ *
+ * **Por qué hay un segundo nivel.** Dentro de cada departamento el SGC publica
+ * varias capas —unidades geológicas, fallas, municipios, drenajes—, y encenderlas
+ * todas o ninguna no sirve: quien mira la geología de Antioquia no quiere
+ * necesariamente los municipios encima. Se despliega aparte del propio
+ * departamento, con su flechita, para que marcarlo entero siga siendo un solo
+ * gesto.
+ */
+const Departamento = ({ grupo, marcadas, onToggle }) => {
+  const [abierto, setAbierto] = useState(false)
+  const hijos = grupo.children ?? []
+  const estado = estadoDe(grupo.ids, marcadas)
+
+  return (
+    <>
+      <div className="flex items-center">
+        <Casilla
+          label={grupo.label}
+          estado={estado}
+          sangria="pl-11"
+          fuerte
+          onClick={() => onToggle(grupo)}
+        />
+        {hijos.length > 1 && (
+          <button
+            type="button"
+            onClick={() => setAbierto((v) => !v)}
+            aria-expanded={abierto}
+            aria-label={`Capas de ${grupo.label}`}
+            className="-ml-2 mr-2 shrink-0 rounded p-1 text-slate-300 transition-colors hover:bg-white hover:text-slate-500"
+          >
+            <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180" : ""}`} />
+          </button>
+        )}
+      </div>
+
+      {abierto &&
+        hijos.map((hoja) => (
+          <Casilla
+            key={hoja.id}
+            label={hoja.label}
+            estado={estadoDe(hoja.ids, marcadas)}
+            sangria="pl-[4.25rem]"
+            onClick={() => onToggle(hoja)}
+          />
+        ))}
+    </>
+  )
+}
+
+/**
  * La fila, más su lista de subcapas cuando el servicio tiene varias.
  *
  * **Existe porque «Geología por departamentos» dibujaba solo Antioquia.** No era
@@ -121,6 +214,9 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
   if (!hayQueElegir) return children
 
   const marcadas = chosenSub ?? []
+  const completos = subLayers.filter((g) => estadoDe(g.ids, marcadas) === "todo").length
+  const aMedias = subLayers.filter((g) => estadoDe(g.ids, marcadas) === "parte").length
+
   return (
     <>
       {children}
@@ -132,48 +228,31 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
           className="flex w-full items-center justify-between gap-2 py-1.5 pl-11 pr-4 text-[11px] text-slate-500 transition-colors hover:text-slate-700"
         >
           <span>
-            {marcadas.length === 0
+            {completos === 0 && aMedias === 0
               ? "Elige qué dibujar"
-              : `${subLayers.filter((g) => g.ids.every((id) => marcadas.includes(id))).length} de ${subLayers.length}`}
+              : `${completos} de ${subLayers.length}${aMedias ? ` · ${aMedias} a medias` : ""}`}
           </span>
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${abierta ? "rotate-180" : ""}`} />
         </button>
 
         {abierta && (
           <div className="max-h-[13rem] overflow-y-auto pb-1.5">
-            {subLayers.map((grupo) => {
-              const puesta = grupo.ids.every((id) => marcadas.includes(id))
-              return (
-                <button
-                  key={grupo.id}
-                  type="button"
-                  onClick={() => onToggleSubLayer?.(layer.key, grupo)}
-                  aria-pressed={puesta}
-                  className="flex w-full items-center gap-2 py-1 pl-11 pr-4 text-left transition-colors hover:bg-white"
-                >
-                  <span
-                    className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border ${
-                      puesta ? "border-slate-800 bg-slate-800" : "border-slate-300"
-                    }`}
-                  >
-                    {puesta && <Check className="h-2.5 w-2.5 text-white" />}
-                  </span>
-                  <span className={`flex-1 truncate text-[11px] ${puesta ? "text-slate-800" : "text-slate-500"}`}>
-                    {grupo.label}
-                  </span>
-                </button>
-              )
-            })}
+            {subLayers.map((grupo) => (
+              <Departamento
+                key={grupo.id}
+                grupo={grupo}
+                marcadas={marcadas}
+                onToggle={(cual) => onToggleSubLayer?.(layer.key, cual)}
+              />
+            ))}
           </div>
         )}
 
-        {/* Sin nada marcado, el servicio dibuja lo que él trae encendido —que es
-            justamente el problema que esta lista viene a resolver—, así que
-            conviene decirlo en vez de dejar al usuario preguntándose por qué solo
-            se ve un departamento. */}
+        {/* Desmarcarlo todo deja la capa en blanco, y conviene decirlo: si no, se
+            lee como que la capa dejó de funcionar. */}
         {marcadas.length === 0 && !abierta && (
           <p className="pb-1.5 pl-11 pr-4 text-[10px] leading-tight text-slate-400">
-            Sin elegir, el servicio dibuja solo lo que trae por omisión.
+            Sin nada marcado, esta capa no dibuja nada.
           </p>
         )}
       </div>
@@ -233,14 +312,18 @@ const LayerRow = ({
 
     {/* Sin selector de color en las capas ráster: llegan ya dibujadas por el
         servicio, con la simbología que un geólogo reconoce —el amarillo de un
-        cuaternario, el granate de un batolito—. Un selector ahí no cambiaría
-        nada, y un control que no hace nada se lee como roto. */}
-    <ColorSwatch
-      layer={layer}
-      state={state}
-      disabled={layer.pending || layer.raster}
-      onOpen={onOpenColor}
-    />
+        cuaternario, el granate de un batolito—.
+
+        Y no apagado sino ausente. Apagado ya se probó, y no basta: un cuadrito
+        gris junto a la capa sigue pareciendo un botón, se sigue intentando
+        pulsar, y no pasa nada. Lo que ocupa su sitio es un hueco del mismo
+        ancho, para que las filas no bailen entre las capas que sí eligen color
+        y las que no. */}
+    {layer.raster ? (
+      <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+    ) : (
+      <ColorSwatch layer={layer} state={state} disabled={layer.pending} onOpen={onOpenColor} />
+    )}
 
     <span
       className={`min-w-0 flex-1 truncate text-[13px] ${

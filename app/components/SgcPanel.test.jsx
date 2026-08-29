@@ -11,6 +11,9 @@ import { SgcPanel, activeSgcKeys } from "./SgcPanel"
  * nada prácticamente»— y estas pruebas son la traducción de esa frase.
  */
 
+/** Una consulta ya resuelta y sin resultados: lo mínimo para que salga la tarjeta. */
+const consultaVacia = { loading: false, results: [] }
+
 const leyendaDeAntioquia = [
   {
     layerId: 4,
@@ -42,16 +45,12 @@ describe("activeSgcKeys", () => {
 })
 
 describe("la tarjeta de geología", () => {
-  it("no aparece si no hay ninguna capa del SGC encendida", () => {
-    // Un panel permanente que casi nunca tiene algo que decir es ruido en una
-    // columna que ya lleva la leyenda de pendiente y la ventana del 3D.
-    const { container } = render(<SgcPanel activeKeys={[]} />)
+  it("no aparece mientras no se ha tocado el mapa", () => {
+    // Es un popup, no un panel fijo. La versión anterior se quedaba puesta
+    // diciendo «toca el mapa»: ocupaba sitio permanentemente para no decir nada,
+    // y una tarjeta que está siempre deja de leerse.
+    const { container } = render(<SgcPanel activeKeys={["geologiaNacional"]} />)
     expect(container).toBeEmptyDOMElement()
-  })
-
-  it("invita a tocar el mapa mientras no se ha preguntado nada", () => {
-    render(<SgcPanel activeKeys={["geologiaNacional"]} />)
-    expect(screen.getByText(/Toca el mapa/)).toBeInTheDocument()
   })
 
   it("enseña los atributos del punto tocado y de qué capa salen", () => {
@@ -100,6 +99,34 @@ describe("la tarjeta de geología", () => {
     expect(screen.getByText("Consultando…")).toBeInTheDocument()
   })
 
+  it("los enlaces de un campo se pueden tocar", async () => {
+    // El servicio de estado de la cartografía devuelve la memoria explicativa de
+    // cada plancha como una dirección. Como texto plano hay que copiarla a mano.
+    render(
+      <SgcPanel
+        activeKeys={["estadoCartografia"]}
+        featureInfo={{
+          loading: false,
+          results: [
+            {
+              layerKey: "estadoCartografia",
+              layerName: "Planchas",
+              value: "Plancha 146",
+              attributes: [{ field: "Memoria", value: "Ver https://sgc.gov.co/146.pdf" }],
+            },
+          ],
+        }}
+      />,
+    )
+
+    const enlace = screen.getByRole("link")
+    expect(enlace).toHaveAttribute("href", "https://sgc.gov.co/146.pdf")
+    expect(enlace).toHaveAttribute("target", "_blank")
+    // `noreferrer` además de `noopener`: la página que se abre no tiene por qué
+    // saber desde dónde se llegó.
+    expect(enlace).toHaveAttribute("rel", expect.stringContaining("noreferrer"))
+  })
+
   it("se puede cerrar la ficha", async () => {
     const user = userEvent.setup()
     const cerrar = jest.fn()
@@ -118,7 +145,13 @@ describe("la tarjeta de geología", () => {
 describe("la simbología", () => {
   it("viene plegada y se abre con los símbolos del propio servicio", async () => {
     const user = userEvent.setup()
-    render(<SgcPanel activeKeys={["geologiaNacional"]} legends={{ geologiaNacional: leyendaDeAntioquia }} />)
+    render(
+      <SgcPanel
+        activeKeys={["geologiaNacional"]}
+        featureInfo={consultaVacia}
+        legends={{ geologiaNacional: leyendaDeAntioquia }}
+      />,
+    )
 
     expect(screen.queryByText("Q-al")).not.toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: /Simbología/ }))
@@ -139,6 +172,7 @@ describe("la simbología", () => {
     render(
       <SgcPanel
         activeKeys={["geologiaDepartamentos"]}
+        featureInfo={consultaVacia}
         subLayers={{
           geologiaDepartamentos: [
             { id: 3, label: "Antioquia", ids: [3, 4], on: true },
@@ -155,11 +189,12 @@ describe("la simbología", () => {
     expect(screen.queryByText("K1-Sm")).not.toBeInTheDocument()
   })
 
-  it("sin nada marcado no filtra, porque el servicio dibuja lo suyo", async () => {
+  it("sin nada marcado no enseña leyenda, porque la capa no dibuja nada", async () => {
     const user = userEvent.setup()
     render(
       <SgcPanel
         activeKeys={["geologiaDepartamentos"]}
+        featureInfo={consultaVacia}
         subLayers={{ geologiaDepartamentos: [{ id: 3, label: "Antioquia", ids: [3, 4], on: true }] }}
         chosenSub={{ geologiaDepartamentos: [] }}
         legends={{ geologiaDepartamentos: [...leyendaDeAntioquia, ...leyendaDeBoyaca] }}
@@ -167,13 +202,19 @@ describe("la simbología", () => {
     )
 
     await user.click(screen.getByRole("button", { name: /Simbología/ }))
-    expect(screen.getByText("Q-al")).toBeInTheDocument()
-    expect(screen.getByText("K1-Sm")).toBeInTheDocument()
+    expect(screen.queryByText("Q-al")).not.toBeInTheDocument()
+    expect(screen.getByText(/no devolvió simbología/)).toBeInTheDocument()
   })
 
   it("lo dice cuando el servicio no devolvió simbología", async () => {
     const user = userEvent.setup()
-    render(<SgcPanel activeKeys={["geologiaNacional"]} legends={{ geologiaNacional: [] }} />)
+    render(
+      <SgcPanel
+        activeKeys={["geologiaNacional"]}
+        featureInfo={consultaVacia}
+        legends={{ geologiaNacional: [] }}
+      />,
+    )
     await user.click(screen.getByRole("button", { name: /Simbología/ }))
     expect(screen.getByText(/no devolvió simbología/)).toBeInTheDocument()
   })
