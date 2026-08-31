@@ -179,77 +179,104 @@ export const useExpedientSearchGL = (
     labelMarkerRef.current?.remove()
     labelMarkerRef.current = null
 
-    let unreachableLayers = totalLayers - layers.length
-
-    for (const layer of layers) {
-      // No todas las capas exponen los dos campos; por eso se prueban ambos.
+    /**
+     * Las cuatro capas se consultan a la vez.
+     *
+     * Antes era un doble bucle con `await` dentro: cuatro capas por dos nombres
+     * de campo, hasta **ocho idas y vueltas en serie**. Si el expediente estaba
+     * en la última capa se pagaban las ocho una detrás de otra, sobre servicios
+     * que ya de por sí tardan. En paralelo el peor caso son dos.
+     *
+     * El orden del resultado no cambia: las respuestas se recorren en el orden
+     * de `layers`, y dentro de cada capa se prefiere TENURE_ID sobre
+     * CODIGO_EXPEDIENTE, igual que hacían los dos bucles. Si un mismo código
+     * apareciera en dos capas se sigue enseñando la primera de la lista. Lo que
+     * se paraleliza es la espera, no la decisión.
+     */
+    const consultarCapa = async (layer) => {
+      // No todas las capas exponen los dos campos; por eso se prueban ambos, y
+      // por eso una capa solo cuenta como caída si fallan sus dos consultas: es
+      // normal que una devuelva "campo inexistente".
       const queries = [
         `UPPER(TENURE_ID)='${normalizedCode}'`,
         `UPPER(CODIGO_EXPEDIENTE)='${normalizedCode}'`,
       ]
 
-      let layerResponded = false
-
-      for (const whereClause of queries) {
-        const params = new URLSearchParams({
-          where: whereClause,
-          outFields: "*",
-          returnGeometry: "true",
-          f: "geojson",
-        })
-
-        try {
-          const data = await fetchArcgisJson(`${layer.url}?${params}`, {
-            signal: controller.signal,
+      const intentos = await Promise.all(
+        queries.map(async (whereClause) => {
+          const params = new URLSearchParams({
+            where: whereClause,
+            outFields: "*",
+            returnGeometry: "true",
+            f: "geojson",
           })
-          layerResponded = true
 
-          // Otra búsqueda arrancó mientras esperábamos: no tocar el mapa.
-          if (isStale()) return
-
-          if (data.features && data.features.length > 0) {
-            const style = RESULT_STYLES[layer.key]
-            map.setPaintProperty(SEARCH_LAYERS.fill, "fill-color", style.fill)
-            map.setPaintProperty(SEARCH_LAYERS.line, "line-color", style.line)
-            setSourceData(SEARCH_SOURCES.result, data)
-
-            const bounds = boundsOf(data)
-            if (bounds) map.fitBounds(bounds, { padding: 60, duration: 800 })
-
-            // La etiqueta del expediente buscado se muestra siempre, sin
-            // depender del zoom: es un único resultado que el usuario pidió, y
-            // el encuadre suele quedar por debajo del zoom mínimo de las capas
-            // masivas.
-            const label = createLabelElement(data.features[0])
-            if (label) {
-              labelMarkerRef.current = new Marker({ element: label.element })
-                .setLngLat(label.coordinates)
-                .addTo(map)
-            }
-
-            // Todas las features y todos sus anillos, no solo la primera.
-            const rings = extractRings(data)
-            addVertices(rings)
-
-            onCoordinatesUpdate(
-              rings.flatMap((ring) => ring.coordinates),
-              data,
-              rings,
-            )
-            return
+          try {
+            const data = await fetchArcgisJson(`${layer.url}?${params}`, {
+              signal: controller.signal,
+            })
+            return { respondio: true, data }
+          } catch (error) {
+            if (error?.name === "AbortError") return { abortado: true }
+            console.error("Error al obtener los datos:", error)
+            return { respondio: false }
           }
-        } catch (error) {
-          if (error?.name === "AbortError") return
-          console.error("Error al obtener los datos:", error)
-        }
-      }
+        }),
+      )
 
-      if (!layerResponded) {
-        unreachableLayers += 1
+      if (intentos.some((intento) => intento.abortado)) return { abortado: true }
+
+      return {
+        respondio: intentos.some((intento) => intento.respondio),
+        data: intentos.find((intento) => intento.data?.features?.length > 0)?.data ?? null,
       }
     }
 
-    if (isStale()) return
+    const resultados = await Promise.all(layers.map(consultarCapa))
+
+    // Otra búsqueda arrancó mientras esperábamos: no tocar el mapa.
+    if (isStale() || resultados.some((r) => r.abortado)) return
+
+    // Las que no se pudieron ni construir —índice sin descubrir— más las que no
+    // respondieron a ninguna de sus dos consultas. Cuenta para que el mensaje de
+    // error no mienta sobre cuántas capas se llegaron a consultar.
+    const unreachableLayers =
+      totalLayers - layers.length + resultados.filter((r) => !r.respondio).length
+
+    const acierto = resultados.findIndex((r) => r.data)
+    if (acierto >= 0) {
+      const layer = layers[acierto]
+      const data = resultados[acierto].data
+
+      const style = RESULT_STYLES[layer.key]
+      map.setPaintProperty(SEARCH_LAYERS.fill, "fill-color", style.fill)
+      map.setPaintProperty(SEARCH_LAYERS.line, "line-color", style.line)
+      setSourceData(SEARCH_SOURCES.result, data)
+
+      const bounds = boundsOf(data)
+      if (bounds) map.fitBounds(bounds, { padding: 60, duration: 800 })
+
+      // La etiqueta del expediente buscado se muestra siempre, sin depender del
+      // zoom: es un único resultado que el usuario pidió, y el encuadre suele
+      // quedar por debajo del zoom mínimo de las capas masivas.
+      const label = createLabelElement(data.features[0])
+      if (label) {
+        labelMarkerRef.current = new Marker({ element: label.element })
+          .setLngLat(label.coordinates)
+          .addTo(map)
+      }
+
+      // Todas las features y todos sus anillos, no solo la primera.
+      const rings = extractRings(data)
+      addVertices(rings)
+
+      onCoordinatesUpdate(
+        rings.flatMap((ring) => ring.coordinates),
+        data,
+        rings,
+      )
+      return
+    }
 
     setShowErrorBanner(true)
     if (unreachableLayers === totalLayers) {

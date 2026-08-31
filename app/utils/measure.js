@@ -1,5 +1,7 @@
 import proj4 from "proj4"
 
+import { crsById, SOURCE_CRS } from "./crs"
+
 /**
  * Áreas y distancias de lo que dibuja el usuario.
  *
@@ -19,10 +21,22 @@ import proj4 from "proj4"
  * contra cuadrados de tamaño conocido.
  */
 
-const WGS84 = "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs"
-const CTM12 =
-  "+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000000 +y_0=2000000 " +
-  "+ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+/**
+ * Las dos definiciones salen de `crs.js`, no se escriben aquí.
+ *
+ * Estuvieron escritas a mano —las mismas dos cadenas de proj4, palabra por
+ * palabra—, que es exactamente la duplicación que `crs.js` dice haber venido a
+ * eliminar: «cada uno repetía la misma cadena de proj4… de ahí este módulo
+ * único». El día que se corrija un parámetro del CTM-12 se corrige en un sitio,
+ * y las áreas que enseña el visor no se quedan calculadas con el viejo.
+ *
+ * De paso se va un nombre que engañaba: lo que aquí se llamaba `WGS84` no era
+ * WGS84 sino MAGNA-SIRGAS geográficas (EPSG:4686). Coinciden dentro de un metro
+ * en Colombia, pero llamarle al uno por el nombre del otro es como acaban
+ * mezclándose los sistemas.
+ */
+const MAGNA = crsById(SOURCE_CRS).proj
+const CTM12 = crsById("9377").proj
 
 /**
  * [lon, lat] geográficas → [este, norte] en metros.
@@ -32,7 +46,7 @@ const CTM12 =
  * la herramienta de medir para esa misma línea no coincidirían, y esa
  * discrepancia se lee como un error del visor —con razón—.
  */
-export const toCtm12 = ([lon, lat]) => proj4(WGS84, CTM12, [lon, lat])
+export const toCtm12 = ([lon, lat]) => proj4(MAGNA, CTM12, [lon, lat])
 
 /**
  * Área de un anillo por la fórmula del agrimensor (shoelace).

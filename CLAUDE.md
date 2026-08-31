@@ -74,7 +74,8 @@ app/
     mapStyles.js          Estilo declarativo: fuentes y capas del mapa
     anmLayers.js          Consulta de capas ANM por bbox
     bboxDownload.js       Armado del ZIP y su README
-    measure.js            Áreas y distancias en CTM-12
+    measure.js            Áreas y distancias en CTM-12 (las definiciones, de crs.js)
+    layerFields.js        Qué campos declara una capa ANM, preguntados en runtime
     demTiles.js           Qué teselas del modelo de elevación hacen falta y dónde va cada una
     demTileLoader.js      Bajarlas, decodificarlas a alturas y recordarlas
     terrainRaster.js      Horn sobre el mosaico → los píxeles de la capa
@@ -150,6 +151,14 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
    `response.ok` es `true` y `data.features` queda `undefined`, esos fallos se
    confundían con "no se encontró el expediente". Usa siempre
    `fetchArcgisJson()`, nunca `fetch` pelado contra ArcGIS.
+
+   Y **el campo inexistente no es hipotético**: el filtro «toda la capa»
+   traducía el respaldo entre nombres —el estado es `TITULO_ESTADO` en unas
+   capas y `STATUS` o `ESTADO` en otras— a un `OR` de los tres, así que en cada
+   capa nombraba dos que no tenía. El respaldo pensado para que ninguna capa se
+   quedara sin filtrar era lo que las rompía todas. Se pregunta antes qué campos
+   declara la capa (`utils/layerFields.js`), que es la trampa nº 1 otra vez: no
+   escribir a mano lo que el servicio dice de sí mismo.
 
 3. **No caches resultados incompletos.** Si las peticiones de descubrimiento
    fallan todas, guardar `{}` deja las capas rotas hasta recargar la página.
@@ -269,7 +278,22 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     lista crece. Funcionaba con el panel corto y dejaba de funcionar justo cuando
     hacía falta agrandarlo. Va por fuera, con `left-full`.
 
-18. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
+18. **Un tope declarado en el estilo no se entera de que el código lo levantó.**
+    Las capas de la ANM llevan `minzoom: 10` en `mapStyles.js`, y `useMapLayersGL`
+    desactiva ese tope a propósito cuando el filtro barre la capa entera —lo que
+    cumple puede estar lejísimos de lo que se está mirando—. Pero solo lo
+    desactivaba *para consultar*: el tope del estilo seguía puesto, así que el
+    visor pedía los polígonos, los recibía, los guardaba… y MapLibre se negaba a
+    pintarlos. El panel decía «37 de 412» sobre un mapa vacío, y sin el aviso de
+    «acerca el mapa», que en ese modo tampoco sale. Lo levanta ahora
+    `setLayerZoomRange`. Ojo con el otro extremo: MapLibre esconde la capa **a
+    partir** de su `maxzoom`, así que pasarle el zoom máximo del mapa la apagaría
+    justo al llegar a él.
+
+    Es otra vez la trampa nº 10: los datos llegaban y se guardaban bien, y
+    ninguna prueba sobre ellos podía verlo. Se vio en una captura.
+
+19. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
     cosas.** `mapbox-gl-draw` cancela el `touchend`, y sin él el navegador no
     genera el clic de compatibilidad. Todo lo que responda a tocar el mapa se
     engancha por partida doble: `map.on("click", …)` y `onMapTap(map, …)` de

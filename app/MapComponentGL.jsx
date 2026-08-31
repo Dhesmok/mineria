@@ -270,13 +270,25 @@ export default function MapComponentGL({
    * cuando se pulsó pero el modelo todavía no tenía dato ahí: son dos cosas
    * distintas y la tarjeta las dice distinto.
    */
+  /**
+   * **Los efectos van fuera del actualizador de estado.** Estuvieron dentro de
+   * `setQueryingTerrain(actual => …)`, que es el mismo patrón que ya costó una
+   * tanda con el perfil longitudinal y que `useTerrainGL.toggle3D` y
+   * `useTerrainRasterGL.chooseMode` documentan: React puede ejecutar ese
+   * actualizador más de una vez para el mismo cambio, y ahí dentro no puede
+   * haber nada que no se pueda repetir —ni tocar el terreno del mapa, ni llamar
+   * a otro `setState`—. El estado actual se lee de una referencia para que esta
+   * función no cambie de identidad en cada render.
+   */
+  const queryingTerrainRef = useRef(queryingTerrain)
+  queryingTerrainRef.current = queryingTerrain
+
   const toggleTerrainQuery = useCallback(() => {
-    setQueryingTerrain((actual) => {
-      const siguiente = !actual
-      setTerrainForQuery(siguiente)
-      setTerrainResult(null)
-      return siguiente
-    })
+    const siguiente = !queryingTerrainRef.current
+    queryingTerrainRef.current = siguiente
+    setQueryingTerrain(siguiente)
+    setTerrainForQuery(siguiente)
+    setTerrainResult(null)
   }, [setTerrainForQuery])
 
   /**
@@ -390,6 +402,21 @@ export default function MapComponentGL({
     mapInstance.addPointAt = addPointAt
   }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult, addPointAt])
 
+  /**
+   * El aviso de "mapa listo", por referencia.
+   *
+   * El efecto que crea el mapa lo tenía en sus dependencias, y eso lo dejaba a
+   * un `useCallback` de distancia del desastre: si esa prop cambiara de
+   * identidad, React ejecutaría la limpieza —que destruye el mapa y pone
+   * `mapRef` a null—, y al volver a entrar la guarda `if (mapRef.current)`… ya no
+   * frenaría nada, pero el mapa recién destruido se habría llevado consigo las
+   * capas, lo dibujado y el resultado de la búsqueda, sin ningún error. Hoy no
+   * pasa porque llega memoizado con dependencias vacías; el día que alguien le
+   * añada una, tiene que seguir sin pasar. El mapa se crea una vez y punto.
+   */
+  const onMapInitializedRef = useRef(onMapInitialized)
+  onMapInitializedRef.current = onMapInitialized
+
   useEffect(() => {
     if (mapRef.current) return
 
@@ -451,7 +478,7 @@ export default function MapComponentGL({
       if (announced || !map.getLayer(BASE_LAYERS.osm)) return
       announced = true
       setMapInstance(map)
-      onMapInitialized?.(map)
+      onMapInitializedRef.current?.(map)
     }
 
     map.on("styledata", announceWhenStyleReady)
@@ -474,7 +501,7 @@ export default function MapComponentGL({
       // siguiente llamada. Es la misma trampa que documenta el visor Leaflet.
       setMapInstance(null)
     }
-  }, [onMapInitialized])
+  }, [])
 
   return (
     <>

@@ -471,10 +471,19 @@ export const identifyResultsFrom = (json) => {
    * `subLayersFrom`, pero un servicio puede publicar la misma geometría en dos
    * capas suyas y devolverla dos veces igualmente. Dos filas idénticas no
    * informan de nada: informan de un fallo que no existe.
+   *
+   * **La huella es solo de los atributos**, y ese es el arreglo. Antes se hacía
+   * sobre el resultado entero, `layerId` incluido, así que el caso que este
+   * bloque dice cubrir —la misma unidad publicada en dos capas— tenía dos
+   * huellas distintas y sobrevivía intacto: solo se quitaban las repeticiones
+   * dentro de una misma capa, que es el caso que ya no ocurre.
+   *
+   * Se conserva el primero, que viene de la capa que ArcGIS devuelve antes, o
+   * sea la de más arriba en el servicio.
    */
   const vistos = new Set()
   return limpios.filter((resultado) => {
-    const huella = JSON.stringify(resultado)
+    const huella = JSON.stringify(resultado.attributes)
     if (vistos.has(huella)) return false
     vistos.add(huella)
     return true
@@ -493,9 +502,15 @@ const ENLACE = /https?:\/\/[^\s<>"')]+/gi
  * componente, porque decidir qué es un enlace es una regla, no una decoración, y
  * conviene poder probarla.
  *
- * Se recorta la puntuación final —un punto o una coma pegados al cierre son del
- * texto, no de la dirección— salvo si cierra un paréntesis que la dirección
- * abrió.
+ * Se recorta la puntuación final: un punto o una coma pegados al cierre son del
+ * texto, no de la dirección.
+ *
+ * **Los paréntesis quedan fuera de la dirección siempre**, y es una decisión, no
+ * un descuido: una dirección puede llevar paréntesis balanceados y reconocerlos
+ * exige contarlos. El caso real de estos servicios es el contrario —«(ver
+ * https://…)»—, donde el paréntesis es del texto. Ante la duda se prefiere
+ * partir de más: un enlace un carácter corto sigue siendo copiable; uno que se
+ * traga el paréntesis de cierre lleva a una página que no existe.
  *
  * @returns {Array<{text: string, href?: string}>}
  */

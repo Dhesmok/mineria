@@ -258,9 +258,20 @@ export const useDrawControlGL = (mapRef, mapInstance, crsId = SOURCE_CRS) => {
       // defecto. Es un fallo que no se nota mirando los datos —ahí el color
       // está—, solo mirando la pantalla.
       userProperties: true,
-      // Suprimir la tecla Supr propia de la librería: borra sin preguntar y sin
-      // dejar rastro. El botón de la papelera hace lo mismo pero a la vista.
-      keybindings: true,
+      /**
+       * Los atajos de teclado de la librería, apagados.
+       *
+       * El comentario decía «suprimir la tecla Supr» y el valor era `true`, que
+       * es justo lo que la deja activa: la tecla borraba la figura seleccionada
+       * sin preguntar y sin dejar rastro, y quien leyera el código creería lo
+       * contrario. Se resuelve por donde decía el comentario, que además es lo
+       * correcto: borrar es de la papelera, que está a la vista y tiene el
+       * comportamiento documentado —sin selección, borra todo—.
+       *
+       * Escape sigue saliendo del modo de dibujo: lo maneja `handleKeyDown` más
+       * abajo, no la librería, así que no se pierde nada al apagar esto.
+       */
+      keybindings: false,
     })
 
     mapInstance.addControl(draw)
@@ -357,12 +368,14 @@ export const useDrawControlGL = (mapRef, mapInstance, crsId = SOURCE_CRS) => {
       clearMeasurements()
       // El control se quita solo si el mapa sigue vivo: al desmontar la página,
       // MapLibre ya se destruyó y removeControl reventaría.
-      if (mapInstance.getStyle()) {
-        try {
-          mapInstance.removeControl(draw)
-        } catch {
-          // El mapa ya se estaba destruyendo; no queda nada que quitar.
-        }
+      //
+      // `getStyle()` va **dentro** del try, y no fuera como estaba: sobre un mapa
+      // ya quitado lanza por su cuenta, así que la comprobación que existía para
+      // evitar la excepción se saltaba el catch puesto para lo mismo.
+      try {
+        if (mapInstance.getStyle()) mapInstance.removeControl(draw)
+      } catch {
+        // El mapa ya se estaba destruyendo; no queda nada que quitar.
       }
       drawRef.current = null
     }
@@ -410,9 +423,14 @@ export const useDrawControlGL = (mapRef, mapInstance, crsId = SOURCE_CRS) => {
       })
 
       syncMeasurements()
+      // Y el recuento, que faltaba: un punto marcado con el ratón lo actualiza
+      // desde `draw.create`, pero `draw.add()` no dispara ese evento. Escribir
+      // una coordenada metía el punto en el mapa y dejaba la barra de dibujo
+      // diciendo «2 figuras» con tres puestas.
+      refreshHasArea()
       return id
     },
-    [mapRef, syncMeasurements],
+    [mapRef, refreshHasArea, syncMeasurements],
   )
 
   const deleteSelected = useCallback(() => {

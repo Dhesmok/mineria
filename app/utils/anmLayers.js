@@ -33,11 +33,23 @@ export const MAX_FEATURES_PER_QUERY = 2000
  * Los colores son los mismos del visor Leaflet, para que la comparación lado a
  * lado no dependa de recordar cuál era cuál.
  */
+/**
+ * Quién publica cada capa.
+ *
+ * Va como dato y no escrito en el README de la descarga, donde estaba fijo como
+ * «ANM» para toda capa. Hoy es cierto —las cuatro son de la ANM—, y deja de
+ * serlo en cuanto se conecte la primera de otra entidad: el README seguiría
+ * diciendo «Fuente: ANM» sobre una capa del SGC, y un dato geoespacial con la
+ * procedencia equivocada es peor que uno sin procedencia.
+ */
+export const ANM_SOURCE = "ANM (Agencia Nacional de Minería)"
+
 export const ANM_LAYERS = [
   {
     key: "title",
     label: "Títulos Vigentes",
     tenureName: TITLE_LAYER_NAME,
+    source: ANM_SOURCE,
     lineColor: "#894444",
     fillColor: "#A46F48",
   },
@@ -45,6 +57,7 @@ export const ANM_LAYERS = [
     key: "anmService",
     label: "Subcontratos",
     url: "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3",
+    source: ANM_SOURCE,
     lineColor: "#6E4B3A",
     fillColor: "#B68863",
   },
@@ -52,6 +65,7 @@ export const ANM_LAYERS = [
     key: "request",
     label: "Solicitudes Vigentes",
     tenureName: REQUEST_LAYER_NAME,
+    source: ANM_SOURCE,
     lineColor: "#F0C567",
     fillColor: "#FFF0AF",
   },
@@ -59,6 +73,7 @@ export const ANM_LAYERS = [
     key: "historicalTitle",
     label: "Título Histórico",
     url: "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87",
+    source: ANM_SOURCE,
     lineColor: "#22577A",
     fillColor: "#38A3A5",
   },
@@ -194,6 +209,12 @@ export const fetchLayerFeatures = async (layerUrl, bounds, options, where = null
 
   return {
     featureCollection,
-    truncated: didExceedLimit(data, featureCollection.features.length),
+    // Se cuenta lo que **respondió el servicio**, no lo que quedó después de
+    // descartar las figuras sin geometría. Con el conteo de salida, una sola
+    // figura sin geometría dentro de una respuesta recortada daba 1999 contra
+    // 2000 y el aviso de recorte no salía: el usuario creía estar viendo todos
+    // los títulos del área. Y ese respaldo es justo el que importa, porque solo
+    // se usa cuando el servidor no manda `exceededTransferLimit`.
+    truncated: didExceedLimit(data, Array.isArray(data?.features) ? data.features.length : 0),
   }
 }

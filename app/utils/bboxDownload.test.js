@@ -86,14 +86,37 @@ describe("buildReadme", () => {
       bbox,
       generatedAt,
       layers: [
-        { label: "Títulos Vigentes", serviceUrl: "https://anm/MapServer/2", count: 12, truncated: false },
+        {
+          label: "Títulos Vigentes",
+          source: "ANM (Agencia Nacional de Minería)",
+          serviceUrl: "https://anm/MapServer/2",
+          count: 12,
+          truncated: false,
+        },
       ],
     })
 
     expect(readme).toContain("Títulos Vigentes")
+    expect(readme).toContain("Fuente: ANM (Agencia Nacional de Minería)")
     expect(readme).toContain("https://anm/MapServer/2")
     expect(readme).toContain("2026-08-20 09:58 UTC")
     expect(readme).toContain("Registros incluidos: 12")
+  })
+
+  it("la fuente sale de la capa, no escrita en el README", () => {
+    // Estaba fija como «ANM» para toda capa: cierto con las cuatro de hoy y
+    // falso el día que entre la primera del SGC o del IGAC. Un dato geoespacial
+    // con la procedencia equivocada es peor que uno sin procedencia.
+    const readme = buildReadme({
+      bbox,
+      generatedAt,
+      layers: [
+        { label: "Geología", source: "SGC", serviceUrl: "https://sgc/1", count: 3, truncated: false },
+      ],
+    })
+
+    expect(readme).toContain("Fuente: SGC")
+    expect(readme).not.toContain("Fuente: ANM")
   })
 
   it("avisa cuando el servicio recortó la respuesta", () => {
@@ -239,5 +262,26 @@ describe("buildAreaZip", () => {
 
     expect(zip.file("vacia.geojson")).not.toBeNull()
     expect(zip.file("vacia.kml")).toBeNull()
+  })
+
+  it("dos capas que sanean al mismo nombre no se pisan", async () => {
+    // `sanitizeName` quita los acentos, así que «Títulos Vigentes» y «Titulos
+    // Vigentes» dan el mismo archivo: el segundo sobrescribía al primero dentro
+    // del ZIP y el usuario abría cuatro capas para encontrar tres archivos.
+    const chocan = [
+      { ...layers[0], label: "Títulos Vigentes" },
+      { ...layers[0], label: "Titulos Vigentes" },
+    ]
+    const buffer = await buildAreaZip({
+      JSZipCtor: JSZip,
+      layers: chocan,
+      areaGeoJSON,
+      bbox,
+      generatedAt,
+    })
+    const zip = await JSZip.loadAsync(buffer)
+
+    expect(zip.file("titulos_vigentes.geojson")).not.toBeNull()
+    expect(zip.file("titulos_vigentes_2.geojson")).not.toBeNull()
   })
 })

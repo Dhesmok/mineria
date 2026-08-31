@@ -119,6 +119,16 @@ export const slopeColorFor = (slopeDegrees) => {
  *
  * La recursión llega como mucho a dos niveles por eje, y las esquinas se
  * resuelven solas al aplicarse los dos.
+ *
+ * **`derivativePixels` hace lo contrario a propósito, y conviene saber por qué**
+ * para no leerlo como una contradicción. Aquella franja falsa la medía una
+ * rejilla de 8 píxeles de pantalla: el anillo exterior era una banda gruesa y
+ * bien visible. La capa de color trabaja sobre la rejilla del modelo, donde ese
+ * anillo es **una celda** de menos de un píxel en pantalla y además queda tapado
+ * por el mosaico vecino, porque las teselas se piden con margen. A cambio,
+ * recortar es lo que permite resolver el borde sin meter una condición en la
+ * pasada rápida —dos millones de comprobaciones para que se cumplan en cuatro
+ * mil—. Es lo mismo que hace GDAL con `-compute_edges`.
  */
 const at = (heights, cols, rows, col, row) => {
   if (cols < 2 || rows < 2) return NaN
