@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Button } from "@/components/ui/button"
+import { Loader2, Download } from "lucide-react"
 import proj4 from 'proj4'
 import shpwrite from '@mapbox/shp-write'
 import * as turf from '@turf/turf'
@@ -146,6 +147,11 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
         onClick={exportSHP}
         disabled={isExportingSHP || isExportingKML}
       >
+        {isExportingSHP ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="mr-2 h-4 w-4" />
+        )}
         {isExportingSHP ? 'Exportando...' : 'Exportar SHP'}
       </Button>
       <Button
@@ -154,6 +160,11 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
         onClick={exportKML}
         disabled={isExportingSHP || isExportingKML}
       >
+        {isExportingKML ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="mr-2 h-4 w-4" />
+        )}
         {isExportingKML ? 'Exportando...' : 'Exportar KML'}
       </Button>
     </div>
