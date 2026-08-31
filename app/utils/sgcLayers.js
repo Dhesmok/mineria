@@ -89,7 +89,7 @@ export const SGC_LAYERS = [
   },
   {
     key: "geologiaDepartamentos",
-    label: "Geología departamental",
+    label: "Geología por departamento",
     service:
       "https://srvags.sgc.gov.co/arcgis/rest/services/Geologia/Geologia_Por_Departamentos/MapServer",
     scale: "variable",

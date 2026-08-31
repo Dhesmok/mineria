@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, X } from "lucide-react"
+import { ChevronDown, MapPin } from "lucide-react"
 
+import { FloatingPanel } from "./FloatingPanel"
 import {
   SGC_LAYERS,
   describeValue,
@@ -119,22 +120,35 @@ export const SgcPanel = ({
       .map((capa) => ({ ...capa, key }))
   })
 
+  /**
+   * La ficha se arrastra, y por eso va dentro de `FloatingPanel`.
+   *
+   * Salía siempre pegada al costado derecho, que es justo donde suele estar el
+   * polígono que se acaba de tocar: para ver la unidad de al lado había que
+   * cerrarla, mover el mapa y volver a tocar. Ahora se agarra por su barra y se
+   * lleva a donde no estorbe, con el mapa quieto.
+   *
+   * Se reutiliza el panel del 3D y el de dibujo en vez de escribir otro arrastre:
+   * ese componente ya tiene resueltas las tres trampas que costaron una tanda
+   * cada una —el `preventDefault` que mataba el clic de la equis, distinguir un
+   * arrastre de un toque, y devolver el panel a la pantalla si se sale o si la
+   * ventana cambia de tamaño—.
+   *
+   * `collapsible={false}` porque esta ficha no debe dejar un botón detrás: se
+   * abre tocando el mapa, así que la equis la cierra del todo, como antes.
+   */
   return (
-    <div className="w-[min(15rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-      <div className="flex items-baseline justify-between gap-2 border-b border-slate-100 bg-slate-50 px-2.5 py-1.5">
-        <p className="text-[11px] font-medium text-slate-600">
-          {consultando ? "Consultando…" : "En este punto"}
-        </p>
-        <button
-          type="button"
-          onClick={onDismiss}
-          aria-label="Cerrar la consulta"
-          className="-mr-1 shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-600"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
+    <FloatingPanel
+      title={consultando ? "Consultando…" : "En este punto"}
+      icon={MapPin}
+      collapsible={false}
+      closeLabel="Cerrar la consulta"
+      onRequestClose={onDismiss}
+    >
+      {/* El margen negativo anula el relleno del panel para que las separaciones
+          y la barra de «Simbología» sigan llegando de borde a borde, como en la
+          tarjeta que había antes. */}
+      <div className="-mx-3 -my-2">
       {!consultando && resultados.length === 0 ? (
         // Decirlo, y no dejar la tarjeta vacía: «no hay dato aquí» y «la consulta
         // falló» se ven igual si no se distinguen, y la primera es una respuesta
@@ -226,7 +240,8 @@ export const SgcPanel = ({
           )}
         </div>
       )}
-    </div>
+      </div>
+    </FloatingPanel>
   )
 }
 

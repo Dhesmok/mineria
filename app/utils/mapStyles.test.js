@@ -5,6 +5,7 @@ import {
   INITIAL_CENTER,
   MAX_ZOOM,
   TERRAIN_SOURCE_ID,
+  TRANSPARENT_PIXEL,
 } from "./mapStyles"
 import {
   ANM_LAYERS,
@@ -181,5 +182,55 @@ describe("terreno y relieve en el estilo", () => {
     ANM_LAYERS.forEach(({ key }) => {
       expect(indexOfLayer(style, anmFillLayerId(key))).toBeGreaterThan(hillshade)
     })
+  })
+})
+
+describe("TRANSPARENT_PIXEL", () => {
+  /**
+   * Se le leen los píxeles de verdad, decodificando el PNG.
+   *
+   * **«Parece transparente» es exactamente lo que ya falló.** El que había era
+   * azul al 50 % —bytes `0, 0, 255, 127`— y nadie lo notó porque el nombre de la
+   * constante decía otra cosa. Como las fuentes de tipo `image` nacen cubriendo
+   * el mundo entero, eso pintaba el país de azul al encender una capa del SGC sin
+   * departamentos marcados. Una prueba que solo comparase la cadena base64 con
+   * ella misma habría pasado igual de contenta.
+   */
+  const pixelesDe = (dataUrl) => {
+    const zlib = require("zlib")
+    const png = Buffer.from(dataUrl.split(",")[1], "base64")
+
+    expect(png.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    expect(png.readUInt32BE(16)).toBe(1) // ancho
+    expect(png.readUInt32BE(20)).toBe(1) // alto
+    expect(png[25]).toBe(6) // color type 6 = RGBA; sin canal alfa no hay transparencia posible
+
+    let offset = 8
+    while (offset < png.length) {
+      const largo = png.readUInt32BE(offset)
+      if (png.toString("ascii", offset + 4, offset + 8) === "IDAT") {
+        // El primer byte de la fila es el tipo de filtro; con filtro 0 los cuatro
+        // siguientes son el RGBA tal cual.
+        const crudo = zlib.inflateSync(png.subarray(offset + 8, offset + 8 + largo))
+        expect(crudo[0]).toBe(0)
+        return [...crudo.subarray(1, 5)]
+      }
+      offset += 12 + largo
+    }
+    throw new Error("El PNG no tiene datos")
+  }
+
+  it("es transparente de verdad, no azul", () => {
+    expect(pixelesDe(TRANSPARENT_PIXEL)[3]).toBe(0)
+  })
+
+  it("lo usan todas las fuentes de imagen, y es el mismo", () => {
+    // Estuvo copiado en `useSgcLayersGL` con el mismo error, que es el motivo por
+    // el que arreglarlo en un sitio no habría bastado.
+    const style = createBaseStyle()
+    const imagenes = Object.values(style.sources).filter((s) => s.type === "image")
+
+    expect(imagenes.length).toBeGreaterThan(0)
+    imagenes.forEach((fuente) => expect(fuente.url).toBe(TRANSPARENT_PIXEL))
   })
 })

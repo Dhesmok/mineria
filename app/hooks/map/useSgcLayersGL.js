@@ -17,7 +17,7 @@ import {
   sgcSourceId,
   subLayersFrom,
 } from "../../utils/sgcLayers"
-import { SGC_ATTRIBUTION_LAYER_ID } from "../../utils/mapStyles"
+import { SGC_ATTRIBUTION_LAYER_ID, TRANSPARENT_PIXEL } from "../../utils/mapStyles"
 import { onMapTap } from "../../utils/tapGesture"
 import { debounce } from "@/lib/utils"
 
@@ -63,9 +63,12 @@ const REDIBUJO_MS = 350
  *
  * Una fuente de tipo `image` no se puede vaciar: solo se le puede dar otra
  * imagen. Esta es la forma de decir «aquí no va nada» sin ir a buscar un archivo.
+ *
+ * Llega de `mapStyles` y ya no se escribe aquí: estaba copiado, y el copiado era
+ * **azul** —ver la nota de `TRANSPARENT_PIXEL`—, que es lo que pintaba el país
+ * entero de azul al desmarcar todos los departamentos.
  */
-const PIXEL_TRANSPARENTE =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+const PIXEL_TRANSPARENTE = TRANSPARENT_PIXEL
 /** La marca que se guarda para no volver a vaciar una capa ya vacía. */
 const VACIA = "vacia"
 

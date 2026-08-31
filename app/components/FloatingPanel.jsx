@@ -53,6 +53,14 @@ export const FloatingPanel = ({
   /** Botón extra a la izquierda de la equis, para lo que necesite cada panel. */
   headerAction = null,
   /**
+   * Cómo se llama la equis para quien no ve la pantalla.
+   *
+   * Por omisión se arma con el título, que funciona con «Dibujo» o «Opciones 3D».
+   * Pero el título de la ficha del SGC es «En este punto», y «Cerrar En este
+   * punto» no es una frase: por eso se puede dar el texto entero.
+   */
+  closeLabel = null,
+  /**
    * Recogido: el panel se estrecha hasta lo que ocupe su contenido.
    *
    * Hace falta que lo sepa **el panel** y no solo su contenido. La primera
@@ -102,6 +110,23 @@ export const FloatingPanel = ({
   const devolverAPantalla = useCallback(() => {
     const caja = nodoRef.current?.getBoundingClientRect()
     if (!caja) return
+
+    /**
+     * Un elemento sin medidas todavía no está colocado, y no hay nada que
+     * corregir.
+     *
+     * **Sin esta salida la corrección no converge.** Un rectángulo de ceros cae
+     * siempre por encima y a la izquierda del margen, así que se pide moverlo;
+     * pero como la medida sigue siendo de ceros, se vuelve a pedir en el
+     * siguiente pintado, y otra vez. React lo corta con «Maximum update depth
+     * exceeded» y el panel no llega a dibujarse.
+     *
+     * Pasa antes del primer trazado, dentro de un contenedor oculto, y en
+     * cualquier entorno que no calcule maquetación. Se destapó al meter aquí la
+     * ficha del SGC, que sí se prueba montada; el panel del 3D nunca lo hizo
+     * saltar porque no tenía pruebas que lo montaran.
+     */
+    if (caja.width === 0 && caja.height === 0) return
 
     let mover = { x: 0, y: 0 }
     if (caja.right > window.innerWidth - MARGEN) mover.x = window.innerWidth - MARGEN - caja.right
@@ -230,7 +255,7 @@ export const FloatingPanel = ({
                 if (collapsible) setCollapsed(true)
                 onRequestClose?.()
               }}
-              aria-label={collapsible ? `Guardar ${title}` : `Cerrar ${title}`}
+              aria-label={closeLabel ?? (collapsible ? `Guardar ${title}` : `Cerrar ${title}`)}
               title={collapsible ? "Guardar en un botón" : "Cerrar"}
               className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
             >
