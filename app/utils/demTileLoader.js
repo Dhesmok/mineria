@@ -228,6 +228,10 @@ export const reliefAround = async (template, { lng, lat, radiusMeters, zoom, sig
   )
   const teselas = tilesOf(rango)
   const { heights, missing } = await loadMosaic(template, teselas, rango, { signal })
+  // Abandonar deja el mosaico a medias, y a medias significa lleno de ceros: sin
+  // esta salida se devolvería un desnivel calculado sobre alturas que nunca se
+  // bajaron —cero es una altura perfectamente válida, y ese es el problema—.
+  if (signal?.aborted) return null
   if (missing === teselas.length) return null
 
   const { col, row } = cellInMosaic(lng, lat, rango)

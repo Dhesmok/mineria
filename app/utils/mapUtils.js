@@ -18,6 +18,17 @@ export const formatArea = (squareMeters) => {
   return `${squareMeters.toFixed(2)} m²`
 }
 
+/**
+ * Por debajo de esto, un número suelto no es una fecha de la ANM.
+ *
+ * Los servicios entregan las fechas como milisegundos desde 1970, y cualquiera
+ * de un expediente minero pasa holgadamente de este umbral (son los años
+ * setenta). Sin él, un campo que valiera "2020" se leía como 2020 milisegundos y
+ * la ficha decía `01/01/1970` con toda naturalidad: un dato falso con aspecto de
+ * dato bueno, que es la clase de error que nadie comprueba.
+ */
+const MIN_TIMESTAMP_MS = 1e11
+
 export const formatDate = (value) => {
   if (!value) {
     return "N/A"
@@ -25,6 +36,7 @@ export const formatDate = (value) => {
   let date
   if (typeof value === "number" || /^[0-9]+$/.test(value)) {
     const timestamp = Number.parseInt(value, 10)
+    if (Math.abs(timestamp) < MIN_TIMESTAMP_MS) return String(value)
     date = new Date(timestamp)
   } else {
     date = new Date(value)

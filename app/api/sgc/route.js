@@ -176,7 +176,13 @@ export const GET = async (request) => {
       },
     })
   } catch (fallo) {
-    const agotado = fallo?.name === "AbortError"
-    return error(agotado ? "El SGC tardó demasiado." : "No se pudo consultar al SGC.", 504)
+    // Solo un tiempo agotado es un 504. Lo demás —el DNS que no resuelve, el TLS
+    // que no negocia, la conexión que se cae— es un 502: la puerta de enlace no
+    // pudo hablar con el servicio, que no es lo mismo que el servicio tardando.
+    // Salían los tres como 504 y desde fuera parecían el mismo problema, con lo
+    // que las dos soluciones —esperar o revisar la red— se confundían.
+    if (fallo?.name === "AbortError") return error("El SGC tardó demasiado.", 504)
+    console.error("No se pudo consultar al SGC:", fallo)
+    return error("No se pudo consultar al SGC.", 502)
   }
 }

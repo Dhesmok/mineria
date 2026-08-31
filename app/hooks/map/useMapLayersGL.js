@@ -12,6 +12,7 @@ import {
 } from "../../utils/anmLayers"
 import { SEARCH_LAYERS } from "../../utils/mapStyles"
 import { buildMapFilter, buildWhereClause } from "../../utils/layerFilters"
+import { layerFieldsFor } from "../../utils/layerFields"
 import { layerByKey, styleLayerIdsFor } from "../../utils/themeAreas"
 import { bboxOfGeometry } from "../../utils/bboxDownload"
 import { labelElementFor } from "../../utils/mapLabelsGL"
@@ -25,6 +26,18 @@ import { debounce } from "@/lib/utils"
 // la ANM por capa encendida. Esperar a que el usuario se quede quieto evita
 // encadenar peticiones que van a quedar obsoletas antes de llegar.
 const REFRESH_DELAY_MS = 400
+
+/**
+ * El tope superior que `setLayerZoomRange` entiende como «ninguno».
+ *
+ * Es el valor por omisión de `maxzoom` en la especificación de estilo, y hay que
+ * escribirlo porque `setLayerZoomRange` exige los dos extremos: solo se quiere
+ * mover el de abajo. **No vale pasarle el `MAX_ZOOM` del mapa**, que es 22:
+ * MapLibre esconde la capa *a partir* de su `maxzoom`, así que con 22 los
+ * títulos desaparecerían justo al llegar al zoom máximo — se arreglaría un
+ * fallo de escala metiendo otro en la contraria.
+ */
+const SIN_TOPE_SUPERIOR = 24
 
 /**
  * Capas de la ANM sobre MapLibre.
@@ -156,6 +169,11 @@ export const useMapLayersGL = (
       return Boolean(buildWhereClause(selections, areaRange))
     })
 
+  // Lo leen `redrawLabels` y el efecto de visibilidad, que corren fuera del
+  // render en el que se calculó.
+  const barreCapaEnteraRef = useRef(barreCapaEntera)
+  barreCapaEnteraRef.current = barreCapaEntera
+
   const clearLabels = useCallback((key) => {
     const markers = labelMarkersRef.current[key]
     if (!markers) return
@@ -196,17 +214,32 @@ export const useMapLayersGL = (
     if (!map) return
 
     Object.keys(labelMarkersRef.current).forEach((key) => clearLabels(key))
-    if (map.getZoom() < LAYERS_MIN_ZOOM) return
+    // El zoom mínimo no aplica cuando se barre la capa entera, por lo mismo que
+    // no aplica a la consulta: ahí hay figuras cargadas a cualquier escala. No
+    // hace falta otra guarda para que no se apiñen — `selectVisibleLabels` ya
+    // descarta la etiqueta que no cabe dentro de su propio polígono, y a esos
+    // zooms no cabe casi ninguna.
+    if (!barreCapaEnteraRef.current && map.getZoom() < LAYERS_MIN_ZOOM) return
 
     const candidatos = Object.entries(labelCandidatesRef.current)
       .filter(([key]) => Boolean(stateRef.current[key]?.on))
       .flatMap(([, lista]) => lista)
 
     const lienzo = map.getCanvas()
+    const limites = map.getBounds()
     const elegidas = selectVisibleLabels(candidatos, {
       project: (lngLat) => map.project(lngLat),
       width: lienzo.clientWidth,
       height: lienzo.clientHeight,
+      // Lo que no toca la pantalla se descarta sin proyectarlo. Con la capa
+      // entera cargada eso son miles de figuras de las que se ven decenas, y
+      // `project` con el terreno puesto cuesta caro.
+      bounds: {
+        west: limites.getWest(),
+        south: limites.getSouth(),
+        east: limites.getEast(),
+        north: limites.getNorth(),
+      },
     })
 
     elegidas.forEach((candidato) => {
@@ -316,7 +349,30 @@ export const useMapLayersGL = (
             layerUrl = tenureLayerUrl(layerNumber)
           }
 
-          const where = whereDe(key)
+          /**
+           * El `where` definitivo, ya sabiendo qué campos tiene esta capa.
+           *
+           * `whereDe` sirve para decidir *si* hay que barrer la capa entera, y
+           * eso se calcula en el render. Pero la cláusula que se manda tiene que
+           * nombrar solo campos que existan, o ArcGIS responde HTTP 200 con un
+           * cuerpo de error —trampa nº 2— y el visor saca el banner rojo. Cada
+           * capa bautiza el estado a su manera (TITULO_ESTADO, STATUS, ESTADO),
+           * así que preguntar por los tres rompía justamente lo que el respaldo
+           * venía a resolver.
+           *
+           * Los campos se piden una vez por capa y se cachean en el módulo; si
+           * la petición no llega, `layerFieldsFor` devuelve null y se manda la
+           * cláusula de antes, que es el peor caso de siempre y no uno nuevo.
+           */
+          const barrer = whereDe(key)
+          let where = null
+          if (barrer) {
+            const campos = await layerFieldsFor(layerUrl)
+            if (isStale()) return
+            const { selections, areaRange } = filtroDeCapa(key)
+            where = buildWhereClause(selections, areaRange, campos)
+          }
+
           const result = await fetchLayerFeatures(
             layerUrl,
             where ? null : box,
@@ -369,6 +425,25 @@ export const useMapLayersGL = (
       const estado = layerState[key]
       if (!estado || !map.getLayer(anmFillLayerId(key))) return
 
+      /**
+       * El zoom mínimo se levanta al barrer la capa entera.
+       *
+       * **Es el fallo que dejaba "Toda la capa" sin dibujar nada.** El estilo
+       * declara estas capas con `minzoom: 10` para no pintar manchas sueltas al
+       * alejarse, y `refresh` desactiva ese tope a propósito cuando hay un filtro
+       * que barre el país —lo que cumple puede estar lejísimos de donde se está
+       * mirando—. Pero el tope del estilo seguía puesto: el hook consultaba a la
+       * ANM, recibía los polígonos, hacía `setData`… y MapLibre se negaba a
+       * pintarlos. Y como `showZoomInHint` es falso en ese modo, tampoco salía la
+       * explicación: el panel decía «37 de 412» sobre un mapa vacío.
+       *
+       * No se ve en ninguna prueba sobre datos —los datos llegan y se guardan
+       * bien—, solo mirando la pantalla. Trampa nº 10.
+       */
+      const desde = barreCapaEntera ? 0 : LAYERS_MIN_ZOOM
+      map.setLayerZoomRange(anmFillLayerId(key), desde, SIN_TOPE_SUPERIOR)
+      map.setLayerZoomRange(anmLineLayerId(key), desde, SIN_TOPE_SUPERIOR)
+
       const visible = estado.on ? "visible" : "none"
       map.setLayoutProperty(anmFillLayerId(key), "visibility", visible)
       map.setLayoutProperty(anmLineLayerId(key), "visibility", visible)
@@ -379,7 +454,7 @@ export const useMapLayersGL = (
       map.setPaintProperty(anmFillLayerId(key), "fill-color", estado.fillColor ?? fillColor)
       map.setPaintProperty(anmLineLayerId(key), "line-color", estado.lineColor ?? lineColor)
     })
-  }, [mapInstance, layerState, mapRef])
+  }, [mapInstance, layerState, barreCapaEntera, mapRef])
 
   /**
    * Orden de pintado, según el orden de la lista del panel.

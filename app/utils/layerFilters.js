@@ -100,9 +100,34 @@ export const collectFilterOptions = (featureProperties) => {
   }
 }
 
-/** La expresión que lee un campo con sus respaldos, en el lenguaje de MapLibre. */
-const fieldExpression = (fields) =>
-  fields.length === 1 ? ["get", fields[0]] : ["coalesce", ...fields.map((field) => ["get", field])]
+/**
+ * La expresión que lee un campo con sus respaldos, en el lenguaje de MapLibre.
+ *
+ * **El envoltorio que convierte la cadena vacía en nada no sobra.** `coalesce`
+ * solo se salta lo que vale `null`, y ArcGIS devuelve `""` —no `null`— en un
+ * campo de texto sin dato. Sin esto, un título con `TITULO_ESTADO: ""` y
+ * `ESTADO: "Vigente"` se leía como `""` y el mapa lo escondía, mientras
+ * `matchesFilters` —que sí salta los vacíos— lo seguía contando: el panel decía
+ * un número y el mapa enseñaba otro, sin ningún error de por medio. Es la peor
+ * clase de discrepancia porque las dos mitades parecen correctas por separado.
+ */
+const readExpression = (field) => [
+  "case",
+  ["==", ["to-string", ["coalesce", ["get", field], ""]], ""],
+  null,
+  ["to-string", ["get", field]],
+]
+
+/**
+ * El `""` del final tampoco es adorno: `match` exige texto o número y **revienta
+ * la expresión entera si le llega `null`**, así que una figura sin ninguno de
+ * los campos dejaría la capa sin filtrar en vez de sin coincidencias. Con la
+ * cadena vacía, esa figura simplemente no casa con nada, que es lo correcto.
+ *
+ * Y `to-string` porque `readField` compara textos: un área guardada como número
+ * y una opción guardada como "12" son el mismo valor y tienen que casar.
+ */
+const fieldExpression = (fields) => ["coalesce", ...fields.map(readExpression), ""]
 
 /**
  * Traduce lo elegido en el panel a un filtro de MapLibre.
@@ -137,6 +162,9 @@ export const buildMapFilter = (selections = {}, areaRange = null) => {
 /** Comilla simple duplicada: es como SQL escapa una comilla dentro de un texto. */
 const quote = (value) => `'${escapeSqlText(value)}'`
 
+/** Lo que se le pide al servicio cuando la capa no puede cumplir el filtro. */
+export const NO_MATCHES = "1=0"
+
 /**
  * El mismo filtro, pero en SQL, para pedírselo al servicio.
  *
@@ -146,29 +174,65 @@ const quote = (value) => `'${escapeSqlText(value)}'`
  * al servicio, porque los títulos que cumplen pueden estar a mil kilómetros de
  * donde se está mirando.
  *
- * El respaldo entre nombres de campo se traduce a un `OR`: una capa que no tenga
- * TITULO_ESTADO puede tener ESTADO, y preguntar solo por el primero devolvería
- * cero resultados en esa capa sin decir por qué.
+ * ## Por qué hace falta saber qué campos tiene la capa
  *
+ * El respaldo entre nombres de campo existe porque **cada capa de la ANM
+ * bautiza el suyo a su manera**: el estado del título es TITULO_ESTADO en unas y
+ * STATUS o ESTADO en otras. Traducirlo a un `OR` de los tres parecía lo natural,
+ * y es justo lo que dispara la trampa nº 2 del proyecto: un `where` que nombra
+ * un campo inexistente hace que ArcGIS responda **HTTP 200 con un cuerpo de
+ * error**, `fetchArcgisJson` lo convierte en excepción y el visor saca el banner
+ * rojo. O sea que el respaldo pensado para que ninguna capa se quedara sin
+ * filtrar era lo que las rompía todas.
+ *
+ * Con `fields` —los nombres que la propia capa declara, leídos en runtime como
+ * manda la trampa nº 1— se pregunta solo por los que existen. Y si no existe
+ * ninguno, se pide `1=0` en vez de callar la condición: esa capa **no puede**
+ * cumplir el filtro, y devolverla entera sería enseñar como resultado lo que no
+ * se ha filtrado.
+ *
+ * @param {Object} selections {estado: ["Vigente"], ...}
+ * @param {Object|null} areaRange {min, max} en hectáreas
+ * @param {Set<string>|null} [fields] los campos que la capa declara, o null si
+ *   no se pudieron averiguar; con null se nombran todos, que es como estaba
  * @returns {string|null} la cláusula, o null si no hay nada que filtrar
  */
-export const buildWhereClause = (selections = {}, areaRange = null) => {
+export const buildWhereClause = (selections = {}, areaRange = null, fields = null) => {
+  // La comparación va sin distinguir mayúsculas: los nombres de campo de ArcGIS
+  // no las distinguen y una capa que publique `Estado` no debería quedarse fuera
+  // por una letra.
+  const disponibles = fields ? new Set([...fields].map((f) => String(f).toUpperCase())) : null
+  const existe = (field) => !disponibles || disponibles.has(field.toUpperCase())
+
   const partes = []
+  let imposible = false
 
   FILTER_FIELDS.forEach((campo) => {
     const elegidos = selections?.[campo.key]
     if (!Array.isArray(elegidos) || elegidos.length === 0) return
 
+    const usables = campo.fields.filter(existe)
+    if (usables.length === 0) {
+      imposible = true
+      return
+    }
+
     const lista = elegidos.map(quote).join(", ")
-    const porCampo = campo.fields.map((field) => `${field} IN (${lista})`)
+    const porCampo = usables.map((field) => `${field} IN (${lista})`)
     partes.push(porCampo.length === 1 ? porCampo[0] : `(${porCampo.join(" OR ")})`)
   })
 
   if (areaRange) {
-    if (Number.isFinite(areaRange.min)) partes.push(`${AREA_FIELD} >= ${areaRange.min}`)
-    if (Number.isFinite(areaRange.max)) partes.push(`${AREA_FIELD} <= ${areaRange.max}`)
+    if (!existe(AREA_FIELD)) imposible = true
+    else {
+      if (Number.isFinite(areaRange.min)) partes.push(`${AREA_FIELD} >= ${areaRange.min}`)
+      if (Number.isFinite(areaRange.max)) partes.push(`${AREA_FIELD} <= ${areaRange.max}`)
+    }
   }
 
+  // `imposible` solo se marca cuando había algo que filtrar, así que aquí no
+  // puede confundirse con "no hay filtro puesto".
+  if (imposible) return NO_MATCHES
   return partes.length === 0 ? null : partes.join(" AND ")
 }
 

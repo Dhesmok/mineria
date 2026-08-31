@@ -279,7 +279,16 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
     if (!mapInstance) return
     const alParar = debounce(repintar, REDIBUJO_MS)
     mapInstance.on("moveend", alParar)
-    return () => mapInstance.off("moveend", alParar)
+    return () => {
+      mapInstance.off("moveend", alParar)
+      // Y se anula la que estuviera esperando. Sin esto, el temporizador ya en
+      // marcha dispara un repintado justo después de desengancharse, con el mapa
+      // posiblemente ya destruido: `repintar` comprueba que exista `mapRef`, pero
+      // la referencia puede seguir apuntando a un mapa quitado, y ahí
+      // `getBounds()` lanza. Es la misma limpieza que hace `useMapLayersGL` con
+      // su consulta aplazada, y aquí faltaba.
+      alParar.cancel()
+    }
   }, [mapInstance, repintar])
 
   /** Y al encender una capa, apagarla o cambiar qué subcapas se quieren ver. */

@@ -184,10 +184,36 @@ describe("useExpedientSearchGL", () => {
     const { rerender } = renderSearch(map)
 
     rerender({ searchTrigger: 1 })
-    await waitFor(() => expect(signals).toHaveLength(1))
+    // Las cuatro capas se consultan a la vez y con dos nombres de campo cada
+    // una, así que la primera búsqueda lanza varias peticiones —no una— y todas
+    // comparten el mismo `signal`. Lo que importa aquí no es cuántas son sino
+    // que la búsqueda siguiente las cancele todas de golpe.
+    await waitFor(() => expect(signals.length).toBeGreaterThan(0))
+    const deLaPrimera = [...signals]
 
     rerender({ searchTrigger: 2 })
-    await waitFor(() => expect(signals[0].aborted).toBe(true))
+    await waitFor(() => expect(deLaPrimera.every((signal) => signal.aborted)).toBe(true))
+  })
+
+  it("consulta las capas a la vez y no una detrás de otra", async () => {
+    // Eran hasta ocho idas y vueltas en serie —cuatro capas por dos nombres de
+    // campo—, así que un expediente de la última capa se pagaba entero. En
+    // paralelo el peor caso son dos.
+    let enVuelo = 0
+    let maximoALaVez = 0
+    global.fetch = jest.fn(async () => {
+      enVuelo += 1
+      maximoALaVez = Math.max(maximoALaVez, enVuelo)
+      await Promise.resolve()
+      enVuelo -= 1
+      return { ok: true, json: async () => ({ features: [] }) }
+    })
+
+    const { rerender } = renderSearch(createMap())
+    rerender({ searchTrigger: 1 })
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(8))
+    expect(maximoALaVez).toBeGreaterThan(1)
   })
 
   it("limpia los vértices del expediente anterior cuando la búsqueda no encuentra nada", async () => {

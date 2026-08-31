@@ -113,7 +113,11 @@ export const buildReadme = ({ layers, bbox, generatedAt }) => {
 
   layers.forEach((layer) => {
     push(`  - ${layer.label}`)
-    push("      Fuente: ANM (Agencia Nacional de Minería)")
+    // La fuente sale del catálogo de la capa, no escrita aquí. Estuvo fija como
+    // «ANM» para toda capa: cierto con las cuatro de hoy y falso el día que
+    // entre la primera del SGC o del IGAC, con el README asegurando una
+    // procedencia equivocada sin que nada fallara.
+    push(`      Fuente: ${layer.source ?? "sin identificar"}`)
     push(`      Servicio: ${layer.serviceUrl}`)
     push(`      Consultado: ${formatTimestamp(generatedAt)}`)
     push(`      Registros incluidos: ${layer.count}`)
@@ -160,10 +164,10 @@ export const resolveActiveLayers = async (layerVisibility) => {
   const layerNumbers = needsDiscovery ? await findTenureLayerNumbers() : {}
 
   return active
-    .map(({ key, label, tenureName, url }) => {
-      if (url) return { key, label, serviceUrl: url }
+    .map(({ key, label, source, tenureName, url }) => {
+      if (url) return { key, label, source, serviceUrl: url }
       const number = layerNumbers[tenureName]
-      return number === undefined ? null : { key, label, serviceUrl: tenureLayerUrl(number) }
+      return number === undefined ? null : { key, label, source, serviceUrl: tenureLayerUrl(number) }
     })
     .filter(Boolean)
 }
@@ -200,6 +204,7 @@ export const buildAreaZip = async ({ JSZipCtor, layers, areaGeoJSON, bbox, gener
 
   const readmeLayers = layers.map((layer) => ({
     label: layer.label,
+    source: layer.source,
     serviceUrl: layer.serviceUrl,
     count: layer.featureCollection.features.length,
     truncated: layer.truncated,
@@ -208,8 +213,26 @@ export const buildAreaZip = async ({ JSZipCtor, layers, areaGeoJSON, bbox, gener
   zip.file("README.txt", buildReadme({ layers: readmeLayers, bbox, generatedAt }))
   zip.file("area.geojson", JSON.stringify(areaGeoJSON, null, 2))
 
+  // Un nombre de archivo por capa, y sin repetidos. `sanitizeName` quita los
+  // acentos, así que «Títulos Vigentes» y «Titulos Vigentes» dan lo mismo y el
+  // segundo pisaba al primero dentro del ZIP sin avisar: el usuario abría cuatro
+  // capas y encontraba tres archivos. Con las de hoy no pasa; con capas de
+  // varias entidades es cuestión de tiempo.
+  const usados = new Set()
+  const nombreLibre = (etiqueta) => {
+    const base = sanitizeName(etiqueta)
+    if (!usados.has(base)) {
+      usados.add(base)
+      return base
+    }
+    let n = 2
+    while (usados.has(`${base}_${n}`)) n += 1
+    usados.add(`${base}_${n}`)
+    return `${base}_${n}`
+  }
+
   layers.forEach((layer) => {
-    const base = sanitizeName(layer.label)
+    const base = nombreLibre(layer.label)
     zip.file(`${base}.geojson`, JSON.stringify(layer.featureCollection, null, 2))
 
     // El KML solo si hay geometría exportable; buildKml devuelve null si no.

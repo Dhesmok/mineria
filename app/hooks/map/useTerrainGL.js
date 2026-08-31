@@ -177,19 +177,39 @@ export const useTerrainGL = (mapRef, mapInstance) => {
    * sintético de 1.800 m: a zoom 13 y 14 responde bien, de 15 en adelante da 0.
    * Preguntarle a él habría dado un techo de cero y no habría corregido nada.
    */
+  /**
+   * La medida en curso, para abandonarla si llega otra.
+   *
+   * Al mover el mapa en 3D se vuelve a medir en cada `moveend`. Casi siempre sale
+   * de la memoria —una tesela de este nivel abarca 19 km—, pero al cruzar el
+   * borde de una tesela con la red lenta se encolaban mosaicos que ya no le
+   * importaban a nadie, y el último en llegar podía ser el más viejo: la cámara
+   * acababa calculando con el desnivel de donde ya no está.
+   */
+  const medicionRef = useRef(null)
+
   const medirElDesnivel = useCallback(async (map) => {
     const centro = map.getCenter()
+
+    medicionRef.current?.abort()
+    const control = new AbortController()
+    medicionRef.current = control
+
     try {
       const medida = await reliefAround(TERRAIN_TILE_TEMPLATE, {
         lng: centro.lng,
         lat: centro.lat,
         radiusMeters: SCENE_RADIUS_M,
         zoom: LOOKAROUND_DEM_ZOOM,
+        signal: control.signal,
       })
+      // Si mientras tanto arrancó otra medida, la que manda es esa: lo que se
+      // acaba de calcular es de un sitio donde ya no se está mirando.
+      if (medicionRef.current !== control) return desnivelRef.current
       desnivelRef.current = medida?.relief ?? null
     } catch {
       // Sin modelo no hay nada que calcular.
-      desnivelRef.current = null
+      if (medicionRef.current === control) desnivelRef.current = null
     }
     return desnivelRef.current
   }, [])
@@ -569,6 +589,8 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   useEffect(() => {
     if (!mapInstance) return
     return () => {
+      // Y abandonar la medida del desnivel, que puede tener teselas en vuelo.
+      medicionRef.current?.abort()
       try {
         if (mapInstance.getTerrain()) mapInstance.setTerrain(null)
       } catch {

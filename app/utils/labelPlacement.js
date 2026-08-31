@@ -65,17 +65,39 @@ const overlaps = (a, b) =>
  *   de grados a píxeles de pantalla
  * @param {number} options.width  ancho del mapa en píxeles
  * @param {number} options.height alto del mapa en píxeles
+ * @param {{west,south,east,north}} [options.bounds] lo que se está viendo, en
+ *   grados. Con él, lo que cae fuera se descarta sin proyectarlo: ver abajo
  * @param {number} [options.maxLabels]
  * @returns {Array} el subconjunto de `candidates` que se debe dibujar
  */
 export const selectVisibleLabels = (candidates, options) => {
-  const { project, width, height, maxLabels = MAX_LABELS } = options ?? {}
+  const { project, width, height, bounds, maxLabels = MAX_LABELS } = options ?? {}
   if (typeof project !== "function") return []
+
+  /**
+   * ¿El recuadro de esta figura toca lo que se está viendo?
+   *
+   * Es una comparación de cuatro números, y evita una llamada a `project` por
+   * figura descartada. Importa en modo "toda la capa", donde lo cargado puede
+   * ser el país entero: son miles de figuras de las que apenas unas decenas
+   * están en pantalla, y `project` con el terreno puesto no es una fórmula sino
+   * un rayo contra la malla del relieve —la misma lección de `demTiles.js`—.
+   *
+   * Sin `bounds` no se descarta nada: el filtro por píxeles de más abajo sigue
+   * siendo el que manda, y este solo le ahorra trabajo.
+   */
+  const puedeVerse = (bbox) =>
+    !bounds ||
+    (bbox.east >= bounds.west &&
+      bbox.west <= bounds.east &&
+      bbox.north >= bounds.south &&
+      bbox.south <= bounds.north)
 
   const medidos = []
 
   for (const candidate of Array.isArray(candidates) ? candidates : []) {
     if (!candidate?.anchor || !candidate?.bbox) continue
+    if (!puedeVerse(candidate.bbox)) continue
 
     const punto = project(candidate.anchor)
     if (!punto || !Number.isFinite(punto.x) || !Number.isFinite(punto.y)) continue

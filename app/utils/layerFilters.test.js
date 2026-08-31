@@ -1,8 +1,11 @@
 import {
   buildMapFilter,
+  buildWhereClause,
   collectFilterOptions,
   countMatching,
   hasActiveFilters,
+  matchesFilters,
+  NO_MATCHES,
 } from "./layerFilters"
 
 // Atributos con la forma que devuelven los servicios de la ANM, incluida la
@@ -51,24 +54,50 @@ describe("buildMapFilter", () => {
     expect(hasActiveFilters({}, null)).toBe(false)
   })
 
+  // Los nombres de campo que lee una expresión, en orden. Se comprueba esto y
+  // no la forma literal: cada campo va envuelto en un `case` que trata la
+  // cadena vacía como ausente (ver `readExpression`), y escribir ese anidamiento
+  // en cada expectativa haría la prueba ilegible sin comprobar nada más.
+  const camposLeidos = (expresion) => {
+    const encontrados = []
+    const recorrer = (nodo) => {
+      if (!Array.isArray(nodo)) return
+      if (nodo[0] === "get" && typeof nodo[1] === "string") {
+        if (!encontrados.includes(nodo[1])) encontrados.push(nodo[1])
+        return
+      }
+      nodo.forEach(recorrer)
+    }
+    recorrer(expresion)
+    return encontrados
+  }
+
   it("arma una condición por un solo campo", () => {
-    expect(buildMapFilter({ etapa: ["Explotación"] })).toEqual([
-      "match",
-      ["get", "ETAPA"],
-      ["Explotación"],
-      true,
-      false,
-    ])
+    const filtro = buildMapFilter({ etapa: ["Explotación"] })
+    expect(filtro[0]).toBe("match")
+    expect(camposLeidos(filtro[1])).toEqual(["ETAPA"])
+    expect(filtro.slice(2)).toEqual([["Explotación"], true, false])
   })
 
-  it("lee el estado con sus respaldos", () => {
-    expect(buildMapFilter({ estado: ["Vigente"] })).toEqual([
-      "match",
-      ["coalesce", ["get", "TITULO_ESTADO"], ["get", "STATUS"], ["get", "ESTADO"]],
-      ["Vigente"],
-      true,
-      false,
-    ])
+  it("lee el estado con sus respaldos, en orden", () => {
+    const filtro = buildMapFilter({ estado: ["Vigente"] })
+    expect(filtro[1][0]).toBe("coalesce")
+    expect(camposLeidos(filtro[1])).toEqual(["TITULO_ESTADO", "STATUS", "ESTADO"])
+  })
+
+  it("trata la cadena vacía como campo ausente, igual que el conteo", () => {
+    // ArcGIS devuelve "" —no null— en un campo de texto sin dato, y `coalesce`
+    // solo se salta null. Sin el envoltorio, un título con TITULO_ESTADO vacío y
+    // ESTADO con valor lo escondía el mapa mientras `matchesFilters` lo contaba:
+    // el panel decía un número y el mapa enseñaba otro.
+    const props = { TITULO_ESTADO: "", ESTADO: "Vigente" }
+    expect(matchesFilters(props, { estado: ["Vigente"] })).toBe(true)
+
+    const lectura = buildMapFilter({ estado: ["Vigente"] })[1]
+    // El respaldo del final impide que `match` reciba null, que sí revienta la
+    // expresión entera en vez de limitarse a no coincidir.
+    expect(lectura[lectura.length - 1]).toBe("")
+    expect(JSON.stringify(lectura)).toContain('"case"')
   })
 
   it("junta varios campos con un all", () => {
@@ -146,5 +175,50 @@ describe("buildWhereClause", () => {
     expect(buildWhereClause({ etapa: ["Explotación"] }, { min: 100, max: 500 })).toBe(
       "ETAPA IN ('Explotación') AND AREA_HA >= 100 AND AREA_HA <= 500",
     )
+  })
+
+  // La razón de ser del tercer parámetro: nombrar un campo que la capa no tiene
+  // hace que ArcGIS responda HTTP 200 con un cuerpo de error —la trampa nº 2—, y
+  // el visor sacaba el banner rojo al filtrar por estado en "toda la capa".
+  describe("con los campos que la capa declara", () => {
+    it("pregunta solo por los que existen", () => {
+      expect(buildWhereClause({ estado: ["Vigente"] }, null, new Set(["ESTADO", "AREA_HA"]))).toBe(
+        "ESTADO IN ('Vigente')",
+      )
+    })
+
+    it("mantiene el OR cuando la capa tiene varios de los nombres", () => {
+      expect(
+        buildWhereClause({ estado: ["Vigente"] }, null, new Set(["TITULO_ESTADO", "STATUS"])),
+      ).toBe("(TITULO_ESTADO IN ('Vigente') OR STATUS IN ('Vigente'))")
+    })
+
+    it("no distingue mayúsculas al comparar nombres de campo", () => {
+      // ArcGIS no las distingue, ni al declarar ni al consultar: una capa que
+      // publique `Estado` no debe quedarse fuera del filtro por una letra, y
+      // preguntarle por `ESTADO` le sirve igual.
+      expect(buildWhereClause({ estado: ["Vigente"] }, null, new Set(["Estado"]))).toBe(
+        "ESTADO IN ('Vigente')",
+      )
+    })
+
+    it("pide cero resultados si la capa no puede cumplir el filtro", () => {
+      // Callar la condición devolvería la capa entera: enseñar como resultado
+      // filtrado lo que no se ha filtrado es peor que no devolver nada.
+      expect(buildWhereClause({ estado: ["Vigente"] }, null, new Set(["OBJECTID"]))).toBe(NO_MATCHES)
+      expect(buildWhereClause({}, { min: 10, max: 20 }, new Set(["OBJECTID"]))).toBe(NO_MATCHES)
+    })
+
+    it("sin filtro no pide nada, aunque a la capa le falten campos", () => {
+      expect(buildWhereClause({}, null, new Set(["OBJECTID"]))).toBeNull()
+    })
+
+    it("sin campos conocidos se comporta como antes", () => {
+      // Si la petición de metadatos no llega, el peor caso es el de siempre; no
+      // se deja de filtrar por no haber podido preguntar.
+      expect(buildWhereClause({ etapa: ["Explotación"] }, null, null)).toBe(
+        "ETAPA IN ('Explotación')",
+      )
+    })
   })
 })
