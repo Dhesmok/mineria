@@ -119,8 +119,26 @@ const TERRAIN_SOURCE = {
 export const DERIVATIVE_SOURCE_ID = "terrain-derivative"
 export const DERIVATIVE_LAYER_ID = "terrain-derivative-layer"
 
-const TRANSPARENT_PIXEL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+/**
+ * Un píxel de 1×1 **de verdad transparente**, para decir «aquí todavía no va
+ * nada» sin pedirle un archivo a nadie.
+ *
+ * **El que había aquí no era transparente: era azul.** Se copió de algún sitio
+ * como «1x1 transparent png» y sus cuatro bytes son `0, 0, 255, 127` — azul al
+ * 50 %. Una fuente de tipo `image` no se puede vaciar, solo se le puede dar otra
+ * imagen, y estas nacen cubriendo el mundo entero: al desmarcar todos los
+ * departamentos de una capa del SGC, el visor pintaba **el país entero de azul**.
+ * Parecía un fallo del servicio y estaba en esta constante.
+ *
+ * Se exporta, y no se copia, porque estaba escrito dos veces —aquí y en
+ * `useSgcLayersGL`— con el mismo error en las dos. Es el motivo por el que
+ * arreglarlo en un solo sitio no habría bastado.
+ *
+ * Lleva una prueba que le decodifica el PNG y le lee el canal alfa: «parece
+ * transparente» es exactamente lo que ya falló una vez.
+ */
+export const TRANSPARENT_PIXEL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII="
 
 /** Las cuatro esquinas del mundo, en el orden que pide MapLibre: NO, NE, SE, SO. */
 const MUNDO_ENTERO = [

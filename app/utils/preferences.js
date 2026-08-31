@@ -30,8 +30,8 @@ import {
   PANEL_HEIGHT_DEFAULT,
   PANEL_HEIGHT_MAX,
   PANEL_HEIGHT_MIN,
+  PANEL_WIDTH_CEILING,
   PANEL_WIDTH_DEFAULT,
-  PANEL_WIDTH_MAX,
   PANEL_WIDTH_MIN,
 } from "./panelSize"
 
@@ -120,7 +120,11 @@ export const sanitizePreferences = (raw) => {
     layers,
     layerOrder: sanitizeOrder(raw.layerOrder),
     compassSize: dentroDelRango(raw.compassSize, COMPASS_SIZE_MIN, COMPASS_SIZE_MAX, base.compassSize),
-    panelWidth: dentroDelRango(raw.panelWidth, PANEL_WIDTH_MIN, PANEL_WIDTH_MAX, base.panelWidth),
+    // Se acota contra el techo absoluto y no contra el tope de la ventana: aquí
+    // se sanea lo *guardado*, y este módulo también corre en el servidor, donde
+    // no hay ventana que medir. Ajustarlo a la pantalla de cada visita es otra
+    // pregunta, y la responde `fitPanelToViewport` al leerlo.
+    panelWidth: dentroDelRango(raw.panelWidth, PANEL_WIDTH_MIN, PANEL_WIDTH_CEILING, base.panelWidth),
     panelHeight: dentroDelRango(raw.panelHeight, PANEL_HEIGHT_MIN, PANEL_HEIGHT_MAX, base.panelHeight),
   }
 }

@@ -19,6 +19,7 @@ import { readPreferences, writePreferences } from "./utils/preferences"
 import {
   PANEL_HEIGHT_DEFAULT,
   PANEL_WIDTH_DEFAULT,
+  fitPanelToViewport,
   heightFromPointer,
   widthFromPointer,
 } from "./utils/panelSize"
@@ -123,9 +124,33 @@ export default function Component() {
     setSelectedCoordinateSystem(prefs.crs)
     setLayers(prefs.layers)
     setLayerOrder(prefs.layerOrder)
-    setPanelWidth(prefs.panelWidth)
-    setPanelHeight(prefs.panelHeight)
+    // El tamaño guardado, devuelto a lo que cabe en **esta** pantalla: un panel
+    // ajustado en un monitor grande se abría igual de ancho en el portátil y
+    // tapaba el mapa entero. Ver `fitPanelToViewport`.
+    const cabe = fitPanelToViewport(
+      { width: prefs.panelWidth, height: prefs.panelHeight },
+      window.innerWidth,
+    )
+    setPanelWidth(cabe.width)
+    setPanelHeight(cabe.height)
     setPrefsCargadas(true)
+  }, [])
+
+  /**
+   * Y lo mismo al cambiar el tamaño de la ventana.
+   *
+   * Sin esto, achicar la ventana —o cambiar de pantalla, o girar el teléfono—
+   * dejaba el panel con el ancho de antes: más ancho que la ventana, con el
+   * tirador fuera y sin forma de recuperarlo salvo borrando datos del navegador.
+   * Solo encoge cuando hace falta; al volver a agrandar la ventana el panel se
+   * queda como esté, que es donde el usuario lo dejó.
+   */
+  useEffect(() => {
+    const alRedimensionar = () => {
+      setPanelWidth((actual) => fitPanelToViewport({ width: actual }, window.innerWidth).width)
+    }
+    window.addEventListener("resize", alRedimensionar)
+    return () => window.removeEventListener("resize", alRedimensionar)
   }, [])
 
   // Guardar es un efecto y no una llamada dentro de cada manejador: así no hay
@@ -172,7 +197,7 @@ export default function Component() {
     if (!caja) return
 
     const mover = (e) => {
-      if (eje === "ancho") setPanelWidth(widthFromPointer(e.clientX, caja.left))
+      if (eje === "ancho") setPanelWidth(widthFromPointer(e.clientX, caja.left, window.innerWidth))
       else setPanelHeight(heightFromPointer(e.clientY, caja.top, window.innerHeight))
     }
     const soltar = () => {
