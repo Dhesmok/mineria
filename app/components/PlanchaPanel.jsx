@@ -56,6 +56,14 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
             <AlertTriangle className="mt-[1px] h-3.5 w-3.5 shrink-0" />
             <span>{fallo}</span>
           </p>
+          {/* Y con qué números falló. Es feo y es a propósito: cada hoja del SGC
+              está hecha con un programa distinto de una época distinta, así que
+              la siguiente que no se coloque fallará por algo que no se ha visto
+              todavía. Esta línea es lo que permite arreglarla sin tener el
+              archivo delante. */}
+          {plancha.detalle && (
+            <p className="pl-5 text-[10px] leading-snug text-slate-400">{plancha.detalle}</p>
+          )}
           {/* Que no se pueda colocar sobre el mapa no quita que el PDF sirva:
               sigue siendo la geología más actualizada de esa plancha. */}
           {plancha.url && (
