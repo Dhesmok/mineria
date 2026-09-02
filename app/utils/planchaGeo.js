@@ -608,6 +608,83 @@ const distanciaKm = ([lon1, lat1], [lon2, lat2]) => {
 }
 
 /**
+ * Los rótulos que dicen la coordenada entera: `1.080.000 m.N`, `835.000 m.E`.
+ *
+ * Una plancha rotula su cuadrícula dos veces. En los márgenes van abreviados
+ * —`1.079.`, `1.084.`— porque es lo que cabe entre línea y línea, y en las cuatro
+ * esquinas va uno completo por eje, que es el que dice de qué números se está
+ * hablando.
+ */
+const ROTULO_COMPLETO = /^([\d.]+)\s*m\.?\s*([EN])$/i
+
+/**
+ * Cuánto se corrige el ajuste porque la hoja se contradice a sí misma.
+ *
+ * ## El caso que lo motiva
+ *
+ * La plancha 193 (Yopal) rotula sus nortes abreviados `1.079.`, `1.084.`,
+ * `1.089.` … y en las esquinas escribe `1.080.000 m.N` y `1.120.000 m.N` sobre
+ * **esas mismas dos líneas**. Se contradicen en exactamente mil metros, y como
+ * los abreviados son nueve y los completos dos, el ajuste hacía caso a los
+ * nueve: la hoja quedaba un kilómetro al sur de donde va, lo bastante para que la
+ * geología no cuadrara con el terreno.
+ *
+ * **Los completos son los que valen.** Lo dice la propia hoja por un tercer
+ * camino: su retícula geográfica —`5°36'N`, `5°26'N`, que es un dato
+ * independiente de la cuadrícula plana— coincide con los de esquina dentro de 30
+ * m y discrepa de los abreviados en 1.000. Un rótulo completo es una coordenada
+ * dicha entera; uno abreviado omite tres cifras y lo genera una expresión de
+ * etiquetado que puede ir corrida.
+ *
+ * ## Por qué el umbral es de medio kilómetro
+ *
+ * Porque un rótulo no está donde está su marca —va centrado, y su ancla queda
+ * corrida— y eso mete unos cientos de metros de ruido. Medido en seis hojas, la
+ * diferencia entre lo que declara la esquina y lo que dice el ajuste va de −380 a
+ * +380 m cuando todo está bien, y sale +1.071 en la que está mal. El sesgo
+ * además **se cancela solo** en la mediana, porque los rótulos de esquina vienen
+ * por pares —uno arriba del marco y otro abajo— y sus anclas se corren en
+ * sentidos opuestos. De ahí que se pidan dos como mínimo.
+ *
+ * Y se corrige solo por kilómetros enteros: el error de una expresión de
+ * etiquetado es una cifra cambiada, no una cantidad cualquiera. Si la diferencia
+ * es grande pero no cae cerca de un kilómetro redondo, no se toca nada — eso ya
+ * no es una errata, es que algo más está mal y corregirlo a ciegas sería peor.
+ *
+ * @returns {{este:number, norte:number}} metros que hay que sumarle a cada eje
+ */
+const DESFASE_MINIMO = 500
+const CERCA_DEL_KILOMETRO = 400
+
+export const declaredShift = (items, { aE, aN }) => {
+  const enEste = []
+  const enNorte = []
+
+  for (const item of items ?? []) {
+    const encontrado = String(item?.text ?? "").trim().match(ROTULO_COMPLETO)
+    if (!encontrado) continue
+    const valor = parseGridValue(encontrado[1])
+    if (valor === null || !Number.isFinite(item.x) || !Number.isFinite(item.y)) continue
+
+    // De un rótulo de norte solo interesa su altura, y de uno de este solo su
+    // horizontal: la otra coordenada la ponen donde les cabe.
+    if (encontrado[2].toUpperCase() === "N") enNorte.push(valor - aN(item.y))
+    else enEste.push(valor - aE(item.x))
+  }
+
+  return { este: kilometrosDeMas(enEste), norte: kilometrosDeMas(enNorte) }
+}
+
+const kilometrosDeMas = (diferencias) => {
+  if (diferencias.length < 2) return 0
+  const centro = mediana(diferencias)
+  if (Math.abs(centro) < DESFASE_MINIMO) return 0
+  const kilometros = Math.round(centro / 1000) * 1000
+  if (kilometros === 0 || Math.abs(centro - kilometros) > CERCA_DEL_KILOMETRO) return 0
+  return kilometros
+}
+
+/**
  * Cuánto puede desviarse el ajuste antes de no fiarse.
  *
  * Los dos ejes miden el mismo mapa, así que su escala tiene que salir igual. Si
@@ -765,12 +842,17 @@ export const georeferencePlancha = ({ items, gray, width, height, cerca }) => {
 
   const aE = (x) => (x - ejeX.origin) / ejeX.scale
   const aN = (y) => (y - ejeY.origin) / ejeY.scale
-  const oeste = aE(marco.left)
-  const este = aE(marco.right)
+
+  // Y antes de dar nada por bueno, se le pregunta a la hoja otra vez: los
+  // rótulos de las esquinas dicen la coordenada entera, y tienen que coincidir.
+  const corrimiento = declaredShift(items, { aE, aN })
+
+  const oeste = aE(marco.left) + corrimiento.este
+  const este = aE(marco.right) + corrimiento.este
   // `ejeY.scale` es negativa —la `y` baja mientras el norte sube—, así que el
   // borde de arriba del recorte es el norte mayor.
-  const norte = aN(marco.top)
-  const sur = aN(marco.bottom)
+  const norte = aN(marco.top) + corrimiento.norte
+  const sur = aN(marco.bottom) + corrimiento.norte
 
   const origen = chooseOrigin([(oeste + este) / 2, (norte + sur) / 2], cerca)
   if (!origen) {
@@ -800,5 +882,8 @@ export const georeferencePlancha = ({ items, gray, width, height, cerca }) => {
     residual: Math.max(ejeX.residual, ejeY.residual),
     controlPoints: ejeX.count + ejeY.count,
     frameComplete: marco.complete,
+    // Cuánto hubo que corregir porque la hoja se contradecía a sí misma. Cero
+    // casi siempre; cuando no lo es, quien mire el mapa tiene que enterarse.
+    shift: corrimiento,
   }
 }
