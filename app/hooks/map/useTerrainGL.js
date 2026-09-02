@@ -36,8 +36,8 @@ import { sampleGrid, slopeAspectFrom } from "../../utils/terrainAnalysis"
  * paso la cámara queda un tercio más alta —el desnivel va con el coseno—, así que
  * hay que alejarse menos para salvar las lomas.
  */
-const PITCH_3D = 45
-const EXAGGERATION_DEFAULT = 1.5
+export const PITCH_3D = 45
+export const EXAGGERATION_DEFAULT = 1.5
 export const EXAGGERATION_MIN = 0.5
 export const EXAGGERATION_MAX = 3
 
@@ -84,25 +84,65 @@ const TERRAIN_FAILURES_LIMIT = 4
  * con la cámara mal colocada que dejar el botón sin responder: lo primero se
  * arregla moviendo el mapa, lo segundo parece que el visor se colgó.
  */
-const TERRAIN_WAIT_MS = 1200
+const TERRAIN_WAIT_MS = 1500
 
-/** Espera a que el mapa termine de cargar lo que está pidiendo, con tope. */
+/**
+ * Espera a que el modelo de elevación esté cargado y MapLibre conozca la cota del centro.
+ *
+ * **No basta con `areTilesLoaded()`**: al encender el terreno desde 2D, las teselas del
+ * mapa plano ya estaban cargadas y `areTilesLoaded()` devolvía `true` de inmediato (en 0 ms),
+ * antes de que MapLibre siquiera empezara a pedir o decodificar el DEM. La cámara
+ * calculaba su pose con cota cero y luego, al subir el terreno a 2.000 m, quedaba atrapada en el suelo.
+ *
+ * Esperamos a que `queryTerrainElevation(centro)` devuelva una cota válida o a que el
+ * mapa emita `idle`/`render` con el terreno ya decodificado.
+ */
 const esperarAlTerreno = (map, ms = TERRAIN_WAIT_MS) =>
   new Promise((listo) => {
-    if (map.areTilesLoaded()) {
+    if (!map) {
+      listo()
+      return
+    }
+
+    const centro = map.getCenter?.()
+    if (centro && map.queryTerrainElevation?.(centro) != null) {
       listo()
       return
     }
 
     let reloj = 0
+    let terminado = false
+
     const terminar = () => {
+      if (terminado) return
+      terminado = true
       clearTimeout(reloj)
-      map.off("idle", terminar)
+      map.off?.("idle", onIdle)
+      map.off?.("render", onRender)
+      map.off?.("data", onData)
       listo()
     }
 
+    const onIdle = () => terminar()
+
+    const onRender = () => {
+      if (centro && map.queryTerrainElevation?.(centro) != null) {
+        terminar()
+      }
+    }
+
+    const onData = (e) => {
+      if (e?.dataType === "source" && e?.sourceId === TERRAIN_SOURCE_ID) {
+        if (centro && map.queryTerrainElevation?.(centro) != null) {
+          terminar()
+        }
+      }
+    }
+
     reloj = setTimeout(terminar, ms)
-    map.on("idle", terminar)
+    map.on?.("idle", onIdle)
+    map.on?.("render", onRender)
+    map.on?.("data", onData)
   })
 
 export const useTerrainGL = (mapRef, mapInstance) => {
@@ -429,16 +469,28 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   useEffect(() => {
     if (!mapInstance || !is3D) return
 
-    const remedir = () => {
+    const remedir = async () => {
       // Mientras gira solo, cada fotograma dispara un `moveend` y la cámara no
       // se está desplazando: no hay desnivel nuevo que medir.
       if (spinningRef.current) return
-      medirElDesnivel(mapInstance)
+      const desnivel = await medirElDesnivel(mapInstance)
+      if (desnivel !== null && is3DRef.current) {
+        const safeZoom = zoomParaMirarElRelieve(
+          mapInstance,
+          mapInstance.getPitch(),
+          exaggerationRef.current,
+        )
+        // Si al desplazarse a una zona más montañosa la cámara quedó por debajo de las lomas,
+        // elevar suavemente la vista para no colisionar contra el relieve.
+        if (safeZoom < mapInstance.getZoom() - 0.25) {
+          mapInstance.easeTo({ zoom: safeZoom, duration: 500 })
+        }
+      }
     }
 
     mapInstance.on("moveend", remedir)
     return () => mapInstance.off("moveend", remedir)
-  }, [mapInstance, is3D, medirElDesnivel])
+  }, [mapInstance, is3D, medirElDesnivel, zoomParaMirarElRelieve])
 
   // El mapa también se gira e inclina arrastrando con Ctrl, o con dos dedos en
   // el celular. Sin escuchar esos eventos, los deslizadores se quedarían
