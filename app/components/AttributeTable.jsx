@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ArrowUpDown, Crosshair, X } from "lucide-react"
+import { ArrowUpDown, ChevronLeft, ChevronRight, Crosshair, X } from "lucide-react"
 
 import { layerByKey } from "../utils/themeAreas"
 import { formatDate } from "../utils/mapUtils"
+
+export const PAGE_SIZE = 50
 
 /**
  * La tabla de resultados, como la tabla de atributos de un SIG de escritorio.
@@ -64,6 +66,7 @@ const COLUMNS = [
 
 export const AttributeTable = ({ features, onPick, onClose }) => {
   const [sort, setSort] = useState({ column: "expediente", asc: true })
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     const escape = (event) => {
@@ -72,6 +75,11 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
     document.addEventListener("keydown", escape)
     return () => document.removeEventListener("keydown", escape)
   }, [onClose])
+
+  // Al ordenar o cambiar el conjunto de datos volvemos a la primera página
+  useEffect(() => {
+    setPage(1)
+  }, [features, sort])
 
   const rows = useMemo(() => {
     const columna = COLUMNS.find((c) => c.key === sort.column) ?? COLUMNS[0]
@@ -90,6 +98,14 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
         return sort.asc ? cmp : -cmp
       })
   }, [features, sort])
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+
+  const visibleRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return rows.slice(start, start + PAGE_SIZE)
+  }, [rows, currentPage])
 
   const ordenarPor = (key) =>
     setSort((current) => ({ column: key, asc: current.column === key ? !current.asc : true }))
@@ -149,7 +165,7 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {visibleRows.map((row) => {
                   const capa = layerByKey(row.layerKey)
                   return (
                     <tr
@@ -198,6 +214,51 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
             </table>
           )}
         </div>
+
+        {features.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600">
+            <span>
+              Mostrando{" "}
+              <strong className="font-medium text-slate-900">
+                {(currentPage - 1) * PAGE_SIZE + 1}
+              </strong>
+              –
+              <strong className="font-medium text-slate-900">
+                {Math.min(currentPage * PAGE_SIZE, rows.length)}
+              </strong>{" "}
+              de{" "}
+              <strong className="font-medium text-slate-900">
+                {rows.length.toLocaleString("es")}
+              </strong>{" "}
+              registros
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                aria-label="Página anterior"
+                className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-1 font-medium transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                <span>Anterior</span>
+              </button>
+              <span className="px-2 font-medium text-slate-700">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                aria-label="Página siguiente"
+                className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2.5 py-1 font-medium transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <span>Siguiente</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

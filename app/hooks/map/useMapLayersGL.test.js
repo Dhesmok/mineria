@@ -3,6 +3,7 @@ import { renderHook, waitFor } from "@testing-library/react"
 import { useMapLayersGL } from "./useMapLayersGL"
 import { ANM_LAYERS, anmFillLayerId, anmLineLayerId, LAYERS_MIN_ZOOM } from "../../utils/anmLayers"
 import { resetLayerFieldsCache } from "../../utils/layerFields"
+import { clearAnmCache } from "../../utils/anmCache"
 
 jest.mock("../../utils/tenureLayers", () => ({
   ...jest.requireActual("../../utils/tenureLayers"),
@@ -92,6 +93,7 @@ const barriendo = { scope: "layer", byArea: { mineria: { selections: { estado: [
 beforeEach(() => {
   jest.clearAllMocks()
   resetLayerFieldsCache()
+  clearAnmCache()
   jest.spyOn(console, "error").mockImplementation(() => {})
 })
 

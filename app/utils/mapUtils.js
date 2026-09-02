@@ -1,4 +1,4 @@
-import * as turf from "@turf/turf"
+import { area, booleanPointInPolygon, point, pointOnFeature, polygon } from "@turf/turf"
 import polylabel from "polylabel"
 
 export const formatDistance = (meters) => {
@@ -170,15 +170,15 @@ const interiorPointOf = (rings) => {
   }
 
   const candidate = polylabel(validRings, precisionForRing(validRings[0]))
-  const point = [candidate[0], candidate[1]]
+  const ptCoords = [candidate[0], candidate[1]]
 
   // `ignoreBoundary` es imprescindible: sin él un punto que cae justo sobre el borde
   // cuenta como interior y el respaldo nunca se activa.
-  const isInside = turf.booleanPointInPolygon(turf.point(point), turf.polygon(validRings), {
+  const isInside = booleanPointInPolygon(point(ptCoords), polygon(validRings), {
     ignoreBoundary: true,
   })
 
-  return isInside ? point : turf.pointOnFeature(turf.polygon(validRings)).geometry.coordinates
+  return isInside ? ptCoords : pointOnFeature(polygon(validRings)).geometry.coordinates
 }
 
 /**
@@ -210,18 +210,18 @@ export const getLabelCoordinates = (feature) => {
           continue
         }
 
-        const area = turf.area(turf.polygon(rings))
-        if (bestPoint && area <= largestArea) {
+        const polygonArea = area(polygon(rings))
+        if (bestPoint && polygonArea <= largestArea) {
           continue
         }
 
-        const point = interiorPointOf(rings)
-        if (!point) {
+        const pt = interiorPointOf(rings)
+        if (!pt) {
           continue
         }
 
-        bestPoint = point
-        largestArea = area
+        bestPoint = pt
+        largestArea = polygonArea
       }
 
       return bestPoint
@@ -229,7 +229,7 @@ export const getLabelCoordinates = (feature) => {
 
     // Puntos, líneas y demás: un punto sobre la geometría es mejor que [0, 0],
     // que dejaba la etiqueta en la Isla Nula (0°N 0°E).
-    return turf.pointOnFeature(feature).geometry.coordinates
+    return pointOnFeature(feature).geometry.coordinates
   } catch (error) {
     console.error("No se pudo calcular la posición de la etiqueta:", error)
     return null

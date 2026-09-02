@@ -7,6 +7,7 @@ import {
   fetchLayerFeatures,
   MAX_FEATURES_PER_QUERY,
 } from "./anmLayers"
+import { clearAnmCache } from "./anmCache"
 
 const BOX = { west: -75.6, south: 6.2, east: -75.5, north: 6.3 }
 
@@ -149,8 +150,13 @@ describe("didExceedLimit", () => {
 })
 
 describe("fetchLayerFeatures", () => {
+  beforeEach(() => {
+    clearAnmCache()
+  })
+
   afterEach(() => {
     jest.restoreAllMocks()
+    clearAnmCache()
   })
 
   it("devuelve las features convertidas", async () => {
@@ -180,6 +186,23 @@ describe("fetchLayerFeatures", () => {
 
     expect(result.featureCollection.features).toHaveLength(1)
     expect(result.truncated).toBe(false)
+  })
+
+  it("devuelve el resultado desde la caché espacial sin llamar a fetch de nuevo", async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        objectIdFieldName: "OBJECTID",
+        features: [{ attributes: { OBJECTID: 1 }, geometry: { rings: [[[-75.6, 6.2], [-75.6, 6.3], [-75.5, 6.3], [-75.6, 6.2]]] } }],
+      }),
+    }))
+    global.fetch = fetchMock
+
+    const primerLlamado = await fetchLayerFeatures("https://ejemplo/0", BOX)
+    const segundoLlamado = await fetchLayerFeatures("https://ejemplo/0", BOX)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(segundoLlamado).toBe(primerLlamado)
   })
 
   it("propaga los errores que ArcGIS devuelve con HTTP 200", async () => {

@@ -1,6 +1,7 @@
 import { arcgisToGeoJSON } from "@esri/arcgis-to-geojson-utils"
 import { fetchArcgisJson } from "./arcgis"
 import { REQUEST_LAYER_NAME, TITLE_LAYER_NAME } from "./tenureLayers"
+import { anmCacheKey, getFromAnmCache, saveToAnmCache } from "./anmCache"
 
 /**
  * Definición de las cuatro capas de la ANM y cómo se piden al servicio.
@@ -204,10 +205,16 @@ export const didExceedLimit = (data, featureCount) =>
  * "no hay nada por aquí".
  */
 export const fetchLayerFeatures = async (layerUrl, bounds, options, where = null) => {
+  const cacheKey = anmCacheKey(layerUrl, bounds, where)
+  const cached = getFromAnmCache(cacheKey)
+  if (cached) {
+    return cached
+  }
+
   const data = await fetchArcgisJson(buildFeatureQueryUrl(layerUrl, bounds, where), options)
   const featureCollection = arcgisResponseToGeoJSON(data)
 
-  return {
+  const result = {
     featureCollection,
     // Se cuenta lo que **respondió el servicio**, no lo que quedó después de
     // descartar las figuras sin geometría. Con el conteo de salida, una sola
@@ -217,4 +224,7 @@ export const fetchLayerFeatures = async (layerUrl, bounds, options, where = null
     // se usa cuando el servidor no manda `exceededTransferLimit`.
     truncated: didExceedLimit(data, Array.isArray(data?.features) ? data.features.length : 0),
   }
+
+  saveToAnmCache(cacheKey, result)
+  return result
 }
