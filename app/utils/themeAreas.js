@@ -102,6 +102,23 @@ export const AREAS = [
  * Los colores que llevan son solo para el cuadrito del panel, que necesita algo
  * con lo que distinguir una fila de otra.
  */
+const SGC_PALETTE = [
+  "#cbb8dd",
+  "#bda6d4",
+  "#a98fc6",
+  "#d6c8e4",
+  "#e2d7ec",
+  "#d8b4e2",
+  "#ce9fd8",
+  "#c38bce",
+  "#e0c3fc",
+  "#dab6fc",
+  "#d0a3fc",
+  "#c690fc",
+  "#bc7dfc",
+  "#b26afc",
+]
+
 const SGC_THEME_LAYERS = SGC_LAYERS.map((capa, i) => ({
   key: capa.key,
   areaId: "geologia",
@@ -111,7 +128,7 @@ const SGC_THEME_LAYERS = SGC_LAYERS.map((capa, i) => ({
   year: capa.year,
   raster: true,
   pending: false,
-  fillColor: ["#cbb8dd", "#bda6d4", "#a98fc6", "#d6c8e4", "#e2d7ec"][i] ?? "#cbb8dd",
+  fillColor: SGC_PALETTE[i % SGC_PALETTE.length],
   lineColor: "#6B4E8A",
 }))
 
@@ -121,8 +138,6 @@ const SGC_THEME_LAYERS = SGC_LAYERS.map((capa, i) => ({
  * quitarle `pending`: el resto del visor no necesita enterarse.
  */
 const PENDING_LAYERS = [
-  { key: "simma", areaId: "geologia", label: "Movimientos en masa", fillColor: "#dcc0b6", lineColor: "#8a5b4e" },
-  { key: "sismica", areaId: "geologia", label: "Amenaza sísmica", fillColor: "#e8bdb8", lineColor: "#a6564e" },
   { key: "bloques", areaId: "hidrocarburos", label: "Bloques y contratos", fillColor: "#a9cfc5", lineColor: "#2E6B5E" },
   { key: "pozos", areaId: "hidrocarburos", label: "Pozos", fillColor: "#8fbcb1", lineColor: "#1f4f45" },
   { key: "tierras", areaId: "hidrocarburos", label: "Tierras disponibles", fillColor: "#c6e2da", lineColor: "#4f8a7c" },

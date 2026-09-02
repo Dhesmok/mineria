@@ -34,13 +34,13 @@ describe("themeAreas", () => {
   })
 
   it("hoy tienen servicio las de minería y las de geología", () => {
-    // Minería son cuatro capas de la ANM y geología cinco del SGC. Las demás
+    // Minería son cuatro capas de la ANM y geología catorce del SGC. Las demás
     // áreas siguen pendientes de conseguir sus direcciones públicas.
     const porArea = LIVE_LAYERS.reduce((cuenta, l) => {
       cuenta[l.areaId] = (cuenta[l.areaId] ?? 0) + 1
       return cuenta
     }, {})
-    expect(porArea).toEqual({ mineria: 4, geologia: 4 })
+    expect(porArea).toEqual({ mineria: 4, geologia: 14 })
   })
 
   it("cada capa viva sabe de dónde saca sus datos, de una forma u otra", () => {

@@ -170,7 +170,7 @@ describe("panel de capas por áreas", () => {
     // Geología ya está conectada al SGC, así que sus interruptores funcionan.
     await openArea(user, "Geología")
     expect(screen.getByRole("switch", { name: "Planchas 1:100.000" })).toBeEnabled()
-    expect(screen.getByRole("switch", { name: "Movimientos en masa" })).toBeDisabled()
+    expect(screen.getByRole("switch", { name: "Mapa Metalogénico 2022" })).toBeEnabled()
 
     // Las que siguen sin dirección pública, apagadas.
     await openArea(user, "Hidrocarburos")

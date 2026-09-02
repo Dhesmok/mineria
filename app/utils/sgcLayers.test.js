@@ -23,12 +23,9 @@ import {
 } from "./sgcLayers"
 
 describe("el catálogo del SGC", () => {
-  it("trae las cuatro capas de geología, sin repetir clave", () => {
-    // Eran cinco. La grilla de planchas del IGAC se quitó: iba desfasada
-    // respecto al estado de la cartografía, y dos retículas que dicen cosas
-    // distintas sobre la misma plancha es peor que ninguna.
-    expect(SGC_LAYERS).toHaveLength(4)
-    expect(new Set(SGC_KEYS).size).toBe(4)
+  it("trae las capas de geología, sin repetir clave", () => {
+    expect(SGC_LAYERS).toHaveLength(14)
+    expect(new Set(SGC_KEYS).size).toBe(14)
   })
 
   it("los nombres caben en la fila del panel", () => {

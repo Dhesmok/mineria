@@ -118,6 +118,96 @@ export const SGC_LAYERS = [
     // ven exactamente igual.
     hint: "Qué planchas tienen cartografía publicada y cuáles no. Sirve para saber si un vacío es geología o es falta de dato.",
   },
+  {
+    key: "metalogenico2022",
+    label: "Mapa Metalogénico 2022",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Mapa_Metalogenico_2022/Mapa_Metalogenico_Colombia_2022/MapServer",
+    scale: "1:1.000.000",
+    year: 2022,
+    hint: "Depósitos minerales, distritos y cinturones metalogénicos, distritos aluviales, carbones y fosfatos.",
+  },
+  {
+    key: "depositosMinerales",
+    label: "Depósitos minerales",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Anomalias_Geoquimica/Depositos_Minerales/MapServer",
+    scale: "variable",
+    year: null,
+    hint: "Inventario de yacimientos minerales clasificados y subprovincias metalogénicas de Colombia.",
+  },
+  {
+    key: "potencialCarbonifero",
+    label: "Potencial carbonífero",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Mapa_Potencial_Carbonifero_Colombia/Mapa_Potencial_Carbonifero_Colombia/MapServer",
+    scale: "1:1.000.000",
+    year: null,
+    hint: "Zonas de potencial, mantos y cuencas carboníferas del territorio nacional.",
+  },
+  {
+    key: "geofisica2022",
+    label: "Anomalías geofísicas 2022",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Geofisica/Anomalias_Geofisicas_V2022/MapServer",
+    scale: "variable",
+    year: 2022,
+    hint: "Magnetometría aerotransportada, lineamientos magnéticos y gammaespectrometría K-Th-U.",
+  },
+  {
+    key: "anomaliasGeoquimicas",
+    label: "Anomalías geoquímicas",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Anomalias_Geoquimica/Anomalias_Geoquimicas_y_Potencial_Geoquimico/MapServer",
+    scale: "variable",
+    year: null,
+    hint: "Zonas con potencial geoquímico y anomalías multielemento en sedimentos de corriente.",
+  },
+  {
+    key: "atlasGeoquimico",
+    label: "Atlas geoquímico 2018",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Atlas_Geoquimico_V2018/Atlas_Geoquimico_de_Colombia_V2018/MapServer",
+    scale: "1:1.500.000",
+    year: 2018,
+    hint: "Distribución de concentraciones geoquímicas y elementos en el territorio nacional.",
+  },
+  {
+    key: "movimientosMasa",
+    label: "Movimientos en masa 100K",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Mapa_Nacional_Amenaza_Mov_Masa_100K/Mapa_Nacional_Amenaza_Movimientos_Masa_100K/MapServer",
+    scale: "1:100.000",
+    year: null,
+    hint: "Mapa nacional de amenaza y susceptibilidad por movimientos en masa y deslizamientos.",
+  },
+  {
+    key: "amenazaSismica",
+    label: "Amenaza sísmica nacional",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Amenaza_Sismica/Amenaza_Sismica_Nacional/MapServer",
+    scale: "nacional",
+    year: null,
+    hint: "Aceleración sísmica esperada (PGA) y modelo de fuentes sismogénicas.",
+  },
+  {
+    key: "datacionesRadiometricas",
+    label: "Dataciones radiométricas",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Catalogo_Dataciones_Radiometricas_Colombia/Catalogo_Dataciones_Radiometricas_Colombia_2015/MapServer",
+    scale: "puntos",
+    year: 2015,
+    hint: "Catálogo nacional de edades radiométricas de rocas e intrusiones.",
+  },
+  {
+    key: "litotecaNacional",
+    label: "Litoteca nacional",
+    service:
+      "https://srvags.sgc.gov.co/arcgis/rest/services/Mapa_Inventario_Muestra_Litoteca/Mapa_Inventario_Muestra_Litoteca/MapServer",
+    scale: "puntos",
+    year: null,
+    hint: "Inventario de pozos y testigos de perforación física custodiados por el SGC.",
+  },
 ]
 
 const BY_KEY = new Map(SGC_LAYERS.map((layer) => [layer.key, layer]))
