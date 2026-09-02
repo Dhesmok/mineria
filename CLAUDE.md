@@ -153,13 +153,15 @@ salió de ArcMap en 2013 y sí podría haberlo traído. Ninguna lleva `/Measure`
 Pero las dos llevan dibujada su cuadrícula plana y rotulada en los márgenes, que
 es un juego de puntos de control gratis: se leen los rótulos de la capa de texto,
 se buscan sus líneas en la imagen, se ajusta una recta y se recorta el marco. Las
-esquinas caen a menos de 30 m de su valor redondo en las dos.
+esquinas caen a menos de 30 m de su valor redondo en las seis hojas probadas.
 
 **Y son casi mil hojas que no se parecen entre sí**, levantadas a lo largo de
 cincuenta años con el programa que hubiera en cada época. Nada de lo que hay en
 `utils/planchaGeo.js` puede depender de cómo es una: cada regla se comprueba
-contra el papel o se cruza con otra. Las cuatro trampas que costó —de la 19 a la
-22— son todas casos donde una hoja hacía lo contrario que la anterior.
+contra el papel o se cruza con otra. Las cinco trampas que costó —de la 19 a la
+23— son todas casos donde una hoja hacía lo contrario que la anterior: la
+cuadrícula desfasada, el marco pegado a una línea, el índice del borde que parece
+una serie de coordenadas.
 
 **Y una función de Vercel dura unos segundos si no se dice lo contrario.** Diez
 en el plan gratuito. La ruta que trae la plancha declaraba su propio tope de
@@ -377,7 +379,20 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     de más. Se salta lo mínimo, y se mira con holgura alrededor de la posición de
     partida por si el centroide trae decimales.
 
-23. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
+23. **La cuadrícula de una plancha no siempre cae en valores redondos.** La 193
+    (Yopal) rotula sus nortes 1.079.000, 1.084.000, 1.089.000: cada cinco
+    kilómetros, sí, pero desfasados mil metros de los múltiplos de 5.000. Una
+    versión del código se quedaba con las líneas detectadas que caían sobre un
+    múltiplo del paso **contado desde cero**, y en esa hoja eso descartaba
+    **todas**: la búsqueda del marco se quedaba sin nada de donde partir y el
+    recorte caía en el respaldo, que era el borde de la hoja entera. El marco
+    salió de 53 × 50 km en vez de 45 × 40, con medio kilómetro de leyenda dentro.
+    Ahora se parte de las líneas que el ajuste emparejó con un rótulo, que no
+    supone nada sobre los valores y de paso exige que haya un rótulo cerca —cosa
+    que el filo del recuadro de la leyenda no cumple, y en esa hoja caía a cuatro
+    píxeles de donde tocaba la línea siguiente—.
+
+24. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
     cosas.** `mapbox-gl-draw` cancela el `touchend`, y sin él el navegador no
     genera el clic de compatibilidad. Todo lo que responda a tocar el mapa se
     engancha por partida doble: `map.on("click", …)` y `onMapTap(map, …)` de

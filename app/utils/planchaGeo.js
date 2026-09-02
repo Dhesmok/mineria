@@ -400,12 +400,12 @@ export const fitGridAxis = (lineas, rotulos, { movil }) => {
     // Medio píxel es lo que se consigue con una cuadrícula limpia; por encima de
     // eso hay algo emparejado de más.
     if (peor <= 0.5 || pares.length <= 3) {
-      return { ...ajuste, residual: peor, count: pares.length }
+      return { ...ajuste, residual: peor, count: pares.length, lines: pares.map((p) => p.pos) }
     }
     const corte = Math.max(0.5, 3 * mediana(residuos))
     const filtrados = pares.filter((_, i) => residuos[i] < corte)
     if (filtrados.length === pares.length) {
-      return { ...ajuste, residual: peor, count: pares.length }
+      return { ...ajuste, residual: peor, count: pares.length, lines: pares.map((p) => p.pos) }
     }
     pares = filtrados
   }
@@ -429,24 +429,6 @@ const mediana = (valores) => {
   const medio = Math.floor(orden.length / 2)
   return orden.length % 2 ? orden[medio] : (orden[medio - 1] + orden[medio]) / 2
 }
-
-/** Cada cuántos metros rotula la cuadrícula: el salto más pequeño de la serie. */
-const pasoDe = (serie) => Math.min(...serie.slice(1).map((r, i) => r.value - serie[i].value))
-
-/**
- * Las líneas detectadas que de verdad son de la cuadrícula.
- *
- * Con el eje ya ajustado se sabe qué valor le toca a cada posición; una línea de
- * la cuadrícula cae sobre un múltiplo del paso y un contacto geológico recto cae
- * donde sea. La tolerancia es una décima de cuadro, muy por encima del residuo
- * del ajuste —décimas de píxel— y muy por debajo de acertar por casualidad.
- */
-const sobreLaCuadricula = (lineas, eje, paso) =>
-  lineas.filter((pos) => {
-    const valor = (pos - eje.origin) / eje.scale
-    const cuantos = valor / paso
-    return Math.abs(cuantos - Math.round(cuantos)) < 0.1
-  })
 
 const medianaDeSeparaciones = (posiciones) => {
   const orden = [...posiciones].sort((a, b) => a - b)
@@ -753,18 +735,32 @@ export const georeferencePlancha = ({ items, gray, width, height, cerca }) => {
     }
   }
 
-  // Para buscar el marco valen **todas** las líneas de la cuadrícula, también
-  // las que no llevan rótulo: son las de más afuera, justo las que dicen por
-  // dónde anda el borde. Se quedan las que caen sobre un múltiplo del paso, que
-  // es lo que separa una línea de la cuadrícula de un contacto geológico recto
-  // que el detector haya recogido de propina.
-  const pasoEstes = pasoDe(filaEstes)
-  const pasoNortes = pasoDe(columnaNortes)
+  // Para buscar el marco se parte de **las líneas que el ajuste emparejó con un
+  // rótulo**, y no de todas las que encontró el detector.
+  //
+  // Hubo una versión que se quedaba con las que caían sobre un múltiplo del paso
+  // contado desde cero, para incluir también las líneas sin rótulo. Tenía dos
+  // fallos y los dos aparecieron en la plancha 193 (Yopal):
+  //
+  // 1. **Su cuadrícula no está en múltiplos redondos.** Sus nortes van
+  //    1.079.000, 1.084.000, 1.089.000 — cada cinco kilómetros, sí, pero
+  //    desfasados mil metros. Ninguna de sus líneas era múltiplo de 5.000, así
+  //    que se descartaban **todas**, la búsqueda del marco se quedaba sin nada de
+  //    donde partir y el recorte caía en el respaldo: el borde de la hoja.
+  // 2. **Y aun arreglando eso**, el filo izquierdo del recuadro de la leyenda
+  //    caía a cuatro píxeles de donde tocaría la línea siguiente, o sea dentro de
+  //    cualquier tolerancia razonable, y el marco derecho se iba con él.
+  //
+  // El emparejamiento con rótulos no tiene ninguno de los dos problemas: no
+  // supone nada sobre los valores y exige que haya un rótulo cerca, cosa que un
+  // recuadro de leyenda no cumple. Se pierden las líneas de más afuera que no
+  // llevan rótulo, y no importa: el marco se busca **hacia afuera** desde ahí,
+  // con un cuadro largo de alcance.
   const marco = detectFrame(gray, {
     width,
     height,
-    lineasX: sobreLaCuadricula(lineasX, ejeX, pasoEstes),
-    lineasY: sobreLaCuadricula(lineasY, ejeY, pasoNortes),
+    lineasX: ejeX.lines,
+    lineasY: ejeY.lines,
   }) ?? { left: Math.min(...lineasX), right: Math.max(...lineasX), top: Math.min(...lineasY), bottom: Math.max(...lineasY), complete: false }
 
   const aE = (x) => (x - ejeX.origin) / ejeX.scale
