@@ -161,6 +161,15 @@ cincuenta años con el programa que hubiera en cada época. Nada de lo que hay e
 contra el papel o se cruza con otra. Las cuatro trampas que costó —de la 19 a la
 22— son todas casos donde una hoja hacía lo contrario que la anterior.
 
+**Y una función de Vercel dura unos segundos si no se dice lo contrario.** Diez
+en el plan gratuito. La ruta que trae la plancha declaraba su propio tope de
+sesenta segundos y no servía de nada: la plataforma mataba la función antes, a
+mitad de la descarga, y el visor decía «no se pudo traer la plancha del SGC» sin
+señalar a ningún sitio. El síntoma era desconcertante —**unas hojas sí y otras
+no**— porque no dependía de la hoja sino de si llegaba a tiempo. Se declara con
+`export const maxDuration` en el propio `route.js`; es un contrato con la
+plataforma, no una constante nuestra, y por eso no puede vivir en otro archivo.
+
 **Y el gestor documental del SGC publica sus enlaces en `http` pelado.** La
 primera versión de `/api/plancha` exigía `https` —que parecía lo obvio— y no
 colocó ni una hoja: devolvía un 400 diciendo «esa dirección no es un PDF de un

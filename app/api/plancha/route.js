@@ -26,8 +26,34 @@ import { permite, sinCifrar } from "../../utils/planchaUrl"
  * descargarse del SGC lo mismo que ya puede descargarse del SGC.
  */
 
-/** Cuánto se espera al SGC. Estas hojas pesan decenas de megas y van lentas. */
-const TIMEOUT_MS = 60000
+/**
+ * Cuánto puede durar esta función antes de que la plataforma la corte.
+ *
+ * **Esto es lo que hacía fallar unas planchas sí y otras no.** Vercel le da a una
+ * función unos pocos segundos por omisión —diez en el plan gratuito—, y una hoja
+ * de diecisiete megas traída de un servidor lento no cabe ahí. La función moría a
+ * mitad de la descarga, el navegador se encontraba la conexión cortada y el visor
+ * decía «no se pudo traer la plancha del SGC», que era verdad pero no señalaba a
+ * ningún sitio. Las que sí funcionaban eran simplemente las que llegaban a
+ * tiempo.
+ *
+ * Sesenta segundos es el tope del plan gratuito. Si un día hiciera falta más
+ * —hay hojas de más de treinta megas—, en un plan de pago se puede subir hasta
+ * trescientos.
+ *
+ * No es un valor que se elija por gusto: **es un contrato con la plataforma**, y
+ * por eso vive aquí y no en una constante nuestra.
+ */
+export const maxDuration = 60
+
+/**
+ * Y cuánto esperamos nosotros al SGC.
+ *
+ * Diez segundos por debajo del tope de la plataforma, a propósito: así, cuando
+ * el SGC no contesta, quien corta somos nosotros y el visor recibe «el SGC tardó
+ * demasiado» en vez de una conexión rota sin explicación.
+ */
+const TIMEOUT_MS = 50000
 
 /**
  * Cuánto se acepta descargar.
@@ -64,7 +90,13 @@ const error = (mensaje, estado) =>
  */
 const traer = async (url, signal) => {
   try {
-    return await fetch(url, { signal })
+    const cifrada = await fetch(url, { signal })
+    // Un 4xx o un 5xx también valen para reintentar sin cifrar: hay servidores
+    // que atienden en el 443 pero sirven otra cosa, y ahí la respuesta llega
+    // —o sea que no salta la excepción— y aun así no es el documento. Solo se
+    // reintenta lo que puede cambiar al bajar de esquema.
+    if (cifrada.ok) return cifrada
+    return await fetch(sinCifrar(url), { signal })
   } catch (fallo) {
     if (fallo?.name === "AbortError") throw fallo
     return fetch(sinCifrar(url), { signal })
