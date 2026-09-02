@@ -1,5 +1,6 @@
 import { ANM_LAYERS, anmFillLayerId, anmLineLayerId } from "./anmLayers"
 import { SGC_LAYERS, sgcLayerId } from "./sgcLayers"
+import { ANH_LAYERS, anhLayerId } from "./anhLayers"
 
 /**
  * Las capas del visor, agrupadas por área temática.
@@ -132,15 +133,35 @@ const SGC_THEME_LAYERS = SGC_LAYERS.map((capa, i) => ({
   lineColor: "#6B4E8A",
 }))
 
+const ANH_PALETTE = [
+  "#a9cfc5",
+  "#8fbcb1",
+  "#c6e2da",
+  "#7fad9f",
+  "#9bc2b8",
+  "#6e9e90",
+  "#b5d8cf",
+]
+
+const ANH_THEME_LAYERS = ANH_LAYERS.map((capa, i) => ({
+  key: capa.key,
+  areaId: "hidrocarburos",
+  label: capa.label,
+  hint: capa.hint,
+  scale: capa.scale,
+  year: capa.year,
+  raster: true,
+  pending: false,
+  fillColor: ANH_PALETTE[i % ANH_PALETTE.length],
+  lineColor: "#2E6B5E",
+}))
+
 /**
  * Capas todavía sin servicio. Cuando se consiga la dirección pública de una,
  * basta con moverla a su registro correspondiente con `url` o `tenureName` y
  * quitarle `pending`: el resto del visor no necesita enterarse.
  */
 const PENDING_LAYERS = [
-  { key: "bloques", areaId: "hidrocarburos", label: "Bloques y contratos", fillColor: "#a9cfc5", lineColor: "#2E6B5E" },
-  { key: "pozos", areaId: "hidrocarburos", label: "Pozos", fillColor: "#8fbcb1", lineColor: "#1f4f45" },
-  { key: "tierras", areaId: "hidrocarburos", label: "Tierras disponibles", fillColor: "#c6e2da", lineColor: "#4f8a7c" },
   { key: "predios", areaId: "catastro", label: "Predios", fillColor: "#b3ccdb", lineColor: "#22577A" },
   { key: "orto", areaId: "catastro", label: "Ortoimágenes", fillColor: "#c9dbe6", lineColor: "#3d6f8f" },
   { key: "cartografia", areaId: "catastro", label: "Cartografía básica", fillColor: "#d6e3ea", lineColor: "#5b8299" },
@@ -155,6 +176,7 @@ const PENDING_LAYERS = [
 export const THEME_LAYERS = [
   ...ANM_LAYERS.map((layer) => ({ ...layer, areaId: "mineria", pending: false })),
   ...SGC_THEME_LAYERS,
+  ...ANH_THEME_LAYERS,
   ...PENDING_LAYERS,
 ]
 
@@ -180,6 +202,7 @@ export const DEFAULT_ORDER = [
   "anmService",
   "title",
   "historicalTitle",
+  ...ANH_THEME_LAYERS.map((layer) => layer.key),
   // La geología por debajo de los títulos: es el contexto sobre el que se los
   // mira, no algo que deba taparlos. Y entre ellas, de más detalle a menos, para
   // que encender la nacional no borre la plancha.
@@ -211,6 +234,9 @@ export const initialLayerState = () =>
 export const styleLayerIdsFor = (key) => {
   const capa = BY_KEY.get(key)
   if (!capa || capa.pending) return []
-  if (capa.raster) return [sgcLayerId(key)]
+  if (capa.raster) {
+    if (capa.areaId === "hidrocarburos") return [anhLayerId(key)]
+    return [sgcLayerId(key)]
+  }
   return [anmFillLayerId(key), anmLineLayerId(key)]
 }

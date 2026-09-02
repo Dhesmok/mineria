@@ -11,6 +11,8 @@ import {
   sgcLayerByKey,
   shortLinkText,
 } from "../utils/sgcLayers"
+import { ANH_LAYERS, anhLayerByKey } from "../utils/anhLayers"
+import { layerByKey } from "../utils/themeAreas"
 import { planchaPdfFrom } from "../utils/planchaUrl"
 
 /**
@@ -203,7 +205,10 @@ export const SgcPanel = ({
                 {resultado.value || resultado.layerName}
               </p>
               <p className="mb-1 text-[10px] text-slate-400">
-                {sgcLayerByKey(resultado.layerKey)?.label ?? resultado.layerKey}
+                {layerByKey(resultado.layerKey)?.label ??
+                  sgcLayerByKey(resultado.layerKey)?.label ??
+                  anhLayerByKey(resultado.layerKey)?.label ??
+                  resultado.layerKey}
                 {resultado.layerName ? ` · ${resultado.layerName}` : ""}
               </p>
               {/* El botón va **antes** de los campos, no después. Es lo que se
@@ -299,3 +304,13 @@ export const SgcPanel = ({
 /** Las claves de las capas del SGC encendidas, en el orden del catálogo. */
 export const activeSgcKeys = (layerState) =>
   SGC_LAYERS.filter(({ key }) => layerState?.[key]?.on).map(({ key }) => key)
+
+/** Las claves de las capas de la ANH encendidas, en el orden del catálogo. */
+export const activeAnhKeys = (layerState) =>
+  ANH_LAYERS.filter(({ key }) => layerState?.[key]?.on).map(({ key }) => key)
+
+/** Todas las claves ráster activas (SGC + ANH). */
+export const activeRasterKeys = (layerState) => [
+  ...activeSgcKeys(layerState),
+  ...activeAnhKeys(layerState),
+]

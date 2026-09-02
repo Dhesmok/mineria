@@ -33,20 +33,18 @@ describe("themeAreas", () => {
     expect(new Set(claves).size).toBe(claves.length)
   })
 
-  it("hoy tienen servicio las de minería y las de geología", () => {
-    // Minería son cuatro capas de la ANM y geología catorce del SGC. Las demás
-    // áreas siguen pendientes de conseguir sus direcciones públicas.
+  it("hoy tienen servicio las de minería, geología e hidrocarburos", () => {
+    // Minería son cuatro capas de la ANM, geología catorce del SGC e hidrocarburos siete de la ANH.
     const porArea = LIVE_LAYERS.reduce((cuenta, l) => {
       cuenta[l.areaId] = (cuenta[l.areaId] ?? 0) + 1
       return cuenta
     }, {})
-    expect(porArea).toEqual({ mineria: 4, geologia: 14 })
+    expect(porArea).toEqual({ mineria: 4, geologia: 14, hidrocarburos: 7 })
   })
 
   it("cada capa viva sabe de dónde saca sus datos, de una forma u otra", () => {
     // Hay dos formas y no una: las de la ANM llegan como polígonos —con `url` o
-    // con `tenureName`— y las del SGC llegan ya dibujadas, como imagen. Escribir
-    // la comprobación solo con la primera forma dejaba fuera a las segundas.
+    // con `tenureName`— y las del SGC/ANH llegan ya dibujadas, como imagen.
     THEME_LAYERS.forEach((layer) => {
       if (layer.pending) {
         expect(layer.url ?? layer.tenureName).toBeUndefined()
@@ -58,12 +56,11 @@ describe("themeAreas", () => {
   })
 
   it("las capas ráster no ofrecen color, porque no lo eligen ellas", () => {
-    // Llegan dibujadas por el SGC con su propia simbología. Un selector de color
-    // ahí no cambiaría nada, y un control que no hace nada se lee como roto.
+    // Llegan dibujadas por el SGC y la ANH con su propia simbología.
     const raster = THEME_LAYERS.filter((l) => l.raster)
     expect(raster.length).toBeGreaterThan(0)
     raster.forEach((layer) => {
-      expect(layer.areaId).toBe("geologia")
+      expect(["geologia", "hidrocarburos"]).toContain(layer.areaId)
       expect(layer.hint).toBeTruthy()
     })
   })

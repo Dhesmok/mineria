@@ -13,6 +13,7 @@ import {
 } from "./hooks/map/useTerrainGL"
 import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
 import { useSgcLayersGL } from "./hooks/map/useSgcLayersGL"
+import { useAnhLayersGL } from "./hooks/map/useAnhLayersGL"
 import { usePlanchaGL } from "./hooks/map/usePlanchaGL"
 import { useTerrainProfileGL } from "./hooks/map/useTerrainProfileGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
@@ -28,6 +29,7 @@ import { onMapTap } from "./utils/tapGesture"
 import { crsById } from "./utils/crs"
 import { whenSized } from "./utils/whenSized"
 import { ANM_LAYERS } from "./utils/anmLayers"
+import { anhLayerByKey } from "./utils/anhLayers"
 import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
 import { DrawToolbar } from "./components/DrawToolbar"
@@ -35,7 +37,7 @@ import { MapMenuItem, MapMenuPanel, MapMenuSeparator } from "./components/MapMen
 import { ImageExport } from "./components/ImageExport"
 import { TerrainQuery } from "./components/TerrainQuery"
 import { TerrainRasterLegend } from "./components/TerrainRasterLegend"
-import { SgcPanel, activeSgcKeys } from "./components/SgcPanel"
+import { SgcPanel, activeRasterKeys } from "./components/SgcPanel"
 import { PlanchaPanel } from "./components/PlanchaPanel"
 import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
@@ -163,6 +165,15 @@ export default function MapComponentGL({
     clearSgcFeatureInfo,
   } = useSgcLayersGL(mapRef, mapInstance, layerState, { enabled: !queryingTerrain })
 
+  const {
+    subLayers: anhSubLayers,
+    chosenSub: anhChosenSub,
+    toggleSubLayer: toggleAnhSubLayer,
+    legends: anhLegends,
+    featureInfo: anhFeatureInfo,
+    clearFeatureInfo: clearAnhFeatureInfo,
+  } = useAnhLayersGL(mapRef, mapInstance, layerState, { enabled: !queryingTerrain })
+
   // Y la plancha en PDF que cuelga de la ficha de «Estado cartográfico»: se trae
   // el archivo, se le lee la cuadrícula que trae dibujada y se coloca sobre el
   // mapa. Ver `utils/planchaGeo.js` para el porqué de cada paso.
@@ -181,11 +192,25 @@ export default function MapComponentGL({
   // arriba igual que ya lo hace lo cargado de la ANM.
   useEffect(() => {
     onSgcState?.({
-      subLayers: sgcSubLayers,
-      chosenSub: sgcChosenSub,
-      onToggleSubLayer: toggleSgcSubLayer,
+      subLayers: { ...sgcSubLayers, ...anhSubLayers },
+      chosenSub: { ...sgcChosenSub, ...anhChosenSub },
+      onToggleSubLayer: (key, cual) => {
+        if (anhLayerByKey(key)) {
+          toggleAnhSubLayer(key, cual)
+        } else {
+          toggleSgcSubLayer(key, cual)
+        }
+      },
     })
-  }, [sgcSubLayers, sgcChosenSub, toggleSgcSubLayer, onSgcState])
+  }, [
+    sgcSubLayers,
+    anhSubLayers,
+    sgcChosenSub,
+    anhChosenSub,
+    toggleSgcSubLayer,
+    toggleAnhSubLayer,
+    onSgcState,
+  ])
 
   // Lo cargado sube al panel, que es donde viven el filtro y la tabla: las
   // opciones del filtro se arman con lo que hay, y la tabla necesita además el
@@ -730,19 +755,39 @@ export default function MapComponentGL({
           <TerrainQuery result={terrainResult} onClose={toggleTerrainQuery} />
         )}
 
-        {/* La leyenda y la ficha de la geología. Aparece sola al encender una
-            capa del SGC y desaparece al apagarla: mientras no haya geología en
-            pantalla no tiene nada que decir. */}
+        {/* La leyenda y la ficha de capas ráster (Geología SGC e Hidrocarburos ANH).
+            Aparece sola al encender una capa y desaparece al apagarla. */}
         <SgcPanel
-          activeKeys={activeSgcKeys(layerState)}
-          subLayers={sgcSubLayers}
-          chosenSub={sgcChosenSub}
-          legends={sgcLegends}
-          featureInfo={sgcFeatureInfo}
+          activeKeys={activeRasterKeys(layerState)}
+          subLayers={{ ...sgcSubLayers, ...anhSubLayers }}
+          chosenSub={{ ...sgcChosenSub, ...anhChosenSub }}
+          legends={{ ...sgcLegends, ...anhLegends }}
+          featureInfo={
+            sgcFeatureInfo?.consultando || anhFeatureInfo?.consultando
+              ? {
+                  lngLat: sgcFeatureInfo?.lngLat || anhFeatureInfo?.lngLat,
+                  consultando: true,
+                  resultados: [],
+                }
+              : sgcFeatureInfo || anhFeatureInfo
+                ? {
+                    lngLat: sgcFeatureInfo?.lngLat || anhFeatureInfo?.lngLat,
+                    consultando: false,
+                    resultados: [
+                      ...(sgcFeatureInfo?.resultados || []),
+                      ...(anhFeatureInfo?.resultados || []),
+                    ],
+                  }
+                : null
+          }
           fieldInfo={sgcFieldInfo}
-          onDismiss={clearSgcFeatureInfo}
+          onDismiss={() => {
+            clearSgcFeatureInfo()
+            clearAnhFeatureInfo()
+          }}
           onCargarPlancha={(datos) => {
             clearSgcFeatureInfo()
+            clearAnhFeatureInfo()
             cargarPlancha(datos)
           }}
         />

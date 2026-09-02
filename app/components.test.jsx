@@ -172,9 +172,14 @@ describe("panel de capas por áreas", () => {
     expect(screen.getByRole("switch", { name: "Planchas 1:100.000" })).toBeEnabled()
     expect(screen.getByRole("switch", { name: "Mapa Metalogénico 2022" })).toBeEnabled()
 
-    // Las que siguen sin dirección pública, apagadas.
+    // Hidrocarburos ya está conectada a la ANH, así que sus interruptores funcionan.
     await openArea(user, "Hidrocarburos")
-    expect(screen.getByRole("switch", { name: "Pozos" })).toBeDisabled()
+    expect(screen.getByRole("switch", { name: "Mapa de Tierras ANH" })).toBeEnabled()
+    expect(screen.getByRole("switch", { name: "Pozos de hidrocarburos" })).toBeEnabled()
+
+    // Las que siguen sin dirección pública (Cartografía/Catastro), apagadas.
+    await openArea(user, "Cartografía")
+    expect(screen.getByRole("switch", { name: "Predios" })).toBeDisabled()
   })
 
   it("solo deja un área desplegada a la vez", async () => {

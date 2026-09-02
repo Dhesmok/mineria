@@ -32,6 +32,12 @@ import {
   sgcLayerId,
   sgcSourceId,
 } from "./sgcLayers"
+import {
+  ANH_ATTRIBUTION,
+  ANH_LAYERS,
+  anhLayerId,
+  anhSourceId,
+} from "./anhLayers"
 
 /** Centro y zoom iniciales, los mismos del visor Leaflet pero en orden [lon, lat]. */
 export const INITIAL_CENTER = [-72, 4]
@@ -303,6 +309,41 @@ const planchaLayer = () => ({
   },
 })
 
+export const ANH_ATTRIBUTION_SOURCE_ID = "anh-atribucion"
+export const ANH_ATTRIBUTION_LAYER_ID = "anh-atribucion-capa"
+
+const anhSources = () =>
+  Object.fromEntries(
+    ANH_LAYERS.map((capa) => [
+      anhSourceId(capa.key),
+      { type: "image", url: TRANSPARENT_PIXEL, coordinates: MUNDO_ENTERO },
+    ]),
+  )
+
+const anhAttributionSource = () => ({
+  [ANH_ATTRIBUTION_SOURCE_ID]: {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] },
+    attribution: ANH_ATTRIBUTION,
+  },
+})
+
+const anhAttributionLayer = () => ({
+  id: ANH_ATTRIBUTION_LAYER_ID,
+  type: "circle",
+  source: ANH_ATTRIBUTION_SOURCE_ID,
+  layout: { visibility: "none" },
+})
+
+const anhLayers = () =>
+  ANH_LAYERS.map((capa) => ({
+    id: anhLayerId(capa.key),
+    type: "raster",
+    source: anhSourceId(capa.key),
+    layout: { visibility: "none" },
+    paint: { "raster-opacity": 0.6, "raster-fade-duration": 0 },
+  }))
+
 /**
  * Construye el estilo con las dos capas base cargadas desde el principio y una
  * de ellas oculta.
@@ -325,8 +366,10 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
     [DERIVATIVE_SOURCE_ID]: DERIVATIVE_SOURCE,
     ...sgcSources(),
+    ...anhSources(),
     ...planchaSource(),
     ...sgcAttributionSource(),
+    ...anhAttributionSource(),
     ...anmSources(),
   },
   layers: [
@@ -337,8 +380,10 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
     ...sgcLayers(),
+    ...anhLayers(),
     planchaLayer(),
     sgcAttributionLayer(),
+    anhAttributionLayer(),
     derivativeLayer(),
     ...anmLayers(),
     ...searchLayers(),
