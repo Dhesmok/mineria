@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { Button } from "@/components/ui/button"
 import proj4 from 'proj4'
 import shpwrite from '@mapbox/shp-write'
-import { rewind } from '@turf/turf'
+import * as turf from '@turf/turf'
 import { saveAs } from 'file-saver'
 import { buildKml } from './utils/exportUtils'
 import { crsById, SOURCE_CRS } from './utils/crs'
@@ -75,7 +75,7 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
           // Luego corregimos la orientación de los anillos para que sean compatibles con ArcGIS Shapefile
           // ArcGIS requiere que los anillos exteriores sean Clockwise (sentido horario)
           // y los anillos interiores (huecos) Counter-Clockwise (antihorario).
-          rewind(fixedGeometry, { mutate: true, reverse: true });
+          turf.rewind(fixedGeometry, { mutate: true, reverse: true });
 
           return {
             type: "Feature",

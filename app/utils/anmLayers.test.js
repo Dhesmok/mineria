@@ -205,6 +205,22 @@ describe("fetchLayerFeatures", () => {
     expect(segundoLlamado).toBe(primerLlamado)
   })
 
+  it("omite la caché cuando se pasa skipCache: true", async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        objectIdFieldName: "OBJECTID",
+        features: [{ attributes: { OBJECTID: 1 }, geometry: { rings: [[[-75.6, 6.2], [-75.6, 6.3], [-75.5, 6.3], [-75.6, 6.2]]] } }],
+      }),
+    }))
+    global.fetch = fetchMock
+
+    await fetchLayerFeatures("https://ejemplo/0", BOX, { skipCache: true })
+    await fetchLayerFeatures("https://ejemplo/0", BOX, { skipCache: true })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it("propaga los errores que ArcGIS devuelve con HTTP 200", async () => {
     // Trampa conocida: response.ok es true y features queda undefined, así que
     // el fallo pasaba por "no hay nada en esta zona".

@@ -205,10 +205,14 @@ export const didExceedLimit = (data, featureCount) =>
  * "no hay nada por aquí".
  */
 export const fetchLayerFeatures = async (layerUrl, bounds, options, where = null) => {
-  const cacheKey = anmCacheKey(layerUrl, bounds, where)
-  const cached = getFromAnmCache(cacheKey)
-  if (cached) {
-    return cached
+  const skipCache = Boolean(options?.skipCache)
+  const cacheKey = skipCache ? null : anmCacheKey(layerUrl, bounds, where)
+
+  if (!skipCache) {
+    const cached = getFromAnmCache(cacheKey)
+    if (cached) {
+      return cached
+    }
   }
 
   const data = await fetchArcgisJson(buildFeatureQueryUrl(layerUrl, bounds, where), options)
@@ -225,6 +229,8 @@ export const fetchLayerFeatures = async (layerUrl, bounds, options, where = null
     truncated: didExceedLimit(data, Array.isArray(data?.features) ? data.features.length : 0),
   }
 
-  saveToAnmCache(cacheKey, result)
+  if (!skipCache) {
+    saveToAnmCache(cacheKey, result)
+  }
   return result
 }

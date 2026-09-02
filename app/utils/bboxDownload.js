@@ -175,9 +175,9 @@ export const resolveActiveLayers = async (layerVisibility) => {
 /**
  * Consulta cada capa activa dentro del bbox y devuelve sus datos.
  *
- * Usa `fetchLayerFeatures` (que ya normaliza los errores HTTP-200 de ArcGIS y
- * detecta el recorte de respuesta), la misma vía que el mapa: un solo camino
- * para hablar con la ANM.
+ * Usa `fetchLayerFeatures` con `skipCache: true` para garantizar que la descarga
+ * oficial en ZIP contenga siempre información fresca de la ANM y nunca datos
+ * cacheados de la sesión.
  */
 export const collectLayerData = async (activeLayers, bbox, options) => {
   return Promise.all(
@@ -185,7 +185,7 @@ export const collectLayerData = async (activeLayers, bbox, options) => {
       const { featureCollection, truncated } = await fetchLayerFeatures(
         layer.serviceUrl,
         bbox,
-        options,
+        { ...options, skipCache: true },
       )
       return { ...layer, featureCollection, truncated }
     }),
