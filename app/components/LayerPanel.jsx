@@ -1,12 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { Check, ChevronDown, ChevronRight, Filter, GripVertical, Search } from "lucide-react"
 
 import { AREAS, THEME_LAYERS, layerByKey } from "../utils/themeAreas"
 import { darken } from "../utils/colors"
 import { indexForPointer, moveWithinSubset } from "../utils/reorder"
 import { ColorPopover } from "./ColorPopover"
+import { OpacitySlider } from "./OpacitySlider"
 
 /**
  * Panel de capas agrupadas por área temática.
@@ -262,77 +263,6 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
   )
 }
 
-/**
- * La barra de opacidad de una capa.
- *
- * **Por qué no es un `input` a secas, que es lo que era.** Al arrastrarla rápido
- * y soltar el ratón *fuera* de la barra, el valor que quedaba no era el elegido:
- * la capa podía verse a media transparencia con la barra puesta del todo a la
- * derecha, o no verse.
- *
- * La causa es de las que solo se dan cuando algo va lento. Es un control
- * gobernado por React: lo que se ve es el valor del estado, no el del navegador.
- * Cada movimiento manda un valor nuevo, y mientras React reconstruye la lista y
- * MapLibre repinta —con el mapa cargado, eso son milisegundos de sobra— llegan
- * más movimientos. Si el último cae en ese hueco y encima el ratón se suelta
- * fuera, ese valor se pierde y en pantalla queda el penúltimo.
- *
- * El arreglo son dos cosas. Mientras se arrastra manda el navegador —el valor se
- * guarda aquí al lado y la barra deja de esperar a nadie—, y al soltar se lee del
- * propio elemento el valor final y se manda. Y el «soltar» se escucha **en toda
- * la ventana**, que es lo que arregla el caso de soltar fuera: el `pointerup` de
- * un elemento no se dispara si el dedo ya no está encima, pero el del documento
- * sí.
- */
-const OpacitySlider = ({ layer, state, onOpacity }) => {
-  // `null` significa «no se está arrastrando»: entonces manda el estado.
-  const [arrastrando, setArrastrando] = useState(null)
-  const inputRef = useRef(null)
-
-  useEffect(() => {
-    if (arrastrando === null) return
-
-    const soltar = () => {
-      const valor = Number(inputRef.current?.value)
-      setArrastrando(null)
-      if (Number.isFinite(valor)) onOpacity(layer.key, valor / 100)
-    }
-
-    // `pointercancel` también: en el móvil, un gesto que el navegador decide
-    // convertir en desplazamiento cancela el puntero sin soltarlo, y sin esto la
-    // barra se quedaba creyendo que seguía arrastrándose.
-    window.addEventListener("pointerup", soltar)
-    window.addEventListener("pointercancel", soltar)
-    return () => {
-      window.removeEventListener("pointerup", soltar)
-      window.removeEventListener("pointercancel", soltar)
-    }
-  }, [arrastrando, layer.key, onOpacity])
-
-  const valor = arrastrando ?? Math.round(state.opacity * 100)
-
-  return (
-    <input
-      ref={inputRef}
-      type="range"
-      min="0"
-      max="100"
-      value={valor}
-      onPointerDown={() => setArrastrando(Math.round(state.opacity * 100))}
-      onChange={(event) => {
-        const nuevo = Number(event.target.value)
-        // Se guarda aquí *y* se manda fuera: aquí para que la barra siga al dedo
-        // sin esperar, y fuera para que el mapa cambie mientras se arrastra, que
-        // es como se elige una transparencia.
-        if (arrastrando !== null) setArrastrando(nuevo)
-        onOpacity(layer.key, nuevo / 100)
-      }}
-      aria-label={`Opacidad de ${layer.label}`}
-      className="panel-opacidad w-[62px] shrink-0"
-    />
-  )
-}
-
 const LayerRow = ({
   layer,
   state,
@@ -413,7 +343,12 @@ const LayerRow = ({
     {/* La barra reserva su sitio aunque la capa esté apagada: si apareciera y
         desapareciera, la lista entera daría un salto en cada interruptor. */}
     {state.on ? (
-      <OpacitySlider layer={layer} state={state} onOpacity={onOpacity} />
+      <OpacitySlider
+        value={state.opacity}
+        onChange={(valor) => onOpacity(layer.key, valor)}
+        label={`Opacidad de ${layer.label}`}
+        className="w-[62px] shrink-0"
+      />
     ) : (
       <span className="w-[62px] shrink-0" />
     )}

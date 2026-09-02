@@ -8,10 +8,11 @@ dev_server.log
 dev_server.pid
 screenshot_result.png
 
-# Copias del worker de MapLibre, generadas por scripts/copy-maplibre-worker.mjs
-# en cada dev y cada build. No se versionan para que no queden desfasadas
-# respecto a la versión de maplibre-gl instalada.
+# Copias de los workers de MapLibre y de pdf.js, generadas por
+# scripts/copy-workers.mjs en cada dev y cada build. No se versionan para que no
+# queden desfasadas respecto a la versión instalada de cada librería.
 public/maplibre/
+public/pdfjs/
 
 # Lo regenera `next dev` y `next build` en cada arranque, y cada uno escribe una
 # dirección de documentación distinta: versionado, el archivo va y viene entre

@@ -416,7 +416,7 @@ búsqueda y el terreno (Fase 4).
    polígonos. Se localizó comparando qué sí y qué no funcionaba: todo lo que
    pasa por el worker estaba muerto, todo lo demás vivo.
 
-   **Solución:** `scripts/copy-maplibre-worker.mjs` copia el worker a `public/`
+   **Solución:** `scripts/copy-workers.mjs` copia el worker a `public/`
    antes de cada `npm run dev` y cada `npm run build`, y el visor le indica la
    dirección con `setWorkerUrl()`. Se copian dos archivos porque el worker
    importa `maplibre-gl-shared.mjs` por ruta relativa. No se versionan, para que

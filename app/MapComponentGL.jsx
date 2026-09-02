@@ -13,6 +13,7 @@ import {
 } from "./hooks/map/useTerrainGL"
 import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
 import { useSgcLayersGL } from "./hooks/map/useSgcLayersGL"
+import { usePlanchaGL } from "./hooks/map/usePlanchaGL"
 import { useTerrainProfileGL } from "./hooks/map/useTerrainProfileGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
@@ -34,6 +35,7 @@ import { ImageExport } from "./components/ImageExport"
 import { TerrainQuery } from "./components/TerrainQuery"
 import { TerrainRasterLegend } from "./components/TerrainRasterLegend"
 import { SgcPanel, activeSgcKeys } from "./components/SgcPanel"
+import { PlanchaPanel } from "./components/PlanchaPanel"
 import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
@@ -81,7 +83,7 @@ import {
 // siempre. Costó encontrarlo porque el mapa base sí se veía —las teselas raster
 // no pasan por el worker— y todo parecía funcionar.
 //
-// La copia la deja en public/ el script scripts/copy-maplibre-worker.mjs, que
+// La copia la deja en public/ el script scripts/copy-workers.mjs, que
 // corre solo antes de cada `npm run dev` y de cada `npm run build`.
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
 
@@ -159,6 +161,18 @@ export default function MapComponentGL({
     sgcFieldInfo,
     clearSgcFeatureInfo,
   } = useSgcLayersGL(mapRef, mapInstance, layerState, { enabled: !queryingTerrain })
+
+  // Y la plancha en PDF que cuelga de la ficha de «Estado cartográfico»: se trae
+  // el archivo, se le lee la cuadrícula que trae dibujada y se coloca sobre el
+  // mapa. Ver `utils/planchaGeo.js` para el porqué de cada paso.
+  const {
+    plancha,
+    planchaOpacity,
+    setPlanchaOpacity,
+    cargarPlancha,
+    quitarPlancha,
+    encuadrarPlancha,
+  } = usePlanchaGL(mapRef, mapInstance)
 
   // La lista de subcapas sube al panel, que es quien dibuja las casillas. El
   // hook tiene que vivir aquí —necesita el mapa— pero las casillas van junto a
@@ -698,6 +712,17 @@ export default function MapComponentGL({
           featureInfo={sgcFeatureInfo}
           fieldInfo={sgcFieldInfo}
           onDismiss={clearSgcFeatureInfo}
+          onCargarPlancha={cargarPlancha}
+        />
+
+        {/* La plancha geológica del SGC, ya colocada. Su panel sale al pedirla y
+            se va al quitarla, como la ficha de arriba. */}
+        <PlanchaPanel
+          plancha={plancha}
+          opacity={planchaOpacity}
+          onOpacity={setPlanchaOpacity}
+          onEncuadrar={encuadrarPlancha}
+          onQuitar={quitarPlancha}
         />
 
         {/* La función diferenciadora: dibujar un polígono y salir con los
