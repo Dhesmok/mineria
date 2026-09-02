@@ -483,6 +483,14 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     página el DOM no pasa de unos cientos de nodos, y el ordenamiento y la
     navegación se mantienen instantáneos.
 
+30. **Al reingresar al 3D tras desplazarse en 2D, `queryTerrainElevation` devuelve 0 hasta decodificar la tesela.**
+    En el nuevo encuadre, MapLibre devuelve `0` (no `null`) para el centro mientras
+    descarga y decodifica la tesela DEM en la GPU. Si `easeTo` arranca con cota 0,
+    la cámara calcula su pose contra el nivel del mar y, cuando el terreno sube a
+    2.000 m, queda sepultada en el suelo. `esperarAlTerreno` compara activamente
+    contra la cota esperada del DEM (`reliefAround.center`) antes de permitir la
+    inclinación de la cámara.
+
 ## Convenciones
 
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo

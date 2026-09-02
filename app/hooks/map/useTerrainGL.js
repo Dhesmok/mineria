@@ -89,15 +89,15 @@ const TERRAIN_WAIT_MS = 1500
 /**
  * Espera a que el modelo de elevación esté cargado y MapLibre conozca la cota del centro.
  *
- * **No basta con `areTilesLoaded()`**: al encender el terreno desde 2D, las teselas del
- * mapa plano ya estaban cargadas y `areTilesLoaded()` devolvía `true` de inmediato (en 0 ms),
- * antes de que MapLibre siquiera empezara a pedir o decodificar el DEM. La cámara
- * calculaba su pose con cota cero y luego, al subir el terreno a 2.000 m, quedaba atrapada en el suelo.
+ * Al encender el terreno (o al cambiar de sitio en 2D y luego activar 3D), MapLibre
+ * devuelve inicialmente `null` o `0` hasta que descarga y decodifica la tesela DEM en la GPU.
+ * Si se inicia `easeTo` mientras la cota es 0, la cámara calcula su pose contra el nivel del
+ * mar, y al levantarse el terreno real a 2.000 m queda sepultada en el suelo.
  *
- * Esperamos a que `queryTerrainElevation(centro)` devuelva una cota válida o a que el
- * mapa emita `idle`/`render` con el terreno ya decodificado.
+ * Verificamos activamente que `queryTerrainElevation(centro)` devuelva una cota no nula
+ * y consistente con la cota esperada del DEM.
  */
-const esperarAlTerreno = (map, ms = TERRAIN_WAIT_MS) =>
+const esperarAlTerreno = (map, expectedElevation = null, ms = TERRAIN_WAIT_MS) =>
   new Promise((listo) => {
     if (!map) {
       listo()
@@ -105,7 +105,22 @@ const esperarAlTerreno = (map, ms = TERRAIN_WAIT_MS) =>
     }
 
     const centro = map.getCenter?.()
-    if (centro && map.queryTerrainElevation?.(centro) != null) {
+
+    const isElevationReady = () => {
+      if (!centro) return true
+      const elev = map.queryTerrainElevation?.(centro)
+      if (elev === null || elev === undefined) return false
+
+      // Si por el DEM sabemos que la zona está a más de 30 m de altura,
+      // un valor menor a 5 m indica que MapLibre todavía tiene la cota en cero por omisión.
+      if (expectedElevation !== null && expectedElevation > 30) {
+        if (elev < 5) return false
+      }
+
+      return true
+    }
+
+    if (isElevationReady()) {
       listo()
       return
     }
@@ -119,21 +134,21 @@ const esperarAlTerreno = (map, ms = TERRAIN_WAIT_MS) =>
       clearTimeout(reloj)
       map.off?.("idle", onIdle)
       map.off?.("render", onRender)
-      map.off?.("data", onData)
+      map.off?.("sourcedata", onSourceData)
       listo()
     }
 
     const onIdle = () => terminar()
 
     const onRender = () => {
-      if (centro && map.queryTerrainElevation?.(centro) != null) {
+      if (isElevationReady()) {
         terminar()
       }
     }
 
-    const onData = (e) => {
-      if (e?.dataType === "source" && e?.sourceId === TERRAIN_SOURCE_ID) {
-        if (centro && map.queryTerrainElevation?.(centro) != null) {
+    const onSourceData = (e) => {
+      if (e?.sourceId === TERRAIN_SOURCE_ID && e?.isSourceLoaded) {
+        if (isElevationReady()) {
           terminar()
         }
       }
@@ -142,7 +157,7 @@ const esperarAlTerreno = (map, ms = TERRAIN_WAIT_MS) =>
     reloj = setTimeout(terminar, ms)
     map.on?.("idle", onIdle)
     map.on?.("render", onRender)
-    map.on?.("data", onData)
+    map.on?.("sourcedata", onSourceData)
   })
 
 export const useTerrainGL = (mapRef, mapInstance) => {
@@ -245,13 +260,14 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       })
       // Si mientras tanto arrancó otra medida, la que manda es esa: lo que se
       // acaba de calcular es de un sitio donde ya no se está mirando.
-      if (medicionRef.current !== control) return desnivelRef.current
+      if (medicionRef.current !== control) return null
       desnivelRef.current = medida?.relief ?? null
+      return medida
     } catch {
       // Sin modelo no hay nada que calcular.
       if (medicionRef.current === control) desnivelRef.current = null
+      return null
     }
-    return desnivelRef.current
   }, [])
 
   /**
@@ -303,6 +319,8 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       // nada" y deja el terreno puesto.
       map.setTerrain(null)
       map.setSky(undefined)
+      desnivelRef.current = null
+      medicionRef.current?.abort()
       map.easeTo({ pitch: 0, bearing: 0, duration: 700 })
       // El relieve se queda encendido a propósito: sigue siendo útil en plano, y
       // apagarlo de golpe al volver a 2D se siente como si el mapa hubiera
@@ -320,9 +338,9 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     // **Aquí hay que esperar, y no es por cortesía.** MapLibre coloca la cámara
     // sobre la cota del centro, pero solo si en ese instante la conoce. Con
     // `setTerrain` y el movimiento seguidos, la pose se calcula con cota cero —y
-    // no la vuelve a tocar nunca—: la cámara se quedaba dentro del cerro. Se
-    // comprobó dejándolo quince segundos, y ahí seguía.
-    await Promise.all([medirElDesnivel(map), esperarAlTerreno(map)])
+    // no la vuelve a tocar nunca—: la cámara se quedaba dentro del cerro.
+    const medida = await medirElDesnivel(map)
+    await esperarAlTerreno(map, medida?.center)
 
     const zoom = zoomParaMirarElRelieve(map, PITCH_3D, exaggerationRef.current)
     // Mientras se consultaba el modelo pudo pulsarse otra vez el botón.
