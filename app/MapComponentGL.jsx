@@ -26,6 +26,7 @@ import { basemapById } from "./utils/basemaps"
 import { readPreferences } from "./utils/preferences"
 import { onMapTap } from "./utils/tapGesture"
 import { crsById } from "./utils/crs"
+import { whenSized } from "./utils/whenSized"
 import { ANM_LAYERS } from "./utils/anmLayers"
 import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
@@ -434,82 +435,108 @@ export default function MapComponentGL({
   useEffect(() => {
     if (mapRef.current) return
 
-    const map = new MapLibreMap({
-      container: containerRef.current,
-      // El fondo de partida tiene que ser el mismo que dice el botón. Estaba
-      // fijo en "osm" desde cuando solo había dos fondos: el visor arrancaba con
-      // el callejero mientras el botón anunciaba «Satélite», y no se notaba
-      // hasta comparar la atribución de la esquina con lo que decía el botón.
+    /**
+     * **El mapa no se construye hasta que el contenedor mida algo**, y eso no es
+     * una precaución teórica: el visor no abría en el teléfono.
+     *
+     * `_calcMatrices()` de MapLibre empieza con `if (this._width &&
+     * this._height)`, así que con el contenedor a cero deja la matriz de
+     * proyección sin definir. La barra de escala se engancha en `addControl` y
+     * lo primero que hace es preguntar por unas coordenadas de pantalla: le pasa
+     * `undefined` a la multiplicación de matrices y se lleva por delante el
+     * arranque entero, con un «Cannot read properties of undefined» que no
+     * señala a ningún sitio.
+     *
+     * Ver `utils/whenSized`, que es quien espera.
+     */
+    // Lo que hay que deshacer al desmontar, se haya llegado a construir el mapa
+    // o no. Un objeto y no dos variables sueltas: la limpieza corre siempre, y
+    // con banderas sueltas es donde se cuela el «off de un mapa que no existe».
+    const montado = { mapa: null, desengancharEstilo: null }
+
+    const construir = () => {
+      const map = new MapLibreMap({
+        container: containerRef.current,
+        // El fondo de partida tiene que ser el mismo que dice el botón. Estaba
+        // fijo en "osm" desde cuando solo había dos fondos: el visor arrancaba con
+        // el callejero mientras el botón anunciaba «Satélite», y no se notaba
+        // hasta comparar la atribución de la esquina con lo que decía el botón.
+        //
+        // Y se lee de las preferencias, no del valor de fábrica: si no, quien
+        // dejó puesto el fondo claro vería un parpadeo del satélite en cada
+        // recarga antes de que el fondo guardado se aplicara encima.
+        style: createBaseStyle(readPreferences().basemap),
+        center: INITIAL_CENTER,
+        zoom: INITIAL_ZOOM,
+        maxZoom: MAX_ZOOM,
+        // Por defecto MapLibre no deja pasar de 60° de inclinación. Con terreno
+        // real conviene poder acercarse más al horizonte para leer un valle a
+        // contraluz, que es justo lo que uno quiere mirar en 3D.
+        //
+        // El número sale de `PITCH_MAX` y no está escrito aquí: estuvo fijo en 85
+        // mientras el deslizador ya usaba la constante, así que bajarla no bajaba
+        // nada —arrastrando con Ctrl se seguía llegando a 85—.
+        maxPitch: PITCH_MAX,
+        // Sin esto, leer el lienzo devuelve una imagen en negro: WebGL descarta
+        // el búfer en cuanto termina de pintar, salvo que se le pida guardarlo.
+        // Es lo que hace posible exportar el mapa como imagen.
+        preserveDrawingBuffer: true,
+        // La atribución propia de MapLibre se queda, en versión compacta: las
+        // condiciones de uso de OSM la exigen. `false` la quitaría del todo.
+        attributionControl: { compact: true },
+      })
+
+      // visualizePitch inclina la brújula junto con el mapa. Todavía no sirve de
+      // nada porque el mapa está plano, pero es la pieza que en la Fase 4 le
+      // indica al usuario que está mirando el terreno en 3D.
+      map.addControl(new NavigationControl({ visualizePitch: true }), "top-right")
+      map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
+
+      mapRef.current = map
+      montado.mapa = map
+
+      // El mapa no se anuncia hasta que el estilo esté parseado. Es asíncrono:
+      // justo después de `new Map()` el estilo todavía está vacío y getLayer()
+      // devuelve undefined. El hook de capas usa eso como señal de "todavía no",
+      // así que entregarle el mapa antes de tiempo lo deja rendido en silencio y
+      // las capas no aparecen nunca.
       //
-      // Y se lee de las preferencias, no del valor de fábrica: si no, quien
-      // dejó puesto el fondo claro vería un parpadeo del satélite en cada
-      // recarga antes de que el fondo guardado se aplicara encima.
-      style: createBaseStyle(readPreferences().basemap),
-      center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
-      maxZoom: MAX_ZOOM,
-      // Por defecto MapLibre no deja pasar de 60° de inclinación. Con terreno
-      // real conviene poder acercarse más al horizonte para leer un valle a
-      // contraluz, que es justo lo que uno quiere mirar en 3D.
-      //
-      // El número sale de `PITCH_MAX` y no está escrito aquí: estuvo fijo en 85
-      // mientras el deslizador ya usaba la constante, así que bajarla no bajaba
-      // nada —arrastrando con Ctrl se seguía llegando a 85—.
-      maxPitch: PITCH_MAX,
-      // Sin esto, leer el lienzo devuelve una imagen en negro: WebGL descarta
-      // el búfer en cuanto termina de pintar, salvo que se le pida guardarlo.
-      // Es lo que hace posible exportar el mapa como imagen.
-      preserveDrawingBuffer: true,
-      // La atribución propia de MapLibre se queda, en versión compacta: las
-      // condiciones de uso de OSM la exigen. `false` la quitaría del todo.
-      attributionControl: { compact: true },
-    })
+      // La señal NO puede ser el evento `load`, que es lo que sugiere toda la
+      // documentación: MapLibre solo lo dispara cuando el estilo *y todas sus
+      // fuentes* terminaron de cargar. Con una fuente lenta o caída —el servidor
+      // de teselas sin responder, por ejemplo— ese evento no llega nunca y el
+      // visor se quedaría inicializándose para siempre. Se comprobó en pruebas:
+      // con las teselas bloqueadas, `load` no llegó y `isStyleLoaded()` se quedó
+      // en false indefinidamente. `styledata` solo depende del estilo, que es
+      // justo la condición que hace falta aquí.
+      let announced = false
+      const announceWhenStyleReady = () => {
+        if (announced || !map.getLayer(BASE_LAYERS.osm)) return
+        announced = true
+        setMapInstance(map)
+        onMapInitializedRef.current?.(map)
+      }
+      montado.desengancharEstilo = () => map.off("styledata", announceWhenStyleReady)
 
-    // visualizePitch inclina la brújula junto con el mapa. Todavía no sirve de
-    // nada porque el mapa está plano, pero es la pieza que en la Fase 4 le
-    // indica al usuario que está mirando el terreno en 3D.
-    map.addControl(new NavigationControl({ visualizePitch: true }), "top-right")
-    map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
+      map.on("styledata", announceWhenStyleReady)
+      // Por si el estilo ya estaba listo antes de suscribirse.
+      announceWhenStyleReady()
 
-    mapRef.current = map
-
-    // El mapa no se anuncia hasta que el estilo esté parseado. Es asíncrono:
-    // justo después de `new Map()` el estilo todavía está vacío y getLayer()
-    // devuelve undefined. El hook de capas usa eso como señal de "todavía no",
-    // así que entregarle el mapa antes de tiempo lo deja rendido en silencio y
-    // las capas no aparecen nunca.
-    //
-    // La señal NO puede ser el evento `load`, que es lo que sugiere toda la
-    // documentación: MapLibre solo lo dispara cuando el estilo *y todas sus
-    // fuentes* terminaron de cargar. Con una fuente lenta o caída —el servidor
-    // de teselas sin responder, por ejemplo— ese evento no llega nunca y el
-    // visor se quedaría inicializándose para siempre. Se comprobó en pruebas:
-    // con las teselas bloqueadas, `load` no llegó y `isStyleLoaded()` se quedó
-    // en false indefinidamente. `styledata` solo depende del estilo, que es
-    // justo la condición que hace falta aquí.
-    let announced = false
-    const announceWhenStyleReady = () => {
-      if (announced || !map.getLayer(BASE_LAYERS.osm)) return
-      announced = true
-      setMapInstance(map)
-      onMapInitializedRef.current?.(map)
+      // Solo en desarrollo: deja el mapa a mano en la consola del navegador para
+      // poder preguntarle cosas (`__mapa.getZoom()`, `__mapa.getStyle()`) sin
+      // tener que instrumentar el código cada vez. En la versión publicada no
+      // existe, porque `next build` elimina esta rama entera.
+      if (process.env.NODE_ENV === "development") {
+        window.__mapa = map
+      }
     }
 
-    map.on("styledata", announceWhenStyleReady)
-    // Por si el estilo ya estaba listo antes de suscribirse.
-    announceWhenStyleReady()
-
-    // Solo en desarrollo: deja el mapa a mano en la consola del navegador para
-    // poder preguntarle cosas (`__mapa.getZoom()`, `__mapa.getStyle()`) sin
-    // tener que instrumentar el código cada vez. En la versión publicada no
-    // existe, porque `next build` elimina esta rama entera.
-    if (process.env.NODE_ENV === "development") {
-      window.__mapa = map
-    }
+    const dejarDeEsperar = whenSized(containerRef.current, construir)
 
     return () => {
-      map.off("styledata", announceWhenStyleReady)
-      map.remove()
+      dejarDeEsperar()
+      montado.desengancharEstilo?.()
+      montado.mapa?.remove()
       mapRef.current = null
       // Sin esto los hooks siguen viendo un mapa ya destruido y revientan en la
       // siguiente llamada. Es la misma trampa que documenta el visor Leaflet.

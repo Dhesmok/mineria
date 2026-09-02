@@ -88,6 +88,7 @@ app/
     planchaPdf.js         Abrir el PDF con pdf.js, medirlo y recortarle el mapa
     planchaUrl.js         Cuál de los enlaces de la ficha es la plancha, y cuál se deja pasar
     panelSize.js          Topes del panel de capas, que se puede redimensionar
+    whenSized.js          Esperar a que un elemento mida algo antes de montarle un mapa
     mapUtils.js, mapLabelsGL.js, drawStyles.js
   components/SgcPanel.jsx   Ficha del punto tocado y leyenda del SGC
   components/PlanchaPanel.jsx  La plancha colocada: opacidad, encuadre y con qué error se ajustó
@@ -412,7 +413,28 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     se distinguen. Pero el que corrige es el rótulo de esquina, que está en el
     mismo sistema y no arrastra ninguna duda de datum.
 
-25. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
+25. **Un mapa no se construye sobre un contenedor de cero píxeles.** El visor no
+    abría en el teléfono: reventaba al arrancar con «Cannot read properties of
+    undefined (reading '0')» dentro de `unproject`, una traza que no señala a
+    ningún sitio. La causa es de una línea, y está dentro de MapLibre:
+    `_calcMatrices()` empieza con `if (this._width && this._height)`, así que con
+    el contenedor a cero **deja la matriz de proyección sin definir**. Eso solo no
+    rompe nada —se recalcula al crecer—, pero `ScaleControl` se engancha en
+    `addControl` y lo primero que hace es pedir unas coordenadas de pantalla: le
+    pasa `undefined` a la multiplicación de matrices y se lleva el arranque
+    entero.
+
+    Un contenedor puede nacer sin tamaño por media docena de motivos —la pestaña
+    en segundo plano, un padre escondido, la barra del navegador móvil sin
+    asentar— y todos se arreglan solos un instante después. Por eso se espera con
+    un `ResizeObserver` (`utils/whenSized`) en vez de medir una vez y rendirse.
+    Ya construido, MapLibre se recompone solo: trae `trackResize` encendido.
+
+    Es la tercera vez que este contenedor se queda a cero de alto; las otras dos
+    fueron de CSS y están en el comentario de `h-full w-full` de
+    `MapComponentGL`.
+
+26. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
     cosas.** `mapbox-gl-draw` cancela el `touchend`, y sin él el navegador no
     genera el clic de compatibilidad. Todo lo que responda a tocar el mapa se
     engancha por partida doble: `map.on("click", …)` y `onMapTap(map, …)` de
