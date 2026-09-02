@@ -4,6 +4,7 @@ import {
   MAX_TILES,
   TILE_SIZE,
   blankTile,
+  boundsAroundCenter,
   cellSizeMeters,
   demZoomFor,
   elevationFromPixel,
@@ -13,6 +14,7 @@ import {
   mercatorYToLat,
   mosaicCornersOf,
   pasteTile,
+  radius3DForZoom,
   tileRangeFor,
   tileUrl,
   tilesOf,
@@ -261,5 +263,29 @@ describe("pasteTile y blankTile", () => {
     blankTile(mosaico, cols, 0, 0)
     expect(Number.isNaN(mosaico[0])).toBe(true)
     expect(Number.isNaN(mosaico[cols * TILE_SIZE - 1])).toBe(true)
+  })
+})
+
+describe("acotamiento 3D (radius3DForZoom y boundsAroundCenter)", () => {
+  it("asigna radios decrecientes según el nivel de zoom para no saturar", () => {
+    expect(radius3DForZoom(10)).toBe(6000)
+    expect(radius3DForZoom(11)).toBe(4500)
+    expect(radius3DForZoom(12)).toBe(3500)
+    expect(radius3DForZoom(13)).toBe(2500)
+    expect(radius3DForZoom(15)).toBe(2000)
+  })
+
+  it("calcula un recuadro simétrico alrededor del centro", () => {
+    const centro = { lng: -75.5, lat: 6.2 }
+    const bounds = boundsAroundCenter(centro, 2000)
+
+    expect(bounds.west).toBeLessThan(centro.lng)
+    expect(bounds.east).toBeGreaterThan(centro.lng)
+    expect(bounds.south).toBeLessThan(centro.lat)
+    expect(bounds.north).toBeGreaterThan(centro.lat)
+
+    // El centro del recuadro coincide con el punto pedido
+    expect((bounds.west + bounds.east) / 2).toBeCloseTo(centro.lng, 6)
+    expect((bounds.south + bounds.north) / 2).toBeCloseTo(centro.lat, 6)
   })
 })

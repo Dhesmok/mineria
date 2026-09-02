@@ -491,6 +491,13 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     contra la cota esperada del DEM (`reliefAround.center`) antes de permitir la
     inclinación de la cámara.
 
+31. **Pendiente y Orientación en 3D (`utils/demTiles.js` y `hooks/map/useTerrainRasterGL.js`).**
+    En 3D (cámara inclinada), la vista alcanza el horizonte. Para no pedir cientos
+    de teselas ni saturar memoria o la GPU, `radius3DForZoom` acota el cálculo a un
+    radio geográfico alrededor del centro (2.000 m a 6.000 m según zoom, equivalente
+    a 4–9 teselas DEM). MapLibre proyecta automáticamente la imagen rasterizada
+    sobre la malla 3D del relieve.
+
 ## Convenciones
 
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
