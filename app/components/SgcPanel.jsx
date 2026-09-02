@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, MapPin } from "lucide-react"
+import { ChevronDown, MapPin, Map as MapIcon } from "lucide-react"
 
 import { FloatingPanel } from "./FloatingPanel"
 import {
@@ -11,6 +11,7 @@ import {
   sgcLayerByKey,
   shortLinkText,
 } from "../utils/sgcLayers"
+import { planchaPdfFrom } from "../utils/planchaUrl"
 
 /**
  * Lo que hace legible un mapa geológico: la ficha del punto y la leyenda.
@@ -79,6 +80,42 @@ const Atributo = ({ field, value }) => (
   </div>
 )
 
+/**
+ * El botón que trae la plancha en PDF y la pone sobre el mapa.
+ *
+ * **Por qué está aquí y no en el panel de capas.** El enlace no es de una capa,
+ * es de *esta* plancha: sale del `ECG_URL_PL` de la ficha que se acaba de
+ * consultar, y hasta que alguien no toca una cuadrícula no existe. Ofrecerlo en
+ * una lista de capas obligaría a preguntar antes «¿cuál plancha?», que es
+ * exactamente lo que el clic sobre el mapa ya contestó.
+ *
+ * Sale solo si la ficha trae un PDF: una plancha sin cartografía publicada no
+ * tiene ninguno, y un botón que no se puede pulsar informa peor que ningún botón.
+ */
+const PonerPlancha = ({ resultado, lngLat, onCargar }) => {
+  const url = onCargar ? planchaPdfFrom(resultado.attributes) : null
+  if (!url) return null
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onCargar({
+          url,
+          titulo: [sgcLayerByKey(resultado.layerKey)?.label, resultado.value]
+            .filter(Boolean)
+            .join(" · "),
+          cerca: lngLat,
+        })
+      }
+      className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
+    >
+      <MapIcon className="h-3.5 w-3.5" />
+      Poner la plancha sobre el mapa
+    </button>
+  )
+}
+
 export const SgcPanel = ({
   activeKeys,
   subLayers,
@@ -87,6 +124,7 @@ export const SgcPanel = ({
   featureInfo,
   fieldInfo,
   onDismiss,
+  onCargarPlancha,
 }) => {
   const [leyendaAbierta, setLeyendaAbierta] = useState(false)
 
@@ -180,6 +218,11 @@ export const SgcPanel = ({
                   />
                 )
               })}
+              <PonerPlancha
+                resultado={resultado}
+                lngLat={featureInfo.lngLat}
+                onCargar={onCargarPlancha}
+              />
             </div>
           ))}
         </div>

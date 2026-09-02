@@ -267,6 +267,43 @@ const sgcLayers = () =>
   }))
 
 /**
+ * La plancha geológica en PDF, colocada sobre el mapa.
+ *
+ * Va **encima de las capas del SGC** y no debajo, al revés que todo lo demás: no
+ * es contexto de ellas, es la misma geología a más detalle y más al día. Quien
+ * la pone quiere verla, y lo que tiene debajo es la versión gruesa de lo mismo.
+ *
+ * Sigue por debajo de los títulos mineros, que es lo que el visor viene a
+ * enseñar.
+ *
+ * Nace con el píxel transparente y cubriendo el mundo, como las del SGC: una
+ * fuente de imagen exige imagen y esquinas al declararla. Quien la llena es
+ * `usePlanchaGL`, con las cuatro esquinas que salen de georreferenciar el PDF.
+ */
+export const PLANCHA_SOURCE_ID = "plancha-src"
+export const PLANCHA_LAYER_ID = "plancha-capa"
+
+const planchaSource = () => ({
+  [PLANCHA_SOURCE_ID]: { type: "image", url: TRANSPARENT_PIXEL, coordinates: MUNDO_ENTERO },
+})
+
+const planchaLayer = () => ({
+  id: PLANCHA_LAYER_ID,
+  type: "raster",
+  source: PLANCHA_SOURCE_ID,
+  layout: { visibility: "none" },
+  paint: {
+    "raster-opacity": 1,
+    "raster-fade-duration": 0,
+    // La plancha es un dibujo, no una medida: interpolar entre sus píxeles al
+    // acercarse es lo correcto, y es lo que hace MapLibre por omisión. Se deja
+    // dicho para que nadie lo copie de la capa derivada, que sí necesita
+    // `nearest` porque allí cada celda es un valor calculado.
+    "raster-resampling": "linear",
+  },
+})
+
+/**
  * Construye el estilo con las dos capas base cargadas desde el principio y una
  * de ellas oculta.
  *
@@ -288,6 +325,7 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
     [DERIVATIVE_SOURCE_ID]: DERIVATIVE_SOURCE,
     ...sgcSources(),
+    ...planchaSource(),
     ...sgcAttributionSource(),
     ...anmSources(),
   },
@@ -299,6 +337,7 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
     ...sgcLayers(),
+    planchaLayer(),
     sgcAttributionLayer(),
     derivativeLayer(),
     ...anmLayers(),

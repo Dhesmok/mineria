@@ -37,6 +37,9 @@ proyecto es "dibuja un cuadro y sal con los archivos", no ser otro visor.
 - `jszip`, `file-saver` y `@mapbox/shp-write` para exportar. **El KML se
   construye a mano** en `utils/exportUtils.js`; no hay librería de por medio
 - `@esri/arcgis-to-geojson-utils` para traducir lo que responde ArcGIS
+- `pdfjs-dist` para abrir las planchas del SGC, que se publican en PDF. Se carga
+  con `import()` solo cuando alguien pide una: pesa más de un mega y el paquete
+  inicial del visor no lo lleva
 - Jest + Testing Library
 
 Esta lista incluía cinco paquetes que el código no importaba en ninguna parte
@@ -67,6 +70,7 @@ app/
     useAreaDownloadGL.js  Descarga por área (ZIP)
     useGeolocationGL.js   GPS y brújula
     useSgcLayersGL.js     Geología: encender, elegir departamento, consultar un punto
+    usePlanchaGL.js       Traer la plancha en PDF y colocarla sobre el mapa
   utils/
     arcgis.js             fetch normalizado contra ArcGIS REST
     tenureLayers.js       Descubrimiento de índices de capa ANM
@@ -80,13 +84,18 @@ app/
     demTileLoader.js      Bajarlas, decodificarlas a alturas y recordarlas
     terrainRaster.js      Horn sobre el mosaico → los píxeles de la capa
     sgcLayers.js          Catálogo del SGC, direcciones y lectura de sus respuestas
+    planchaGeo.js         Georreferenciar una plancha por la cuadrícula que trae dibujada
+    planchaPdf.js         Abrir el PDF con pdf.js, medirlo y recortarle el mapa
+    planchaUrl.js         Cuál de los enlaces de la ficha es la plancha, y cuál se deja pasar
     panelSize.js          Topes del panel de capas, que se puede redimensionar
     mapUtils.js, mapLabelsGL.js, drawStyles.js
   components/SgcPanel.jsx   Ficha del punto tocado y leyenda del SGC
+  components/PlanchaPanel.jsx  La plancha colocada: opacidad, encuadre y con qué error se ajustó
   api/sgc/route.js        Intermediario del SGC: imagen, árbol de capas, campos, identify y leyenda
+  api/plancha/route.js    Intermediario para el PDF de una plancha, con lista de dominios permitidos
 components/ui/            shadcn
 scripts/
-  copy-maplibre-worker.mjs  Copia el worker de MapLibre a public/ (pre-dev y pre-build)
+  copy-workers.mjs        Copia los workers de MapLibre y pdf.js a public/ (pre-dev y pre-build)
 lib/utils.ts              cn(), debounce()
 ```
 
@@ -98,6 +107,7 @@ https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer
 https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87
 https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3
 https://srvags.sgc.gov.co/arcgis|arcprod/rest/services/...  → geología (ver utils/sgcLayers.js)
+recordcenter.sgc.gov.co, www2.sgc.gov.co  → los PDF de las planchas (vía /api/plancha)
 ```
 
 **La ANM sí permite CORS desde el navegador.** No asumas lo mismo de otras
@@ -131,6 +141,17 @@ tabla en la simbología de cada capa —`MapServer/<capa>?f=json`, en
 Depósitos aluviales» sin ningún diccionario nuestro que mantener. El código no se
 sustituye, se acompaña: es lo que aparece en los informes y en los mapas
 impresos.
+
+**La plancha de verdad está en un PDF, y ahora se puede poner sobre el mapa.**
+La ficha de «Estado cartográfico» trae en `ECG_URL_PL` el enlace a la hoja
+1:100.000 más actualizada —más que el servicio de teselas, que va por detrás—, y
+hasta ahora eso solo se podía abrir en otra pestaña. **Ese PDF no viene
+georreferenciado**: es una impresión a PDF, sin `/Measure` ni `/VP` ni `/LGIDict`.
+Pero lleva dibujada su cuadrícula plana y rotulada en los márgenes, que es un
+juego de puntos de control gratis: se leen los rótulos de la capa de texto, se
+buscan sus líneas en la imagen, se ajusta una recta y se recorta el marco. Sobre
+la plancha 132 el ajuste queda en ±12 m. Todo eso está en `utils/planchaGeo.js`,
+con las dos trampas que costó (la 19 y la 20 de más abajo).
 
 **Y la imagen es una por vista, no una rejilla de teselas.** ArcGIS dibuja cada
 imagen que le piden sin saber nada de las de al lado, así que rotula cada una por
@@ -175,13 +196,14 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
    prefieren pnpm cuando ven ese archivo: los despliegues fallaron con cinco
    comprobaciones en rojo. Si aparece otro archivo de bloqueo, bórralo.
 
-7. **El worker de MapLibre hay que copiarlo a `public/`.** MapLibre reparte
-   trabajo a un hilo aparte y lo localiza con una ruta que el empaquetador de
-   Next reescribe mal. Falla **en silencio**: el mapa base se ve, los datos
+7. **Los workers de MapLibre y de pdf.js hay que copiarlos a `public/`.**
+   MapLibre reparte trabajo a un hilo aparte y lo localiza con una ruta que el
+   empaquetador de Next reescribe mal. Falla **en silencio**: el mapa base se ve, los datos
    llegan, las etiquetas se dibujan, y los polígonos simplemente no aparecen —
    sin un solo error en la consola. Por eso existe
-   `scripts/copy-maplibre-worker.mjs`, enganchado a `predev` y `prebuild`. Si
-   alguna vez desaparecen los polígonos, mira eso primero.
+   `scripts/copy-workers.mjs`, enganchado a `predev` y `prebuild`. Si alguna vez
+   desaparecen los polígonos, mira eso primero. pdf.js tiene exactamente el mismo
+   problema, y por eso el script copia los dos.
 
 8. **`queryTerrainElevation()` devuelve la altura multiplicada por la
    exageración**, no la real. Con exageración 1,5 un cerro de 1.880 m reporta
@@ -293,7 +315,26 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     Es otra vez la trampa nº 10: los datos llegaban y se guardaban bien, y
     ninguna prueba sobre ellos podía verlo. Se vio en una captura.
 
-19. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
+19. **En una hoja antigua, la cuadrícula plana y la retícula geográfica no dicen
+    lo mismo.** La plancha 132 lleva las dos rotuladas —`880.000 m.E` abajo,
+    `74°55'W` un poco más abajo— y **discrepan unos 300 m en longitud**. No es un
+    error de lectura: la hoja es de 1975, del datum Bogotá de entonces, y en 2013
+    le transformaron la cuadrícula plana a MAGNA-SIRGAS y le dejaron la retícula
+    geográfica vieja. Los 300 m son el salto de datum. Lo dice la propia carátula
+    —«Transformada a datum MAGNA SIRGAS, 2013»—, pero hay que leerla sabiendo qué
+    significa. **Se georreferencia por la cuadrícula plana**, que es la que lleva
+    fecha de revisión; la geográfica se ignora aunque parezca el camino corto por
+    venir ya en grados. Ver la cabecera de `utils/planchaGeo.js`.
+
+20. **Un rótulo no está donde está su línea.** Va centrado debajo, así que su
+    ancla en la capa de texto del PDF queda corrida media palabra: unos 7 pt, que
+    a 1:100.000 son 250 m. La *separación* entre rótulos sí es exacta, porque
+    todos miden lo mismo. O sea que los rótulos solos dan bien la escala y mal el
+    origen, y colocar la hoja solo con ellos la deja un cuarto de kilómetro
+    corrida sin que nada falle. Hay que buscar las **líneas** en la imagen y
+    usar los rótulos únicamente para ponerles nombre.
+
+21. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
     cosas.** `mapbox-gl-draw` cancela el `touchend`, y sin él el navegador no
     genera el clic de compatibilidad. Todo lo que responda a tocar el mapa se
     engancha por partida doble: `map.on("click", …)` y `onMapTap(map, …)` de
