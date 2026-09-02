@@ -5,7 +5,15 @@ import {
   DERIVATIVE_SOURCE_ID,
   TERRAIN_TILE_TEMPLATE,
 } from "../../utils/mapStyles"
-import { cellSizeMeters, demZoomFor, mosaicCornersOf, tileRangeFor, tilesOf } from "../../utils/demTiles"
+import {
+  boundsAroundCenter,
+  cellSizeMeters,
+  demZoomFor,
+  mosaicCornersOf,
+  radius3DForZoom,
+  tileRangeFor,
+  tilesOf,
+} from "../../utils/demTiles"
 import { loadMosaic } from "../../utils/demTileLoader"
 import { derivativePixels, slopeUnavailableReason } from "../../utils/terrainRaster"
 import { debounce } from "@/lib/utils"
@@ -18,42 +26,9 @@ import { debounce } from "@/lib/utils"
  * cualquier SIG: se abre el trozo de modelo que hace falta, se le aplica Horn y
  * el resultado se pinta.
  *
- * ## Lo que se rehízo, y por qué
- *
- * La primera versión le preguntaba la altura al motor de mapa punto por punto
- * sobre una rejilla de pantalla: unas veinte mil llamadas a `unproject` más otras
- * veinte mil a `queryTerrainElevation`, todas seguidas y en el hilo que dibuja la
- * página. Diez segundos y medio de navegador congelado por pasada, medidos.
- *
- * Y no era lo peor. Esa pasada se repetía cada vez que llegaba un lote de teselas
- * de elevación, sin ningún tope. Las teselas vienen de un bucket sin red de
- * distribución y llegan a goteo durante uno o dos minutos, así que se encolaban
- * más pasadas de las que daba tiempo a terminar. La pestaña no iba lenta: se
- * moría.
- *
- * Ahora se bajan las teselas del modelo directamente, se pegan en un solo arreglo
- * de alturas y se calcula sobre él. Cero llamadas al motor de mapa. Medido sobre
- * una tesela de 256×256: ~1 ms entre decodificar y calcular, contra los ~10.400
- * ms de la pantalla entera de antes.
- *
- * **El bucle sin tope no se acotó: desapareció.** Ya no hay nada que esperar de
- * MapLibre, así que no hay a qué reaccionar. Se pide lo que hace falta, se espera
- * y se pinta una vez.
- *
- * ## Lo que se gana además de la velocidad
- *
- * - La rejilla es la del modelo, no la de la pantalla: la pendiente de una ladera
- *   es la misma a cualquier zoom. Antes cambiaba con la escala.
- * - Ya no hace falta poner el terreno para consultarlo, así que la capa responde
- *   sin esperar a que cargue el relieve.
- * - Se sabe cuántas teselas faltan, y se puede decir.
- *
- * ## Lo que sigue pendiente
- *
- * Sigue siendo **una sola imagen sobre el rectángulo visible**, así que al mover
- * el mapa se rehace entera y con la cámara inclinada no se dibuja. Lo que lo
- * arregla es servirla por teselas —cada una calculada y guardada por separado—,
- * y es la siguiente fase.
+ * En 3D (con cámara inclinada), el cálculo se acota a un radio alrededor del
+ * centro enfocado para no saturar memoria descargando teselas hasta el horizonte.
+ * MapLibre proyecta la imagen resultante directamente sobre la malla 3D del terreno.
  */
 
 /** Cuánto se espera a que el usuario se quede quieto antes de recalcular. */
@@ -124,16 +99,27 @@ export const useTerrainRasterGL = (mapRef, mapInstance) => {
     pasadaRef.current = control
     const modo = modeRef.current
 
-    const limites = map.getBounds()
-    const rango = tileRangeFor(
-      {
-        west: limites.getWest(),
-        south: limites.getSouth(),
-        east: limites.getEast(),
-        north: limites.getNorth(),
-      },
-      demZoomFor(map.getZoom()),
-    )
+    const centro = map.getCenter()
+    const pitch = map.getPitch()
+    let limites
+
+    if (pitch > 1) {
+      // En 3D (cámara inclinada), la vista alcanza el horizonte. Para no pedir
+      // cientos de teselas ni saturar la red/GPU, acotamos la escena a un radio
+      // alrededor del centro que se está observando.
+      const radio = radius3DForZoom(map.getZoom())
+      limites = boundsAroundCenter(centro, radio)
+    } else {
+      const b = map.getBounds()
+      limites = {
+        west: b.getWest(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        north: b.getNorth(),
+      }
+    }
+
+    const rango = tileRangeFor(limites, demZoomFor(map.getZoom()))
     const teselas = tilesOf(rango)
 
     setUnavailable(null)
@@ -163,7 +149,6 @@ export const useTerrainRasterGL = (mapRef, mapInstance) => {
       return
     }
 
-    const centro = map.getCenter()
     const lado = cellSizeMeters(centro.lat, rango.zoom)
     const pixeles = derivativePixels(mosaico.heights, rango.cols, rango.rows, lado, modo)
 

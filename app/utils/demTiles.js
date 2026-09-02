@@ -303,3 +303,43 @@ export const blankTile = (mosaic, mosaicCols, colOffset, rowOffset) => {
     mosaic.fill(NaN, destino, destino + TILE_SIZE)
   }
 }
+
+/**
+ * Metros aproximados por grado de latitud.
+ */
+export const METERS_PER_DEGREE_LAT = 111320
+
+/**
+ * Radio en metros para acotar el cálculo de pendiente y orientación en 3D.
+ *
+ * En 3D la vista alcanza el horizonte: pedir teselas para toda la pantalla
+ * descargaría cientos de teselas y saturaría el navegador. Este radio acota
+ * la cobertura a la escena visible alrededor del punto de interés (máximo 4 a 9 teselas).
+ */
+export const radius3DForZoom = (zoom) => {
+  if (zoom <= 10) return 6000
+  if (zoom <= 11) return 4500
+  if (zoom <= 12) return 3500
+  if (zoom <= 13) return 2500
+  return 2000
+}
+
+/**
+ * Construye un recuadro geográfico (bounds) centrado en un punto con un radio en metros.
+ */
+export const boundsAroundCenter = (center, radiusMeters) => {
+  if (!center || !Number.isFinite(center.lat) || !Number.isFinite(center.lng)) {
+    return { west: -75.6, east: -75.5, south: 6.2, north: 6.3 }
+  }
+  const radio = Number.isFinite(radiusMeters) && radiusMeters > 0 ? radiusMeters : 2000
+  const dLat = radio / METERS_PER_DEGREE_LAT
+  const cosLat = Math.cos((center.lat * Math.PI) / 180) || 1
+  const dLng = radio / (METERS_PER_DEGREE_LAT * cosLat)
+
+  return {
+    west: center.lng - dLng,
+    south: center.lat - dLat,
+    east: center.lng + dLng,
+    north: center.lat + dLat,
+  }
+}

@@ -95,24 +95,21 @@ describe("cuándo no se dibuja", () => {
     expect(slopeUnavailableReason(bien)).toBeNull()
   })
 
-  it("con la cámara inclinada, no, y dice por qué", () => {
-    // Inclinada se ve hasta el horizonte, y cubrir eso con teselas obligaría a
-    // bajar tanto el nivel que saldrían celdas de kilómetros.
-    const motivo = slopeUnavailableReason({ ...bien, pitch: 45 })
-    expect(motivo).toMatch(/mapa plano/)
+  it("con la cámara inclinada en 3D, también se dibuja (se acota por radio)", () => {
+    expect(slopeUnavailableReason({ ...bien, pitch: 45 })).toBeNull()
+    expect(slopeUnavailableReason({ ...bien, pitch: 60 })).toBeNull()
   })
 
-  it("y por debajo del zoom mínimo tampoco", () => {
+  it("por debajo del zoom mínimo no se dibuja", () => {
     const motivo = slopeUnavailableReason({ ...bien, zoom: SLOPE_MIN_ZOOM - 1 })
     expect(motivo).toMatch(/Acerca el mapa/)
   })
 
   it("ya no depende de la escala de la pantalla", () => {
     // Es el cambio de fondo: la rejilla es la del modelo, así que estar más lejos
-    // o más cerca dentro del rango ya no cambia si el dato vale o no. Antes, con
-    // rejilla de pantalla, sí: la misma ladera daba números distintos.
+    // o más cerca dentro del rango ya no cambia si el dato vale o no.
     expect(slopeUnavailableReason({ zoom: SLOPE_MIN_ZOOM, pitch: 0 })).toBeNull()
-    expect(slopeUnavailableReason({ zoom: 18, pitch: 0 })).toBeNull()
+    expect(slopeUnavailableReason({ zoom: 18, pitch: 45 })).toBeNull()
   })
 })
 

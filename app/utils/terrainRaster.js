@@ -441,24 +441,15 @@ export const resolutionNote = (cellSizeMeters) => {
 }
 
 /**
- * ¿Tiene sentido dibujar la capa con este zoom y esta inclinación?
+ * ¿Tiene sentido dibujar la capa con este zoom?
  *
  * Devuelve el motivo por el que no, para poder decírselo al usuario en vez de
  * dejar la capa encendida sin pintar nada.
+ *
+ * En 3D (pitch > 0), el cálculo se acota a un radio geográfico alrededor del
+ * centro enfocado para no pedir teselas hasta el horizonte.
  */
-export const slopeUnavailableReason = ({ zoom, pitch }) => {
-  if (pitch > 1) {
-    // **El motivo cambió, aunque la restricción siga siendo la misma.** Antes la
-    // capa era una imagen estirada sobre el rectángulo de pantalla y con la
-    // cámara inclinada señalaba pendientes donde no las había. Ahora el mosaico
-    // está pegado a las teselas del modelo y es geográficamente exacto; lo que
-    // impide dibujarlo es otra cosa: con la cámara inclinada se ve hasta el
-    // horizonte, y cubrir eso con teselas obligaría a bajar tanto el nivel que
-    // saldrían celdas de kilómetros. Se resuelve el día que la capa se sirva por
-    // teselas en vez de como una sola imagen.
-    return "Esta capa solo se dibuja con el mapa plano. Vuelve a 2D para verla."
-  }
-
+export const slopeUnavailableReason = ({ zoom }) => {
   if (zoom < SLOPE_MIN_ZOOM) {
     return "Acerca el mapa: a esta escala cada celda pasaría de 150 m."
   }
