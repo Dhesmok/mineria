@@ -302,9 +302,8 @@ export default function MapComponentGL({
     const siguiente = !queryingTerrainRef.current
     queryingTerrainRef.current = siguiente
     setQueryingTerrain(siguiente)
-    setTerrainForQuery(siguiente)
     setTerrainResult(null)
-  }, [setTerrainForQuery])
+  }, [])
 
   /**
    * Abrir la ventana de un botón, o cerrarla si ya estaba abierta por él.
@@ -351,7 +350,10 @@ export default function MapComponentGL({
   useEffect(() => {
     if (!mapInstance || !queryingTerrain) return
 
-    const alPulsar = (event) => setTerrainResult(queryTerrain(event.lngLat) ?? {})
+    const alPulsar = async (event) => {
+      const res = await queryTerrain(event.lngLat)
+      setTerrainResult(res ?? {})
+    }
     mapInstance.on("click", alPulsar)
     // Y el toque aparte: en táctil el clic no llega, porque el control de
     // dibujo cancela `touchend`. Ver `utils/tapGesture.js`.

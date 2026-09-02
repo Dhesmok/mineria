@@ -16,6 +16,7 @@
  */
 
 import {
+  DEM_MAX_ZOOM,
   TILE_SIZE,
   blankTile,
   cellInMosaic,
@@ -26,6 +27,7 @@ import {
   tileUrl,
   tilesOf,
 } from "./demTiles"
+import { sampleGrid, slopeAspectFrom } from "./terrainAnalysis"
 
 /**
  * Cuántas teselas decodificadas se recuerdan.
@@ -245,6 +247,45 @@ export const reliefAround = async (template, { lng, lat, radiusMeters, zoom, sig
   // Nunca negativo: si el punto que se mira es el más alto de la zona, no hay
   // nada que salvar.
   return { relief: Math.max(0, cima - centro), center: centro, highest: cima }
+}
+
+/**
+ * Consulta la cota, pendiente y orientación en un punto directamente del DEM,
+ * sin necesidad de activar la malla 3D de MapLibre ni deformar la vista 2D.
+ *
+ * @param {string} template URL de las teselas terrarium
+ * @param {{lng: number, lat: number}} lngLat
+ * @param {{signal?: AbortSignal}} [opciones]
+ * @returns {Promise<{elevation: number, slopeDegrees?: number, slopePercent?: number, aspectDegrees?: number, aspect?: Object}|null>}
+ */
+export const queryTerrainFromDEM = async (template, { lng, lat }, { signal } = {}) => {
+  const puntos = sampleGrid([lng, lat])
+  const radioMeters = 50
+  const dLat = radioMeters / METROS_POR_GRADO
+  const dLng = radioMeters / (METROS_POR_GRADO * Math.cos((lat * Math.PI) / 180) || 1)
+
+  const rango = tileRangeFor(
+    { west: lng - dLng, east: lng + dLng, south: lat - dLat, north: lat + dLat },
+    DEM_MAX_ZOOM,
+  )
+  const teselas = tilesOf(rango)
+  const { heights, missing } = await loadMosaic(template, teselas, rango, { signal })
+  if (missing === teselas.length || signal?.aborted) return null
+
+  const alturas = puntos.map(([pLng, pLat]) => {
+    const { col, row } = cellInMosaic(pLng, pLat, rango)
+    if (col < 0 || col >= rango.cols || row < 0 || row >= rango.rows) return null
+    const val = heights[row * rango.cols + col]
+    return Number.isFinite(val) ? val : null
+  })
+
+  const centro = alturas[4]
+  if (!Number.isFinite(centro)) return null
+
+  return {
+    elevation: centro,
+    ...(slopeAspectFrom(alturas) ?? {}),
+  }
 }
 
 /** Para las pruebas: dejar la memoria como recién arrancada. */

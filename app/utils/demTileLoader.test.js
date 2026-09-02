@@ -1,5 +1,5 @@
 import { TILE_SIZE, tileRangeFor, tilesOf } from "./demTiles"
-import { clearTileCache, loadMosaic, loadTile, reliefAround } from "./demTileLoader"
+import { clearTileCache, loadMosaic, loadTile, reliefAround, queryTerrainFromDEM } from "./demTileLoader"
 
 /**
  * El navegador, de mentira.
@@ -248,5 +248,39 @@ describe("reliefAround", () => {
   it("sin modelo no responde", async () => {
     global.fetch.mockImplementation(() => Promise.resolve({ ok: false, status: 500 }))
     await expect(reliefAround(PLANTILLA, PUNTO)).resolves.toBeNull()
+  })
+})
+
+describe("queryTerrainFromDEM", () => {
+  const PUNTO = { lng: -75.5, lat: 6.2 }
+
+  it("calcula cota, pendiente y orientación directamente del DEM", async () => {
+    global.fetch = jest.fn(() => {
+      const rgba = new Uint8ClampedArray(TILE_SIZE * TILE_SIZE * 4)
+      for (let fila = 0; fila < TILE_SIZE; fila++) {
+        for (let col = 0; col < TILE_SIZE; col++) {
+          const elev = 1500 + col * 2
+          const t = Math.round((elev + 32768) * 256)
+          const i = (fila * TILE_SIZE + col) * 4
+          rgba[i] = (t >> 16) & 255
+          rgba[i + 1] = (t >> 8) & 255
+          rgba[i + 2] = t & 255
+          rgba[i + 3] = 255
+        }
+      }
+      return Promise.resolve({ ok: true, blob: () => Promise.resolve({ pixeles: rgba }) })
+    })
+
+    const resultado = await queryTerrainFromDEM(PLANTILLA, PUNTO)
+    expect(resultado).not.toBeNull()
+    expect(resultado.elevation).toBeGreaterThan(1400)
+    expect(resultado.slopeDegrees).toBeGreaterThan(0)
+    expect(resultado.aspect).toBeDefined()
+  })
+
+  it("devuelve null si falla la descarga del modelo", async () => {
+    global.fetch.mockImplementation(() => Promise.resolve({ ok: false, status: 500 }))
+    const res = await queryTerrainFromDEM(PLANTILLA, PUNTO)
+    expect(res).toBeNull()
   })
 })

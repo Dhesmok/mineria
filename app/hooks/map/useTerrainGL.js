@@ -9,7 +9,7 @@ import {
   SCENE_RADIUS_M,
   safeZoomFor,
 } from "../../utils/camera3d"
-import { reliefAround } from "../../utils/demTileLoader"
+import { queryTerrainFromDEM, reliefAround } from "../../utils/demTileLoader"
 import { sampleGrid, slopeAspectFrom } from "../../utils/terrainAnalysis"
 
 /**
@@ -609,15 +609,19 @@ export const useTerrainGL = (mapRef, mapInstance) => {
    * @returns {Object|null} null si el modelo todavía no ha llegado a ese punto
    */
   const queryTerrain = useCallback(
-    (lngLat) => {
+    async (lngLat) => {
       const map = mapRef.current
-      if (!map?.getTerrain()) return null
+      if (map?.getTerrain()) {
+        const alturas = sampleGrid([lngLat.lng, lngLat.lat]).map((punto) => elevationAt(punto))
+        const centro = alturas[4]
+        if (Number.isFinite(centro)) {
+          return { elevation: centro, ...(slopeAspectFrom(alturas) ?? {}) }
+        }
+      }
 
-      const alturas = sampleGrid([lngLat.lng, lngLat.lat]).map((punto) => elevationAt(punto))
-      const centro = alturas[4]
-      if (!Number.isFinite(centro)) return null
-
-      return { elevation: centro, ...(slopeAspectFrom(alturas) ?? {}) }
+      // Si no hay terreno puesto (estamos en 2D plano para no deformar el mapa),
+      // consultamos directamente el modelo DEM sin activar la malla 3D de MapLibre.
+      return queryTerrainFromDEM(TERRAIN_TILE_TEMPLATE, lngLat)
     },
     [elevationAt, mapRef],
   )
