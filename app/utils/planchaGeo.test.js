@@ -6,6 +6,7 @@ import {
   georeferencePlancha,
   gridLabelsFrom,
   gridSeries,
+  declaredShift,
   pairSeries,
   parseGridValue,
 } from "./planchaGeo"
@@ -35,6 +36,7 @@ const dibujarPlancha = ({
   indice = false,
   escalaGrafica = false,
   recuadroLeyenda = false,
+  errorEnAbreviados = 0,
 } = {}) => {
   const gray = new Uint8Array(width * height).fill(255)
   const pinta = (x, y, v) => {
@@ -74,9 +76,21 @@ const dibujarPlancha = ({
   for (let y = marco.bottom - pasoPx; y > marco.top; y -= pasoPx) {
     for (let x = marco.left + 3; x < marco.right - 2; x += 1) pinta(x, Math.round(y), 150)
     const valor = norte0 + Math.round(((marco.bottom - y) / pasoPx) * paso)
-    items.push({ text: `${(valor / 1000).toLocaleString("es")}.`, x: marco.left - 40, y: y + 3 })
+    const escrito = valor + errorEnAbreviados
+    items.push({ text: `${(escrito / 1000).toLocaleString("es")}.`, x: marco.left - 40, y: y + 3 })
   }
-  items.push({ text: `${(norte0 / 1000).toLocaleString("es")}.`, x: marco.left - 40, y: marco.bottom + 3 })
+  items.push({
+    text: `${((norte0 + errorEnAbreviados) / 1000).toLocaleString("es")}.`,
+    x: marco.left - 40,
+    y: marco.bottom + 3,
+  })
+
+  // Los rótulos completos de las esquinas, que son los que dicen la coordenada
+  // entera. Van uno a cada lado del marco: sus anclas se corren en sentidos
+  // opuestos y por eso el sesgo se cancela en la mediana.
+  const norteArriba = norte0 + Math.round(((marco.bottom - marco.top) / pasoPx) * paso)
+  items.push({ text: `${norte0.toLocaleString("es")} m.N`, x: marco.left, y: marco.bottom + 10 })
+  items.push({ text: `${norteArriba.toLocaleString("es")} m.N`, x: marco.left, y: marco.top - 5 })
 
   // El índice de localización que llevan las hojas del SGC por el borde de
   // arriba: `1 2 3 … 12`, para decir «la mina está en el D-7». Son números en
@@ -406,6 +420,37 @@ describe("georeferencePlancha", () => {
     expect(resultado.bounds.este).toBeCloseTo(940000, -2)
   })
 
+  test("los rótulos de esquina mandan sobre los abreviados", () => {
+    // El caso de la plancha 193 (Yopal): sus nueve nortes abreviados van un
+    // kilómetro corridos respecto a los dos completos de las esquinas, y como
+    // eran mayoría, la hoja se colocaba un kilómetro al sur. Lo comprobó su
+    // propia retícula geográfica, que coincide con los de esquina.
+    const hoja = dibujarPlancha({ errorEnAbreviados: -1000 })
+    const resultado = georeferencePlancha({
+      items: hoja.items,
+      gray: hoja.gray,
+      width: hoja.width,
+      height: hoja.height,
+      cerca: [-74.87, 6.6],
+    })
+    expect(resultado.ok).toBe(true)
+    expect(resultado.shift.norte).toBe(1000)
+    expect(resultado.bounds.sur).toBeCloseTo(1200000, -2)
+    expect(resultado.bounds.norte).toBeCloseTo(1240000, -2)
+  })
+
+  test("y sin contradicción no se toca nada", () => {
+    const hoja = dibujarPlancha()
+    const resultado = georeferencePlancha({
+      items: hoja.items,
+      gray: hoja.gray,
+      width: hoja.width,
+      height: hoja.height,
+      cerca: [-74.87, 6.6],
+    })
+    expect(resultado.shift).toEqual({ este: 0, norte: 0 })
+  })
+
   test("una hoja sin capa de texto se rechaza en vez de colocarse a ojo", () => {
     const hoja = dibujarPlancha()
     const resultado = georeferencePlancha({
@@ -444,5 +489,66 @@ describe("gridLabelsFrom", () => {
       { text: "885.", x: 50 },
     ])
     expect(rotulos).toEqual([{ value: 880000, x: 10, y: 20 }])
+  })
+})
+
+describe("declaredShift", () => {
+  // El ajuste de mentira: un metro por unidad, para que las cuentas se lean.
+  const ejes = { aE: (x) => x, aN: (y) => y }
+
+  test("sin rótulos completos no corrige nada", () => {
+    expect(declaredShift([{ text: "880.", x: 10, y: 20 }], ejes)).toEqual({ este: 0, norte: 0 })
+  })
+
+  test("con uno solo tampoco: el sesgo del ancla no se cancela", () => {
+    expect(declaredShift([{ text: "1.200.000 m.N", x: 0, y: 1199000 }], ejes).norte).toBe(0)
+  })
+
+  test("una diferencia de un kilómetro se corrige", () => {
+    const shift = declaredShift(
+      [
+        { text: "1.200.000 m.N", x: 0, y: 1199100 },
+        { text: "1.240.000 m.N", x: 0, y: 1238900 },
+      ],
+      ejes,
+    )
+    expect(shift.norte).toBe(1000)
+  })
+
+  test("el corrimiento del ancla no se confunde con una errata", () => {
+    // Trescientos metros arriba y trescientos abajo: es donde caen los rótulos
+    // de esquina de las hojas que están bien.
+    const shift = declaredShift(
+      [
+        { text: "1.200.000 m.N", x: 0, y: 1199650 },
+        { text: "1.240.000 m.N", x: 0, y: 1240350 },
+      ],
+      ejes,
+    )
+    expect(shift.norte).toBe(0)
+  })
+
+  test("una diferencia grande que no cae en un kilómetro redondo no se toca", () => {
+    // Eso ya no es una errata de etiquetado: es que algo más está mal, y
+    // corregirlo a ciegas sería peor que dejarlo y decirlo.
+    const shift = declaredShift(
+      [
+        { text: "1.200.000 m.N", x: 0, y: 1197500 },
+        { text: "1.240.000 m.N", x: 0, y: 1237500 },
+      ],
+      ejes,
+    )
+    expect(shift.norte).toBe(0)
+  })
+
+  test("los estes se corrigen por su horizontal, no por su altura", () => {
+    const shift = declaredShift(
+      [
+        { text: "880.000 m.E", x: 879100, y: 999 },
+        { text: "940.000 m.E", x: 938900, y: 5 },
+      ],
+      ejes,
+    )
+    expect(shift).toEqual({ este: 1000, norte: 0 })
   })
 })

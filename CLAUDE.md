@@ -392,7 +392,27 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     que el filo del recuadro de la leyenda no cumple, y en esa hoja caía a cuatro
     píxeles de donde tocaba la línea siguiente—.
 
-24. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
+24. **Una plancha puede contradecirse a sí misma, y la mayoría no tiene razón.**
+    La 193 (Yopal) rotula sus nortes abreviados `1.079.`, `1.084.`, `1.089.` … y
+    en las esquinas escribe `1.080.000 m.N` y `1.120.000 m.N` **sobre esas mismas
+    dos líneas**: se contradicen en mil metros exactos. Como los abreviados son
+    nueve y los completos dos, el ajuste hacía caso a los nueve y la hoja quedaba
+    un kilómetro al sur — lo bastante para que la geología no cuadrara con el
+    terreno, que es como se notó.
+
+    **Mandan los de esquina**, y lo dice la propia hoja por un tercer camino: su
+    retícula geográfica —independiente de la cuadrícula plana— coincide con ellos
+    dentro de 30 m y discrepa de los abreviados en 1.000. Un rótulo completo es
+    una coordenada dicha entera; uno abreviado omite tres cifras y lo genera una
+    expresión de etiquetado que puede ir corrida. Ver `declaredShift`.
+
+    Nota de método: aquí la retícula geográfica sí sirvió de árbitro, al revés que
+    en la trampa nº 19. No hay contradicción entre las dos: un salto de datum son
+    trescientos metros y una errata de etiquetado es un kilómetro redondo, así que
+    se distinguen. Pero el que corrige es el rótulo de esquina, que está en el
+    mismo sistema y no arrastra ninguna duda de datum.
+
+25. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
     cosas.** `mapbox-gl-draw` cancela el `touchend`, y sin él el navegador no
     genera el clic de compatibilidad. Todo lo que responda a tocar el mapa se
     engancha por partida doble: `map.on("click", …)` y `onMapTap(map, …)` de

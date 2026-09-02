@@ -20,6 +20,20 @@ import { OpacitySlider } from "./OpacitySlider"
  * error es un mapa en el que no se puede confiar ni desconfiar.
  */
 
+/**
+ * Cuánto se corrigió la hoja, dicho para leerlo, o `null` si no hizo falta.
+ *
+ * Casi siempre es `null`. Cuando no lo es, la hoja tenía sus rótulos abreviados
+ * corridos respecto a los de las esquinas — ver `declaredShift` — y el aviso es
+ * lo único que distingue un mapa colocado a conciencia de uno colocado a ojo.
+ */
+const corrida = (shift) => {
+  const partes = []
+  if (shift?.este) partes.push(`${Math.abs(shift.este) / 1000} km al ${shift.este > 0 ? "oeste" : "este"}`)
+  if (shift?.norte) partes.push(`${Math.abs(shift.norte) / 1000} km al ${shift.norte > 0 ? "sur" : "norte"}`)
+  return partes.length ? partes.join(" y ") : null
+}
+
 /** De píxeles de residuo a metros sobre el terreno, para poder contarlo. */
 const metrosDeResiduo = (residual, size, canvas) => {
   const anchoPx = canvas?.width
@@ -111,6 +125,17 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
                   : ""
               }`}
             />
+            {corrida(plancha.shift) && (
+              // **Esto no se calla.** Significa que la hoja se contradice a sí
+              // misma —sus rótulos abreviados dicen una cosa y los de las
+              // esquinas otra— y que el visor ha hecho caso a los de esquina. Es
+              // una decisión con consecuencias sobre dónde queda la geología, y
+              // quien la vaya a usar tiene que poder ir a mirar el papel.
+              <p className="pt-1 text-amber-700">
+                Los rótulos abreviados de esta hoja van {corrida(plancha.shift)} corridos
+                respecto a los de las esquinas. Se colocó con los de las esquinas.
+              </p>
+            )}
             {!plancha.frameComplete && (
               // Sin los cuatro bordes del marco el recorte se hizo por la última
               // línea de la cuadrícula, así que a la hoja le falta un borde. Se
