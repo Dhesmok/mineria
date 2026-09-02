@@ -96,6 +96,11 @@ export const usePlanchaGL = (mapRef, mapInstance) => {
           setPlancha({
             titulo,
             error: MENSAJES[resultado.reason] ?? "No se pudo georreferenciar esta plancha.",
+            // El detalle se enseña tal cual. Las hojas son casi mil y no se
+            // parecen entre sí, así que la siguiente que falle lo hará por algo
+            // que aquí no se ha visto: sin los números, informar del fallo no
+            // sirve para arreglarlo.
+            detalle: resultado.detail,
             url,
           })
           return

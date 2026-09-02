@@ -146,12 +146,20 @@ impresos.
 La ficha de «Estado cartográfico» trae en `ECG_URL_PL` el enlace a la hoja
 1:100.000 más actualizada —más que el servicio de teselas, que va por detrás—, y
 hasta ahora eso solo se podía abrir en otra pestaña. **Ese PDF no viene
-georreferenciado**: es una impresión a PDF, sin `/Measure` ni `/VP` ni `/LGIDict`.
-Pero lleva dibujada su cuadrícula plana y rotulada en los márgenes, que es un
-juego de puntos de control gratis: se leen los rótulos de la capa de texto, se
-buscan sus líneas en la imagen, se ajusta una recta y se recorta el marco. Sobre
-la plancha 132 el ajuste queda en ±12 m. Todo eso está en `utils/planchaGeo.js`,
-con las dos trampas que costó (la 19 y la 20 de más abajo).
+georreferenciado**: ni la 132, que es una impresión a PDF de 1975, ni la 21, que
+salió de ArcMap en 2013 y sí podría haberlo traído. Ninguna lleva `/Measure`, ni
+`/VP`, ni `/LGIDict`.
+
+Pero las dos llevan dibujada su cuadrícula plana y rotulada en los márgenes, que
+es un juego de puntos de control gratis: se leen los rótulos de la capa de texto,
+se buscan sus líneas en la imagen, se ajusta una recta y se recorta el marco. Las
+esquinas caen a menos de 30 m de su valor redondo en las dos.
+
+**Y son casi mil hojas que no se parecen entre sí**, levantadas a lo largo de
+cincuenta años con el programa que hubiera en cada época. Nada de lo que hay en
+`utils/planchaGeo.js` puede depender de cómo es una: cada regla se comprueba
+contra el papel o se cruza con otra. Las cuatro trampas que costó —de la 19 a la
+22— son todas casos donde una hoja hacía lo contrario que la anterior.
 
 **Y el gestor documental del SGC publica sus enlaces en `http` pelado.** La
 primera versión de `/api/plancha` exigía `https` —que parecía lo obvio— y no
@@ -340,7 +348,27 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     corrida sin que nada falle. Hay que buscar las **líneas** en la imagen y
     usar los rótulos únicamente para ponerles nombre.
 
-21. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
+21. **En el margen de una plancha hay números en fila que no son coordenadas.**
+    El índice de localización —`1 2 3 … 12` arriba, `A B C … H` al costado, para
+    decir «la mina está en el D-7»— son doce números en progresión perfecta
+    separados **exactamente el paso de la cuadrícula**. Ninguna regla que mire
+    una sola serie los distingue de unos estes, y en la plancha 21 (Fonseca)
+    ganaban por ser más. Lo mismo la escala gráfica del corte geológico
+    (`1.000 2.000 3.000` metros). Se caen solos al **comparar las dos
+    direcciones**: los estes y los nortes de verdad miden el mismo mapa, así que
+    su escala en píxeles por metro coincide, y la de los impostores no se acerca.
+    Ver `pairSeries` en `utils/planchaGeo.js`.
+
+22. **El marco del mapa no siempre cae sobre una línea de la cuadrícula.** En la
+    132 sí —está recortada en un valor redondo— y en la 21 queda a diez píxeles
+    de la última línea. La búsqueda del marco saltaba un 15 % del cuadro antes de
+    empezar a mirar, así que en la 21 pasaba de largo y se quedaba con la línea
+    siguiente hacia afuera: el borde de la franja del índice. El recorte salía con
+    los números del índice metidos dentro del mapa y la hoja estirada un kilómetro
+    de más. Se salta lo mínimo, y se mira con holgura alrededor de la posición de
+    partida por si el centroide trae decimales.
+
+23. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
     cosas.** `mapbox-gl-draw` cancela el `touchend`, y sin él el navegador no
     genera el clic de compatibilidad. Todo lo que responda a tocar el mapa se
     engancha por partida doble: `map.on("click", …)` y `onMapTap(map, …)` de

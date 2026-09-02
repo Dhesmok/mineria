@@ -10,12 +10,18 @@ import { CRS_LIST, toGeographic } from "./crs"
  * publica el SGC —mejor que el servicio de teselas, que va por detrás— y hasta
  * ahora lo único que se podía hacer con él era abrirlo en otra pestaña.
  *
- * **Ese PDF no está georreferenciado.** Se comprobó sobre la plancha 132
- * (Yolombó): no lleva ni `/Measure`, ni `/VP`, ni `/LGIDict` —los tres
- * diccionarios con los que un PDF puede declarar dónde cae en el mundo—, y sus
- * metadatos delatan por qué: `PDFCreator 0.9.8` sobre `Ghostscript 8.64`, o sea
- * una impresión a PDF. Un controlador de impresora no sabe nada de coordenadas y
- * tira lo que hubiera.
+ * **Ese PDF no está georreferenciado.** Se comprobó sobre dos hojas muy
+ * distintas: ninguna lleva `/Measure`, ni `/VP`, ni `/LGIDict` —los tres
+ * diccionarios con los que un PDF puede declarar dónde cae en el mundo—. La 132
+ * (Yolombó) delata por qué en sus metadatos: `PDFCreator 0.9.8` sobre
+ * `Ghostscript 8.64`, o sea una impresión a PDF, y un controlador de impresora no
+ * sabe nada de coordenadas. La 21 (Fonseca) salió de `ESRI ArcMap 9.3.1`, que sí
+ * sabría escribirlas, y tampoco las trae.
+ *
+ * **Y las hojas no se parecen entre sí.** Son casi mil, levantadas a lo largo de
+ * cincuenta años y exportadas con el programa que hubiera en cada época. Nada de
+ * lo que hay aquí puede depender de cómo es una: cada regla se comprueba contra
+ * el papel o se cruza con otra.
  *
  * ## Pero el papel sí lo dice
  *
@@ -31,6 +37,13 @@ import { CRS_LIST, toGeographic } from "./crs"
  * 2. **Encuentra las líneas** de la cuadrícula en la imagen del mapa.
  * 3. **Empareja cada línea con su rótulo** y ajusta una recta por mínimos
  *    cuadrados.
+ *
+ * Y una cuarta que es la que hace que funcione en hojas distintas: **se comparan
+ * las dos direcciones antes de creerse ninguna**. Un margen de plancha está lleno
+ * de números en fila que no son coordenadas —el índice de localización `1 2 3 …
+ * 12`, la escala gráfica del corte— y por separado son indistinguibles de unos
+ * estes. Juntos no: las dos series de verdad miden el mismo mapa, así que su
+ * escala coincide, y las falsas no se acercan. Ver `pairSeries`.
  *
  * Por qué las tres y no solo la primera: **un rótulo no está donde está su
  * línea**. Va centrado debajo de ella, así que su posición de anclaje queda
@@ -145,9 +158,22 @@ const MINIMO_ROTULOS = 5
  * forma una progresión aritmética de cinco términos alineados, y por eso el
  * filtro es este y no una lista de sitios donde mirar.
  *
+ * **Devuelve todas las candidatas, no la más grande.** Quedarse con la mayor
+ * parecía razonable y es justo lo que rompió la plancha 21 (Fonseca): el índice
+ * de localización que va por el borde —`1 2 3 … 12`, para decir «la mina está en
+ * el D-7»— son doce números en progresión perfecta, separados exactamente el
+ * paso de la cuadrícula, y ganaban a los estes de verdad. Ninguna regla que mire
+ * una sola serie los distingue: son indistinguibles **hasta que se comparan las
+ * dos direcciones**, y ahí se cae solo, porque su escala aparente no cuadra con
+ * la de los nortes. De eso se encarga `pairSeries`.
+ *
+ * Cada candidata trae su escala —píxeles por metro— ya ajustada por mínimos
+ * cuadrados sobre los rótulos que acuerdan.
+ *
  * @param {number} sentido `+1` si el valor crece con la coordenada (los estes,
  *   hacia la derecha), `-1` si decrece (los nortes, porque la `y` del lienzo va
  *   hacia abajo)
+ * @returns {Array<{labels:Array, scale:number}>} de más a menos rótulos
  */
 export const gridSeries = (labels, { fijo, movil, sentido, tolerancia }) => {
   const grupos = []
@@ -157,13 +183,57 @@ export const gridSeries = (labels, { fijo, movil, sentido, tolerancia }) => {
     else grupos.push([rotulo])
   }
 
+  return grupos
+    .map((grupo) => serieDe(grupo, { movil, sentido }))
+    .filter(Boolean)
+    .sort((a, b) => b.labels.length - a.labels.length)
+}
+
+/**
+ * Empareja la serie de estes con la de nortes.
+ *
+ * **Este es el filtro que separa una cuadrícula de un número cualquiera puesto
+ * en fila.** Las dos series miden el mismo mapa, así que su escala —píxeles por
+ * metro— tiene que ser la misma; y las cosas que se le parecen no la cumplen ni
+ * de lejos:
+ *
+ * - El índice de localización del borde (`1 2 3 … 12`) sale a un paso de
+ *   cuadrícula por «kilómetro», o sea cinco veces la escala real.
+ * - La escala gráfica del corte geológico (`1.000 2.000 3.000` metros) sale a
+ *   tres órdenes de magnitud de distancia.
+ *
+ * Ninguna regla sobre una serie aislada los descarta sin descartar también hojas
+ * legítimas. Comparadas, se van solas.
+ *
+ * Gana la pareja con más rótulos entre las dos. El margen es del 2 % y no del
+ * medio por ciento que se exige al final: aquí las posiciones son anclas de
+ * texto, que llevan el corrimiento del rótulo; la comprobación fina se hace
+ * después, ya sobre las líneas.
+ */
+export const pairSeries = (estes, nortes, margen = 0.02) => {
   let mejor = null
-  for (const grupo of grupos) {
-    const serie = serieDe(grupo, { movil, sentido })
-    if (serie && (!mejor || serie.length > mejor.length)) mejor = serie
+  for (const e of estes) {
+    for (const n of nortes) {
+      const desvio = Math.abs(Math.abs(e.scale) - Math.abs(n.scale)) / Math.abs(e.scale)
+      if (!(desvio < margen)) continue
+      const rotulos = e.labels.length + n.labels.length
+      if (!mejor || rotulos > mejor.rotulos) mejor = { estes: e, nortes: n, rotulos }
+    }
   }
   return mejor
 }
+
+/**
+ * Hasta dónde llegan las coordenadas planas colombianas.
+ *
+ * Los cinco husos de MAGNA-SIRGAS ponen su origen en 1.000.000 / 1.000.000 y el
+ * país cabe holgadamente entre los 700.000 y los 1.300.000 m al este; el CTM-12
+ * arranca en 5.000.000 / 2.000.000. Fuera de esta horquilla no hay coordenada
+ * posible, y sirve para tirar de entrada las series de números pequeños —índices
+ * de localización, números de plancha vecina— antes de comparar nada.
+ */
+const COORDENADA_MINIMA = 200000
+const COORDENADA_MAXIMA = 6000000
 
 /** El subconjunto de un grupo de rótulos que forma una progresión, o `null`. */
 const serieDe = (grupo, { movil, sentido }) => {
@@ -171,7 +241,10 @@ const serieDe = (grupo, { movil, sentido }) => {
   // repite el valor del corto de al lado— pondría dos puntos en la misma
   // vertical. Se queda uno.
   const porValor = new Map()
-  for (const rotulo of grupo) if (!porValor.has(rotulo.value)) porValor.set(rotulo.value, rotulo)
+  for (const rotulo of grupo) {
+    if (rotulo.value < COORDENADA_MINIMA || rotulo.value > COORDENADA_MAXIMA) continue
+    if (!porValor.has(rotulo.value)) porValor.set(rotulo.value, rotulo)
+  }
   const unicos = [...porValor.values()].sort((a, b) => a.value - b.value)
   if (unicos.length < MINIMO_ROTULOS) return null
 
@@ -206,7 +279,14 @@ const serieDe = (grupo, { movil, sentido }) => {
   const minimo = Math.min(...saltos)
   if (!(minimo > 0)) return null
   const regulares = saltos.every((s) => Math.abs(s / minimo - Math.round(s / minimo)) < 0.01)
-  return regulares ? dentro : null
+  if (!regulares) return null
+
+  // La escala se recalcula por mínimos cuadrados sobre los que acuerdan, y no se
+  // hereda del par que sembró la búsqueda: ese par puede ser dos rótulos de
+  // formatos distintos —el largo de la esquina y uno abreviado— y traer el
+  // corrimiento de los dos anclas metido dentro.
+  const ajuste = minimosCuadrados(dentro.map((r) => ({ value: r.value, pos: r[movil] })))
+  return ajuste ? { labels: dentro, scale: ajuste.scale } : null
 }
 
 /**
@@ -412,34 +492,49 @@ export const detectFrame = (
   const buscar = (desde, hacia, vertical) => {
     const paso = vertical ? pasoX : pasoY
     const limite = (vertical ? width : height) - 1
-    const trazo = (i) =>
+    const solo = (i) =>
       i >= 0 && i <= limite &&
       esTrazo(gray, { width, height, vertical, i, dentroX, dentroY, oscuro, cobertura })
+
+    /** El centro del trazo que pasa por `i`, midiéndolo a los dos lados. */
+    const centro = (i) => {
+      let uno = i
+      while (solo(uno - 1)) uno -= 1
+      let otro = i
+      while (solo(otro + 1)) otro += 1
+      return (uno + otro) / 2
+    }
 
     // **Primero, si la última línea de la cuadrícula ya es el marco.** Pasa
     // siempre que la hoja está recortada por un valor redondo de la cuadrícula,
     // que es lo normal: entonces el borde del mapa *es* una línea de la
     // cuadrícula y buscar más afuera encuentra el borde de la hoja. Es lo que
     // hacía que la plancha 132 saliera treinta metros corrida hacia el oeste.
-    if (trazo(desde)) return desde
+    //
+    // Se mira con **dos píxeles de holgura** porque la posición que llega es un
+    // centroide con decimales y el trazo puede caer a un lado del redondeo: en la
+    // plancha 21 (Fonseca) el marco de arriba está en la fila 87, la cuadrícula
+    // lo situaba en 88,5 y mirar solo 88 no lo encontraba. Fallando esa
+    // comprobación, la búsqueda seguía hacia afuera y se quedaba con el borde de
+    // la franja del índice de localización: el recorte salía con los números
+    // `1 2 3 … 12` metidos dentro del mapa y la hoja estirada un kilómetro de
+    // más por el norte.
+    for (let d = 0; d <= 2; d += 1) {
+      for (const i of [Math.round(desde) - d, Math.round(desde) + d]) {
+        if (solo(i)) return centro(i)
+      }
+    }
 
-    // Y si no, hacia afuera. Se arranca un poco más allá para no volver a
-    // encontrar la línea de la que se parte.
-    const inicio = Math.round(desde + hacia * paso * 0.15)
+    // Y si no, hacia afuera, parando en el primero. Se arranca tres píxeles más
+    // allá de lo ya mirado, lo justo para no volver sobre lo mismo.
+    const inicio = Math.round(desde + hacia * 3)
     const fin = Math.round(desde + hacia * paso * alcance)
-    const solo = (i) =>
-      i >= 0 && i <= limite &&
-      esTrazo(gray, { width, height, vertical, i, dentroX, dentroY, oscuro, cobertura, ancho: 0 })
-
     for (let i = inicio; hacia > 0 ? i <= fin : i >= fin; i += hacia) {
       if (i < 0 || i > limite) break
-      if (!solo(i)) continue
-      // El marco es un trazo grueso: dos o tres píxeles. Se le mide el ancho y
-      // se devuelve su centro, que es donde está la coordenada; quedarse con el
+      // El marco es un trazo grueso: dos o tres píxeles. Se le mide el ancho y se
+      // devuelve su centro, que es donde está la coordenada; quedarse con el
       // primer píxel lo correría medio trazo hacia afuera.
-      let final = i
-      while (solo(final + hacia)) final += hacia
-      return (i + final) / 2
+      if (solo(i)) return centro(i)
     }
     return null
   }
@@ -465,32 +560,27 @@ const mediaSeparacion = (posiciones) => {
 }
 
 /**
- * Si por ahí pasa un trazo que cruza el mapa de lado a lado.
+ * Si esa fila o columna exacta es un trazo que cruza el mapa de lado a lado.
  *
- * **Se mira un píxel a cada lado**, y no solo el que se pide. La posición que
- * llega puede venir de un centroide y traer decimales: el marco izquierdo de la
- * plancha 132 está en la columna 47 y el centroide daba 47,5, que redondeado es
- * 48 — una columna en blanco—. Con esa sola comprobación el marco no se
- * reconocía, la búsqueda seguía hacia afuera y se quedaba con el borde de la
- * hoja, treinta metros más al oeste.
+ * Quien la llama decide cuánto mirar alrededor: para reconocer un marco cerca de
+ * una posición con decimales hace falta holgura, pero para **medir** el grosor
+ * del trazo y quedarse con su centro hay que preguntar píxel a píxel.
  */
-const esTrazo = (gray, { width, height, vertical, i, dentroX, dentroY, oscuro, cobertura, ancho = 1 }) => {
+const esTrazo = (gray, { width, height, vertical, i, dentroX, dentroY, oscuro, cobertura }) => {
   const desdeJ = Math.max(0, Math.round(vertical ? dentroY[0] : dentroX[0]))
   const hastaJ = Math.min((vertical ? height : width) - 1, Math.round(vertical ? dentroY[1] : dentroX[1]))
   const largo = hastaJ - desdeJ
   if (largo < 10) return false
 
-  const limite = (vertical ? width : height) - 1
-  for (let k = Math.round(i) - ancho; k <= Math.round(i) + ancho; k += 1) {
-    if (k < 0 || k > limite) continue
-    let cuenta = 0
-    for (let j = desdeJ; j <= hastaJ; j += 1) {
-      const valor = vertical ? gray[j * width + k] : gray[k * width + j]
-      if (valor < oscuro) cuenta += 1
-    }
-    if (cuenta / largo > cobertura) return true
+  const k = Math.round(i)
+  if (k < 0 || k > (vertical ? width : height) - 1) return false
+
+  let cuenta = 0
+  for (let j = desdeJ; j <= hastaJ; j += 1) {
+    const valor = vertical ? gray[j * width + k] : gray[k * width + j]
+    if (valor < oscuro) cuenta += 1
   }
-  return false
+  return cuenta / largo > cobertura
 }
 
 /**
@@ -553,23 +643,51 @@ const DESVIO_MAXIMO = 0.005
  *   página en píxeles del lienzo
  * @param {Uint8Array} entrada.gray luminancia de la página, `width*height`
  * @param {[number,number]} entrada.cerca dónde tocó el usuario, en `[lon, lat]`
- * @returns {{ok:true, ...}|{ok:false, reason:string}}
+ *
+ * **Cuando falla dice por qué y con qué números.** No es adorno: las hojas son
+ * casi mil y no se parecen entre sí —la 132 la exportó un controlador de
+ * impresora en 1975 y la 21 salió de ArcMap en 2013—, así que la siguiente que no
+ * se coloque habrá fallado por algo que aquí no se ha visto. Con «leí 57 rótulos,
+ * armé 2 series de estes y 0 de nortes» se sabe dónde mirar sin tener el archivo
+ * delante; con «no se pudo», no.
+ *
+ * @returns {{ok:true, ...}|{ok:false, reason:string, detail:string}}
  */
 export const georeferencePlancha = ({ items, gray, width, height, cerca }) => {
   const rotulos = gridLabelsFrom(items)
   if (rotulos.length < MINIMO_ROTULOS * 2) {
-    return { ok: false, reason: "sin-rotulos" }
+    return {
+      ok: false,
+      reason: "sin-rotulos",
+      detail: `${items?.length ?? 0} textos en la página, ${rotulos.length} con forma de coordenada`,
+    }
   }
 
   // La tolerancia con la que dos rótulos se consideran «de la misma fila»: un
   // uno por ciento de la página. Fija en píxeles no valdría, porque la página se
   // dibuja a la resolución que haga falta.
   const tolerancia = Math.max(3, height * 0.01)
-  const filaEstes = gridSeries(rotulos, { fijo: "y", movil: "x", sentido: +1, tolerancia })
+  const candidatasEstes = gridSeries(rotulos, { fijo: "y", movil: "x", sentido: +1, tolerancia })
   // Los nortes crecen hacia arriba y la `y` del lienzo hacia abajo: al ordenar
   // por valor, la posición tiene que ir bajando.
-  const columnaNortes = gridSeries(rotulos, { fijo: "x", movil: "y", sentido: -1, tolerancia })
-  if (!filaEstes || !columnaNortes) return { ok: false, reason: "sin-cuadricula" }
+  const candidatasNortes = gridSeries(rotulos, { fijo: "x", movil: "y", sentido: -1, tolerancia })
+
+  // Y de todas las series que parecen una cuadrícula, la pareja cuyas dos
+  // escalas coinciden. Es lo que descarta el índice de localización del borde y
+  // la escala gráfica del corte, que por separado son indistinguibles de unos
+  // estes — ver `pairSeries`.
+  const pareja = pairSeries(candidatasEstes, candidatasNortes)
+  if (!pareja) {
+    return {
+      ok: false,
+      reason: "sin-cuadricula",
+      detail:
+        `${rotulos.length} rótulos, ${candidatasEstes.length} series de estes y ` +
+        `${candidatasNortes.length} de nortes; ninguna pareja con la misma escala`,
+    }
+  }
+  const filaEstes = pareja.estes.labels
+  const columnaNortes = pareja.nortes.labels
 
   // El mapa está donde se cruzan las dos series. Se busca ahí y no en toda la
   // página: fuera del marco hay recuadros de leyenda que también son rectos.
@@ -613,13 +731,27 @@ export const georeferencePlancha = ({ items, gray, width, height, cerca }) => {
 
   const ejeX = fitGridAxis(lineasX, filaEstes, { movil: "x" })
   const ejeY = fitGridAxis(lineasY, columnaNortes, { movil: "y" })
-  if (!ejeX || !ejeY) return { ok: false, reason: "sin-ajuste" }
+  if (!ejeX || !ejeY) {
+    return {
+      ok: false,
+      reason: "sin-ajuste",
+      detail:
+        `${filaEstes.length} rótulos de este y ${columnaNortes.length} de norte; ` +
+        `${lineasX.length} líneas verticales y ${lineasY.length} horizontales en la imagen`,
+    }
+  }
 
   // Las dos escalas son la misma cantidad —píxeles por metro— medida por
   // caminos distintos. Que no coincidan es la señal de que uno de los dos
   // emparejó mal, y es la única forma de enterarse sin mirar el resultado.
   const desvio = Math.abs(Math.abs(ejeX.scale) - Math.abs(ejeY.scale)) / Math.abs(ejeX.scale)
-  if (!(desvio < DESVIO_MAXIMO)) return { ok: false, reason: "ejes-discordantes", desvio }
+  if (!(desvio < DESVIO_MAXIMO)) {
+    return {
+      ok: false,
+      reason: "ejes-discordantes",
+      detail: `los dos ejes difieren un ${(desvio * 100).toFixed(2)} %`,
+    }
+  }
 
   // Para buscar el marco valen **todas** las líneas de la cuadrícula, también
   // las que no llevan rótulo: son las de más afuera, justo las que dicen por
@@ -645,7 +777,13 @@ export const georeferencePlancha = ({ items, gray, width, height, cerca }) => {
   const sur = aN(marco.bottom)
 
   const origen = chooseOrigin([(oeste + este) / 2, (norte + sur) / 2], cerca)
-  if (!origen) return { ok: false, reason: "origen-desconocido" }
+  if (!origen) {
+    return {
+      ok: false,
+      reason: "origen-desconocido",
+      detail: `la cuadrícula da E ${Math.round(oeste)} N ${Math.round(sur)}, que no cae cerca en ningún huso`,
+    }
+  }
 
   const aLonLat = (e, n) => toGeographic([e, n], origen.crs.id)
   return {
