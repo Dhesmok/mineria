@@ -434,7 +434,28 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     fueron de CSS y están en el comentario de `h-full w-full` de
     `MapComponentGL`.
 
-26. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
+26. **Una corrección que se mide a sí misma tiene que poder rendirse.** El panel
+    flotante se devuelve a la pantalla si se sale: mide dónde está, calcula
+    cuánto moverlo y lo mueve. Si por lo que sea el panel **no se mueve**, vuelve
+    a medir lo mismo, vuelve a pedir lo mismo, y React lo corta con «Maximum
+    update depth exceeded» — con el visor entero sin abrir. Pasó en el teléfono y
+    no en el escritorio, y **no se consiguió reproducir en qué situación deja de
+    converger**.
+
+    Lo que lo arregla no es el diagnóstico sino el tope: cinco correcciones
+    seguidas y se deja el panel donde esté. Corregir dos veces basta para
+    cualquier caso legítimo, así que el tope no le quita nada a nadie, y lo peor
+    que puede pasar es que un panel quede unos píxeles fuera de sitio en vez de
+    tumbar la aplicación. Además `setPos` devolvía **siempre** un objeto nuevo,
+    así que React no podía ahorrarse ni un render aunque el valor no cambiara.
+
+    Para localizarlo: el error minimizado traía `chunks/682.<hash>.js:1:82297`, y
+    **compilar el mismo commit aquí reproduce el bundle byte a byte**, así que
+    ese desplazamiento se lee directamente en `.next/static/chunks/`. Es la forma
+    de convertir una traza minimizada en una línea concreta sin tener el
+    dispositivo delante.
+
+27. **En el teléfono el clic del ratón no llega, y hay que enganchar las dos
     cosas.** `mapbox-gl-draw` cancela el `touchend`, y sin él el navegador no
     genera el clic de compatibilidad. Todo lo que responda a tocar el mapa se
     engancha por partida doble: `map.on("click", …)` y `onMapTap(map, …)` de

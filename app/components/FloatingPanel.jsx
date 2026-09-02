@@ -37,6 +37,80 @@ import { GripHorizontal, X } from "lucide-react"
 /** Cuánto respira el panel contra el borde de la pantalla. */
 const MARGEN = 8
 
+/**
+ * Por debajo de cuánto no vale la pena mover el panel.
+ *
+ * **Un píxel entero, y esto es lo que tumbaba el visor en el teléfono.**
+ *
+ * `getBoundingClientRect()` devuelve decimales, pero la pantalla de un móvil
+ * tiene densidad fraccionaria —2,75 píxeles físicos por píxel CSS en muchos
+ * Android— y el navegador redondea la posición usada a píxeles **físicos**. Así
+ * que después de corregir, el panel no queda exactamente donde se le pidió sino
+ * a una fracción de píxel: la corrección siguiente vuelve a salir distinta de
+ * cero, y la siguiente, y la siguiente.
+ *
+ * Con `setPos` devolviendo siempre un objeto nuevo, React no se ahorraba ningún
+ * render, y el `useLayoutEffect` que depende de `pos` volvía a medir y a
+ * corregir. React lo cortaba con «Maximum update depth exceeded» y el visor no
+ * abría: es el error que se veía en el celular y no en el escritorio, donde la
+ * densidad es entera y el resto sale cero.
+ *
+ * Un píxel CSS es el tope de ese resto —un píxel físico nunca es mayor que uno
+ * CSS mientras la densidad sea de uno o más— y es además una distancia que nadie
+ * ve. Por debajo de eso, el panel ya está donde tiene que estar.
+ */
+const MINIMO_A_MOVER = 1
+
+/**
+ * Cuántas veces seguidas se acepta corregir antes de dejarlo estar.
+ *
+ * **Este es el tope que hace imposible el bucle**, y está aquí porque sé dónde
+ * reventaba pero no exactamente por qué.
+ *
+ * El visor no abría en el teléfono, con «Maximum update depth exceeded». La
+ * traza minimizada señalaba, sin margen de duda, al `setPos` de aquí abajo: la
+ * corrección se pedía, no surtía efecto, y se volvía a pedir para siempre. Lo
+ * que no conseguí es reproducir en qué situación deja de converger — ni con
+ * pantallas más pequeñas que el panel, ni con densidades de píxel fraccionarias,
+ * ni naciendo fuera de la pantalla.
+ *
+ * Corregir dos veces basta y sobra: la primera mete el panel por el lado que se
+ * salía y la segunda ajusta el borde contrario cuando no cabe entero. Con cinco
+ * hay holgura de sobra para cualquier caso legítimo, y ninguna para un bucle.
+ *
+ * No es un parche sobre un diagnóstico a medias: es que **una corrección de
+ * pantalla no debe poder colgar la aplicación jamás**, sepamos o no por qué
+ * deja de converger. Lo peor que puede pasar con este tope es que un panel
+ * quede unos píxeles fuera de sitio.
+ */
+const MAXIMO_CORRECCIONES = 5
+
+/**
+ * Cuánto hay que mover el panel para que quepa en la pantalla.
+ *
+ * Se mide, no se calcula: el panel cambia de alto al desplegarse la paleta o al
+ * guardarse en un botón, y cualquier número escrito a mano se queda viejo.
+ *
+ * El borde superior se corrige el último, a propósito: si el panel no cabe
+ * entero, lo que tiene que quedar dentro es su barra, que es por donde se agarra
+ * y se cierra.
+ *
+ * Está fuera del componente para poder probarle lo único que importa de verdad:
+ * que **converja**. Ver `FloatingPanel.test.jsx`.
+ */
+export const correccionAPantalla = (caja, ventana, margen = MARGEN) => {
+  const mover = { x: 0, y: 0 }
+  if (caja.right > ventana.width - margen) mover.x = ventana.width - margen - caja.right
+  if (caja.bottom > ventana.height - margen) mover.y = ventana.height - margen - caja.bottom
+  if (caja.left + mover.x < margen) mover.x = margen - caja.left
+  if (caja.top + mover.y < margen) mover.y = margen - caja.top
+
+  // Lo que no llega a un píxel no se mueve. Ver `MINIMO_A_MOVER`.
+  if (Math.abs(mover.x) < MINIMO_A_MOVER) mover.x = 0
+  if (Math.abs(mover.y) < MINIMO_A_MOVER) mover.y = 0
+  return mover
+}
+
 export const FloatingPanel = ({
   title,
   icon: Icon,
@@ -107,6 +181,9 @@ export const FloatingPanel = ({
    * entero, lo que tiene que quedar dentro es su barra, que es por donde se
    * agarra y se cierra.
    */
+  /** Cuántas veces se ha corregido seguidas sin llegar a estar quieto. */
+  const correcciones = useRef(0)
+
   const devolverAPantalla = useCallback(() => {
     const caja = nodoRef.current?.getBoundingClientRect()
     if (!caja) return
@@ -128,23 +205,45 @@ export const FloatingPanel = ({
      */
     if (caja.width === 0 && caja.height === 0) return
 
-    let mover = { x: 0, y: 0 }
-    if (caja.right > window.innerWidth - MARGEN) mover.x = window.innerWidth - MARGEN - caja.right
-    if (caja.bottom > window.innerHeight - MARGEN) mover.y = window.innerHeight - MARGEN - caja.bottom
-    if (caja.left + mover.x < MARGEN) mover.x = MARGEN - caja.left
-    if (caja.top + mover.y < MARGEN) mover.y = MARGEN - caja.top
+    const mover = correccionAPantalla(caja, {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    })
 
-    if (!mover.x && !mover.y) return
-    setPos((actual) =>
-      actual ? { top: actual.top + mover.y, right: actual.right - mover.x } : actual,
-    )
+    if (!mover.x && !mover.y) {
+      // Quieto: se olvida lo corrido hasta ahora, para que el próximo cambio de
+      // tamaño empiece con el cupo entero.
+      correcciones.current = 0
+      return
+    }
+
+    // Y si ya se ha corregido cinco veces sin que el panel se quede quieto, se
+    // deja donde esté. Ver `MAXIMO_CORRECCIONES`.
+    if (correcciones.current >= MAXIMO_CORRECCIONES) return
+    correcciones.current += 1
+
+    setPos((actual) => {
+      if (!actual) return actual
+      const siguiente = { top: actual.top + mover.y, right: actual.right - mover.x }
+      // Y si la corrección no cambia nada, se devuelve el mismo objeto para que
+      // React se ahorre el render. Sin esto, `setPos` devolvía **siempre** un
+      // objeto nuevo, así que una corrección que no movía el panel volvía a
+      // pedirse en cada pintado para siempre.
+      return siguiente.top === actual.top && siguiente.right === actual.right ? actual : siguiente
+    })
   }, [])
 
   useLayoutEffect(devolverAPantalla, [devolverAPantalla, pos, collapsed])
 
   useEffect(() => {
-    window.addEventListener("resize", devolverAPantalla)
-    return () => window.removeEventListener("resize", devolverAPantalla)
+    // Al cambiar la ventana se devuelve el cupo de correcciones: el panel puede
+    // haber quedado fuera por un motivo nuevo y legítimo.
+    const alRedimensionar = () => {
+      correcciones.current = 0
+      devolverAPantalla()
+    }
+    window.addEventListener("resize", alRedimensionar)
+    return () => window.removeEventListener("resize", alRedimensionar)
   }, [devolverAPantalla])
 
   const startDrag = (event) => {
