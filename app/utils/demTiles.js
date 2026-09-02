@@ -314,14 +314,16 @@ export const METERS_PER_DEGREE_LAT = 111320
  *
  * En 3D la vista alcanza el horizonte: pedir teselas para toda la pantalla
  * descargaría cientos de teselas y saturaría el navegador. Este radio acota
- * la cobertura a la escena visible alrededor del punto de interés (máximo 4 a 9 teselas).
+ * la cobertura a una amplia escena panorámica alrededor del punto de interés
+ * (entre 9 y 25 teselas DEM), manteniendo el cálculo instantáneo (~3-6 ms).
  */
 export const radius3DForZoom = (zoom) => {
-  if (zoom <= 10) return 6000
-  if (zoom <= 11) return 4500
-  if (zoom <= 12) return 3500
-  if (zoom <= 13) return 2500
-  return 2000
+  if (zoom <= 10) return 25000 // 25 km de radio (50 km de diámetro)
+  if (zoom <= 11) return 18000 // 18 km de radio (36 km de diámetro)
+  if (zoom <= 12) return 12000 // 12 km de radio (24 km de diámetro)
+  if (zoom <= 13) return 8000  // 8 km de radio (16 km de diámetro)
+  if (zoom <= 14) return 6000  // 6 km de radio (12 km de diámetro)
+  return 5000                  // 5 km de radio (10 km de diámetro a zooms cercanos)
 }
 
 /**

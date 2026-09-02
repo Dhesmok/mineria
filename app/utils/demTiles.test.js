@@ -268,11 +268,12 @@ describe("pasteTile y blankTile", () => {
 
 describe("acotamiento 3D (radius3DForZoom y boundsAroundCenter)", () => {
   it("asigna radios decrecientes según el nivel de zoom para no saturar", () => {
-    expect(radius3DForZoom(10)).toBe(6000)
-    expect(radius3DForZoom(11)).toBe(4500)
-    expect(radius3DForZoom(12)).toBe(3500)
-    expect(radius3DForZoom(13)).toBe(2500)
-    expect(radius3DForZoom(15)).toBe(2000)
+    expect(radius3DForZoom(10)).toBe(25000)
+    expect(radius3DForZoom(11)).toBe(18000)
+    expect(radius3DForZoom(12)).toBe(12000)
+    expect(radius3DForZoom(13)).toBe(8000)
+    expect(radius3DForZoom(14)).toBe(6000)
+    expect(radius3DForZoom(15)).toBe(5000)
   })
 
   it("calcula un recuadro simétrico alrededor del centro", () => {
