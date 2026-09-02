@@ -31,6 +31,15 @@ import { prepararPlancha } from "../../utils/planchaPdf"
 /** Cuánto se espera al SGC antes de rendirse. Estas hojas pesan decenas de megas. */
 const TIMEOUT_MS = 90000
 
+/**
+ * Un fallo del que se conoce el motivo, para poder enseñarlo.
+ *
+ * Se distingue de cualquier otro error porque su mensaje **viene del servidor**
+ * y está escrito para que lo lea una persona; el resto de excepciones son de
+ * programación y no se enseñan.
+ */
+class FalloDeRed extends Error {}
+
 const MENSAJES = {
   "sin-rotulos": "El PDF no trae capa de texto: probablemente es un escaneo, y no se le pueden leer las coordenadas.",
   "sin-cuadricula": "No se encontró la cuadrícula rotulada en los márgenes de la hoja.",
@@ -82,14 +91,44 @@ export const usePlanchaGL = (mapRef, mapInstance) => {
 
       const reloj = setTimeout(() => control.abort(), TIMEOUT_MS)
       try {
-        const respuesta = await fetch(`/api/plancha?url=${encodeURIComponent(url)}`, {
-          signal: control.signal,
-        })
-        if (!respuesta.ok) throw new Error(await respuesta.text())
-        const archivo = await respuesta.arrayBuffer()
+        let archivo
+        try {
+          const respuesta = await fetch(`/api/plancha?url=${encodeURIComponent(url)}`, {
+            signal: control.signal,
+          })
+          // **El mensaje del servidor se enseña, no se tira.** La ruta contesta
+          // cosas útiles —«el SGC respondió 404», «tardó demasiado», «esa
+          // dirección no es un PDF»— y aquí se sustituían todas por un «no se
+          // pudo traer la plancha» que no señalaba a ningún sitio. Fue lo que
+          // dejó sin diagnosticar el fallo de la duración de la función.
+          if (!respuesta.ok) throw new FalloDeRed((await respuesta.text()).trim())
+          archivo = await respuesta.arrayBuffer()
+        } catch (fallo) {
+          if (fallo instanceof FalloDeRed || fallo?.name === "AbortError") throw fallo
+          // Aquí llega la conexión que se corta a mitad de la descarga, que es
+          // lo que pasaba cuando la plataforma mataba la función. Decirlo así
+          // —«se cortó»— es lo que distingue este caso de «el SGC no contesta».
+          throw new FalloDeRed("La descarga se cortó antes de terminar.")
+        }
         if (control.signal.aborted) return
 
-        const resultado = await prepararPlancha(archivo, cerca)
+        let resultado
+        try {
+          resultado = await prepararPlancha(archivo, cerca)
+        } catch (fallo) {
+          if (fallo?.name === "AbortError") throw fallo
+          // Un PDF que llega incompleto revienta al abrirse, no al descargarse.
+          // Sin separar las dos cosas, el aviso culpaba a la red de un archivo
+          // que sí llegó entero pero venía roto, y al revés.
+          console.error("No se pudo leer el PDF de la plancha:", fallo)
+          setPlancha({
+            titulo,
+            url,
+            error: "El PDF llegó incompleto o el navegador no pudo abrirlo.",
+            detalle: `${(archivo.byteLength / 1e6).toFixed(1)} MB recibidos`,
+          })
+          return
+        }
         if (control.signal.aborted) return
 
         if (!resultado.ok) {
@@ -126,6 +165,9 @@ export const usePlanchaGL = (mapRef, mapInstance) => {
             fallo?.name === "AbortError"
               ? "El SGC tardó demasiado en entregar la plancha."
               : "No se pudo traer la plancha del SGC.",
+          // Lo que dijo el servidor, tal cual. Es la diferencia entre saber que
+          // falló y saber por qué.
+          detalle: fallo instanceof FalloDeRed ? fallo.message : undefined,
         })
       } finally {
         clearTimeout(reloj)
