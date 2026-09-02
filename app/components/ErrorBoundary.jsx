@@ -22,7 +22,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react"
 export class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { error: null }
+    this.state = { error: null, componentStack: null }
   }
 
   static getDerivedStateFromError(error) {
@@ -34,6 +34,12 @@ export class ErrorBoundary extends Component {
     // encontrar el sitio, y sin esto el mensaje amable de abajo escondería la
     // única pista útil.
     console.error("El visor falló al pintarse:", error, info?.componentStack)
+    // **Y también a la pantalla.** La consola no existe en un teléfono: quien
+    // se encuentra el fallo en campo copia lo que ve, y lo que veía era la pila
+    // de JavaScript ya minimizada —`at ik`, `at nf`— que no señala a ningún
+    // componente. La pila de componentes sí los nombra, y es la diferencia
+    // entre poder arreglar el fallo con un reporte y tener que adivinarlo.
+    this.setState({ componentStack: info?.componentStack ?? null })
   }
 
   render() {
@@ -61,8 +67,16 @@ export class ErrorBoundary extends Component {
             <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-700">
               Detalle técnico
             </summary>
-            <pre className="mt-1.5 max-h-40 overflow-auto rounded-md bg-slate-50 p-2 font-mono text-[10px] leading-tight text-slate-600">
-              {String(this.state.error?.stack || this.state.error)}
+            <pre className="mt-1.5 max-h-40 select-all overflow-auto rounded-md bg-slate-50 p-2 font-mono text-[10px] leading-tight text-slate-600">
+              {[
+                String(this.state.error?.stack || this.state.error),
+                // La pila de componentes va **después** de la de JavaScript y
+                // separada: son dos cosas distintas —dónde reventó el motor y
+                // qué parte del visor lo pedía— y pegadas se leen como una sola.
+                this.state.componentStack && `\nComponentes:${this.state.componentStack}`,
+              ]
+                .filter(Boolean)
+                .join("\n")}
             </pre>
           </details>
 
