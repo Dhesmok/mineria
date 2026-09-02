@@ -280,4 +280,48 @@ describe("los códigos de la base de datos", () => {
     expect(screen.getByText("COD")).toBeInTheDocument()
     expect(screen.getAllByText("Qal").length).toBeGreaterThan(0)
   })
+
+  it("al pulsar «Poner la plancha sobre el mapa» se cierra el popup de la consulta", async () => {
+    const user = userEvent.setup()
+    const onCargarPlancha = jest.fn()
+    const onDismiss = jest.fn()
+
+    const conPdf = {
+      loading: false,
+      lngLat: { lng: -75.5, lat: 6.2 },
+      results: [
+        {
+          layerKey: "planchas",
+          layerId: 1,
+          layerName: "Estado de la cartografía",
+          value: "Plancha 146",
+          attributes: [
+            { field: "NOM_MAPA", value: "Plancha 146" },
+            { field: "ECG_URL_PL", value: "https://srvags.sgc.gov.co/plancha146.pdf" },
+          ],
+        },
+      ],
+    }
+
+    render(
+      <SgcPanel
+        activeKeys={["planchas"]}
+        featureInfo={conPdf}
+        onCargarPlancha={onCargarPlancha}
+        onDismiss={onDismiss}
+      />,
+    )
+
+    const boton = screen.getByRole("button", { name: /Poner la plancha sobre el mapa/i })
+    expect(boton).toBeInTheDocument()
+
+    await user.click(boton)
+
+    expect(onCargarPlancha).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://srvags.sgc.gov.co/plancha146.pdf",
+      }),
+    )
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+  })
 })

@@ -739,7 +739,10 @@ export default function MapComponentGL({
           featureInfo={sgcFeatureInfo}
           fieldInfo={sgcFieldInfo}
           onDismiss={clearSgcFeatureInfo}
-          onCargarPlancha={cargarPlancha}
+          onCargarPlancha={(datos) => {
+            clearSgcFeatureInfo()
+            cargarPlancha(datos)
+          }}
         />
 
         {/* La plancha geológica del SGC, ya colocada. Su panel sale al pedirla y

@@ -92,14 +92,14 @@ const Atributo = ({ field, value }) => (
  * Sale solo si la ficha trae un PDF: una plancha sin cartografía publicada no
  * tiene ninguno, y un botón que no se puede pulsar informa peor que ningún botón.
  */
-const PonerPlancha = ({ resultado, lngLat, onCargar }) => {
+const PonerPlancha = ({ resultado, lngLat, onCargar, onDismiss }) => {
   const url = onCargar ? planchaPdfFrom(resultado.attributes) : null
   if (!url) return null
 
   return (
     <button
       type="button"
-      onClick={() =>
+      onClick={() => {
         onCargar({
           url,
           titulo: [sgcLayerByKey(resultado.layerKey)?.label, resultado.value]
@@ -107,7 +107,8 @@ const PonerPlancha = ({ resultado, lngLat, onCargar }) => {
             .join(" · "),
           cerca: lngLat,
         })
-      }
+        onDismiss?.()
+      }}
       className="mb-2 flex w-full items-center justify-center gap-1.5 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
     >
       <MapIcon className="h-3.5 w-3.5" />
@@ -215,6 +216,7 @@ export const SgcPanel = ({
                 resultado={resultado}
                 lngLat={featureInfo.lngLat}
                 onCargar={onCargarPlancha}
+                onDismiss={onDismiss}
               />
               {/* Los códigos, con su significado cuando el servicio lo publica:
                   «Qal» pasa a «Qal — Depósitos aluviales». Y el nombre del campo,
