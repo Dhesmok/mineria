@@ -80,6 +80,17 @@ const DOMINIOS = ["sgc.gov.co", "gov.co"]
  * que ser exactamente lo que aquí se validó, no la cadena que llegó. Un
  * `usuario:clave@` colado en la dirección viajaría con la petición y quedaría en
  * los registros del SGC a nombre nuestro.
+ *
+ * **Se acepta `http` además de `https`, y esto costó una tanda.** La primera
+ * versión exigía `https` y parecía lo obvio; el resultado fue que la función no
+ * colocó ni una plancha, con un 400 que decía «esa dirección no es un PDF de un
+ * servicio del Estado» sobre direcciones que lo eran. El gestor documental del
+ * SGC publica sus enlaces en `http` pelado —`http://recordcenter.sgc.gov.co/…`—
+ * y eso no es negociable desde aquí: es lo que devuelve su servicio.
+ *
+ * Lo que sí se puede es **subirlas a `https` al salir** y dejar que la ruta baje
+ * a `http` solo si el SGC no atiende cifrado. Que la dirección llegue en claro no
+ * es motivo para pedirla en claro.
  */
 export const permite = (texto) => {
   let url
@@ -88,12 +99,26 @@ export const permite = (texto) => {
   } catch {
     return null
   }
-  if (url.protocol !== "https:") return null
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null
 
   const servidor = url.hostname.toLowerCase()
   const permitido = DOMINIOS.some((d) => servidor === d || servidor.endsWith(`.${d}`))
   if (!permitido) return null
   if (!/\.pdf$/i.test(url.pathname)) return null
 
-  return `${url.origin}${url.pathname}${url.search}`
+  return `https://${url.host}${url.pathname}${url.search}`
 }
+
+/**
+ * La misma dirección sin cifrar, para el segundo intento.
+ *
+ * No se pudo comprobar si `recordcenter.sgc.gov.co` atiende en `https`: desde la
+ * máquina donde se escribió esto el proxy bloquea `sgc.gov.co`, así que un fallo
+ * de conexión no distingue «el SGC no lo sirve» de «aquí no se llega». Ante esa
+ * duda, se intentan los dos por orden y funciona en los dos casos — que es la
+ * misma decisión que llevó a montar `/api/sgc`.
+ *
+ * Solo la usa la ruta, y solo sobre lo que `permite` ya validó: no es una puerta
+ * de atrás para pedir en claro cualquier cosa.
+ */
+export const sinCifrar = (url) => String(url).replace(/^https:/, "http:")

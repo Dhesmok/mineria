@@ -153,6 +153,12 @@ buscan sus líneas en la imagen, se ajusta una recta y se recorta el marco. Sobr
 la plancha 132 el ajuste queda en ±12 m. Todo eso está en `utils/planchaGeo.js`,
 con las dos trampas que costó (la 19 y la 20 de más abajo).
 
+**Y el gestor documental del SGC publica sus enlaces en `http` pelado.** La
+primera versión de `/api/plancha` exigía `https` —que parecía lo obvio— y no
+colocó ni una hoja: devolvía un 400 diciendo «esa dirección no es un PDF de un
+servicio del Estado» sobre direcciones que lo eran. Se aceptan los dos esquemas,
+se pide primero cifrado y se baja a `http` solo si el SGC no atiende así.
+
 **Y la imagen es una por vista, no una rejilla de teselas.** ArcGIS dibuja cada
 imagen que le piden sin saber nada de las de al lado, así que rotula cada una por
 separado: la grilla de planchas escribía el número de cada cuadrícula cuatro
