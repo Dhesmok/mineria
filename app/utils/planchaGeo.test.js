@@ -34,6 +34,7 @@ const dibujarPlancha = ({
   ruido = [],
   indice = false,
   escalaGrafica = false,
+  recuadroLeyenda = false,
 } = {}) => {
   const gray = new Uint8Array(width * height).fill(255)
   const pinta = (x, y, v) => {
@@ -86,6 +87,14 @@ const dibujarPlancha = ({
       items.push({ text: String(n), x, y: marco.top - 10 })
       n += 1
     }
+  }
+
+  // El filo del recuadro de la leyenda, a la derecha del mapa: una línea negra
+  // de altura completa que cae **casi** donde tocaría la línea siguiente de la
+  // cuadrícula. Es el caso de la plancha 193, y por poco se lleva el marco.
+  if (recuadroLeyenda) {
+    const casi = Math.round(marco.right + pasoPx + 4)
+    for (let y = marco.top; y <= marco.bottom; y += 1) pinta(casi, y, 0)
   }
 
   // Y la escala gráfica del corte geológico: metros redondos, también en fila.
@@ -358,6 +367,43 @@ describe("georeferencePlancha", () => {
     // El marco va diez píxeles —mil metros— más allá de la última línea.
     expect(resultado.bounds.este).toBeCloseTo(941000, -2)
     expect(resultado.bounds.norte).toBeCloseTo(1241000, -2)
+  })
+
+  test("una cuadrícula que no cae en múltiplos redondos se coloca igual", () => {
+    // La plancha 193 (Yopal) rotula sus nortes 1.079.000, 1.084.000, 1.089.000:
+    // cada cinco kilómetros, sí, pero desfasados mil metros de los múltiplos.
+    // Una versión anterior daba por falsas todas sus líneas por eso, se quedaba
+    // sin nada de donde partir y recortaba por el borde de la hoja.
+    const hoja = dibujarPlancha({ norte0: 1079000 })
+    const resultado = georeferencePlancha({
+      items: hoja.items,
+      gray: hoja.gray,
+      width: hoja.width,
+      height: hoja.height,
+      // Bajar el norte ciento veinte kilómetros mueve la hoja: el clic va donde
+      // de verdad cae ahora, que es lo que hace el visor.
+      cerca: [-74.89, 5.49],
+    })
+    expect(resultado.ok).toBe(true)
+    expect(resultado.frameComplete).toBe(true)
+    expect(resultado.bounds.sur).toBeCloseTo(1079000, -2)
+    expect(resultado.bounds.norte).toBeCloseTo(1119000, -2)
+  })
+
+  test("el recuadro de la leyenda no se lleva el marco", () => {
+    // Cae a cuatro píxeles de donde tocaría la línea siguiente, o sea dentro de
+    // cualquier tolerancia razonable. Lo que lo descarta no es la tolerancia
+    // sino que no tiene ningún rótulo cerca.
+    const hoja = dibujarPlancha({ recuadroLeyenda: true })
+    const resultado = georeferencePlancha({
+      items: hoja.items,
+      gray: hoja.gray,
+      width: hoja.width,
+      height: hoja.height,
+      cerca: [-74.87, 6.6],
+    })
+    expect(resultado.ok).toBe(true)
+    expect(resultado.bounds.este).toBeCloseTo(940000, -2)
   })
 
   test("una hoja sin capa de texto se rechaza en vez de colocarse a ojo", () => {
