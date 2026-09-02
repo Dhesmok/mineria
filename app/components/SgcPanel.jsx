@@ -108,7 +108,7 @@ const PonerPlancha = ({ resultado, lngLat, onCargar }) => {
           cerca: lngLat,
         })
       }
-      className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
+      className="mb-2 flex w-full items-center justify-center gap-1.5 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
     >
       <MapIcon className="h-3.5 w-3.5" />
       Poner la plancha sobre el mapa
@@ -205,6 +205,17 @@ export const SgcPanel = ({
                 {sgcLayerByKey(resultado.layerKey)?.label ?? resultado.layerKey}
                 {resultado.layerName ? ` · ${resultado.layerName}` : ""}
               </p>
+              {/* El botón va **antes** de los campos, no después. Es lo que se
+                  viene a hacer con esta ficha; los quince atributos de abajo son
+                  la letra pequeña, y al final del todo obligaban a desplazar la
+                  tarjeta para encontrarlo. Pegado a su encabezado, además, se ve
+                  de qué plancha es: con varias capas del SGC encendidas la ficha
+                  trae un bloque por capa y antes había que adivinarlo. */}
+              <PonerPlancha
+                resultado={resultado}
+                lngLat={featureInfo.lngLat}
+                onCargar={onCargarPlancha}
+              />
               {/* Los códigos, con su significado cuando el servicio lo publica:
                   «Qal» pasa a «Qal — Depósitos aluviales». Y el nombre del campo,
                   con el alias que el SGC le puso para enseñarlo. */}
@@ -218,11 +229,6 @@ export const SgcPanel = ({
                   />
                 )
               })}
-              <PonerPlancha
-                resultado={resultado}
-                lngLat={featureInfo.lngLat}
-                onCargar={onCargarPlancha}
-              />
             </div>
           ))}
         </div>

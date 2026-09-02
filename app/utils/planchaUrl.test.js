@@ -1,4 +1,4 @@
-import { permite, planchaPdfFrom } from "./planchaUrl"
+import { permite, planchaPdfFrom, sinCifrar } from "./planchaUrl"
 
 /**
  * Esta ruta es la única del proyecto que acepta una dirección del cliente, y por
@@ -29,10 +29,28 @@ describe("permite", () => {
     expect(permite("https://recordcenter.sgc.gov.co/algo.exe")).toBeNull()
   })
 
-  test("no deja pasar http ni otros esquemas", () => {
-    expect(permite("http://recordcenter.sgc.gov.co/plancha.pdf")).toBeNull()
+  test("acepta http y lo sube a https", () => {
+    // El caso que dejó la función sin colocar ni una plancha: el gestor
+    // documental del SGC publica sus enlaces en http pelado, y exigir https
+    // rechazaba direcciones que sí eran suyas con un 400 que decía lo
+    // contrario. Se aceptan, pero se piden cifradas.
+    expect(permite("http://recordcenter.sgc.gov.co/B4/13010010024246/mapa/pdf/0101242461300002.pdf")).toBe(
+      "https://recordcenter.sgc.gov.co/B4/13010010024246/mapa/pdf/0101242461300002.pdf",
+    )
+  })
+
+  test("no deja pasar otros esquemas", () => {
     expect(permite("file:///etc/passwd.pdf")).toBeNull()
     expect(permite("javascript:alert(1)")).toBeNull()
+    expect(permite("ftp://recordcenter.sgc.gov.co/a.pdf")).toBeNull()
+  })
+
+  test("conserva el puerto al subir a https", () => {
+    // Con `origin` se perdía: un http en un puerto raro salía como https sin
+    // puerto, o sea a otro servidor distinto del que se validó.
+    expect(permite("http://recordcenter.sgc.gov.co:8080/a.pdf")).toBe(
+      "https://recordcenter.sgc.gov.co:8080/a.pdf",
+    )
   })
 
   test("no deja pasar basura", () => {
@@ -48,6 +66,14 @@ describe("permite", () => {
     expect(permite("https://u:c@recordcenter.sgc.gov.co/a.pdf#x")).toBe(
       "https://recordcenter.sgc.gov.co/a.pdf",
     )
+  })
+
+  test("sinCifrar solo baja el esquema", () => {
+    expect(sinCifrar("https://recordcenter.sgc.gov.co/a.pdf")).toBe(
+      "http://recordcenter.sgc.gov.co/a.pdf",
+    )
+    // Y no toca un «https» que aparezca dentro del camino.
+    expect(sinCifrar("https://x.gov.co/https:/a.pdf")).toBe("http://x.gov.co/https:/a.pdf")
   })
 
   test("un dominio .gov.co que no sea del SGC vale solo si es un PDF", () => {
