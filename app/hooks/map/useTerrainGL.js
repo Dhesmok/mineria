@@ -70,14 +70,6 @@ export const PITCH_MAX = 72
 const SPIN_DEGREES_PER_SECOND = 10
 
 /**
- * Cuántas teselas de elevación pueden fallar antes de dar el 3D por perdido.
- *
- * Una o dos fallan por mil motivos pasajeros. Cuatro seguidas dentro de la misma
- * sesión de 3D ya no es mala suerte: es que el servicio no está respondiendo.
- */
-const TERRAIN_FAILURES_LIMIT = 4
-
-/**
  * Cuánto se espera, como mucho, a que el terreno tenga teselas antes de inclinar.
  *
  * Con red buena no se llega a notar. Si la red está mal, más vale entrar en 3D
@@ -487,28 +479,16 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   useEffect(() => {
     if (!mapInstance || !is3D) return
 
-    const remedir = async () => {
+    const remedir = () => {
       // Mientras gira solo, cada fotograma dispara un `moveend` y la cámara no
       // se está desplazando: no hay desnivel nuevo que medir.
       if (spinningRef.current) return
-      const desnivel = await medirElDesnivel(mapInstance)
-      if (desnivel !== null && is3DRef.current) {
-        const safeZoom = zoomParaMirarElRelieve(
-          mapInstance,
-          mapInstance.getPitch(),
-          exaggerationRef.current,
-        )
-        // Si al desplazarse a una zona más montañosa la cámara quedó por debajo de las lomas,
-        // elevar suavemente la vista para no colisionar contra el relieve.
-        if (safeZoom < mapInstance.getZoom() - 0.25) {
-          mapInstance.easeTo({ zoom: safeZoom, duration: 500 })
-        }
-      }
+      medirElDesnivel(mapInstance)
     }
 
     mapInstance.on("moveend", remedir)
     return () => mapInstance.off("moveend", remedir)
-  }, [mapInstance, is3D, medirElDesnivel, zoomParaMirarElRelieve])
+  }, [mapInstance, is3D, medirElDesnivel])
 
   // El mapa también se gira e inclina arrastrando con Ctrl, o con dos dedos en
   // el celular. Sin escuchar esos eventos, los deslizadores se quedarían
@@ -581,24 +561,12 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   useEffect(() => {
     if (!mapInstance || !is3D) return
 
-    let fallos = 0
     const alFallar = (evento) => {
       if (evento?.sourceId !== TERRAIN_SOURCE_ID) return
-      fallos += 1
-      if (fallos < TERRAIN_FAILURES_LIMIT) return
-
-      // Volver a 2D y no dejar el plano inclinado: una cámara inclinada sobre
-      // un mapa plano no aporta nada y hace pensar que el relieve de esa zona
-      // es llano.
-      setTerrainError("No se pudo cargar el modelo de elevación. El 3D quedó desactivado.")
-      setIs3D(false)
-      try {
-        mapInstance.setTerrain(null)
-        mapInstance.setSky(undefined)
-        mapInstance.easeTo({ pitch: 0, duration: 500 })
-      } catch {
-        // El mapa se estaba destruyendo; no hay nada que devolver a su sitio.
-      }
+      // Las teselas a zooms altos o con cancelaciones de red por zoom rápido
+      // pueden emitir eventos de error temporales, pero MapLibre las resuelve
+      // interpolando teselas del nivel anterior. No desactivamos el 3D para
+      // no expulsar al usuario mientras navega o se acerca.
     }
 
     mapInstance.on("error", alFallar)
