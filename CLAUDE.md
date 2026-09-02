@@ -462,6 +462,27 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     `utils/tapGesture`. Y el manejador recibe **`{point, lngLat}`**, como el de
     MapLibre — no un par de números.
 
+28. **La caché de consultas de la ANM (`utils/anmCache.js`) está acotada y caduca.**
+    - **Tope de 12 entradas:** Con cuatro capas ANM activas y hasta 2.000 figuras
+      cada una, 64 entradas saturaban la memoria RAM de los teléfonos móviles
+      (cientos de MB de heap). 12 entradas cubren exactamente las últimas tres
+      vistas completas.
+    - **Caducidad a los 5 minutos (TTL):** En un visor minero donde la pregunta es
+      «¿está libre esta área?», la frescura legal del dato es crítica. La caché
+      descarta entradas con más de 5 minutos de antigüedad.
+    - **La descarga oficial por área (`utils/bboxDownload.js`) salta la caché:**
+      Usa `skipCache: true` para que el ZIP entregado se construya siempre con
+      datos directos del servidor estatal en ese instante.
+    - **Acierta en vistas repetidas exactas:** La clave de 4 decimales (~11 m)
+      está pensada para el vaivén de zoom, el reencuadre (`fitBounds`) tras una
+      búsqueda o las consultas simultáneas, no para el arrastre continuo a mano.
+
+29. **La tabla de atributos pagina a 50 registros (`components/AttributeTable.jsx`).**
+    Renderizar 2.000 filas de una vez inyectaba más de 16.000 elementos HTML en
+    el DOM al abrir el panel o filtrar por "Toda la capa". Con 50 registros por
+    página el DOM no pasa de unos cientos de nodos, y el ordenamiento y la
+    navegación se mantienen instantáneos.
+
 ## Convenciones
 
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
