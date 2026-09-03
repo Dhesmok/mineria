@@ -37,6 +37,7 @@ const dibujarPlancha = ({
   escalaGrafica = false,
   recuadroLeyenda = false,
   errorEnAbreviados = 0,
+  grisArriba = 0,
 } = {}) => {
   const gray = new Uint8Array(width * height).fill(255)
   const pinta = (x, y, v) => {
@@ -54,7 +55,11 @@ const dibujarPlancha = ({
   }
   for (let x = marco.left - 1; x <= marco.right + 1; x += 1) {
     for (let g = -1; g <= 1; g += 1) {
-      pinta(x, marco.top + g, 0)
+      // `grisArriba` deja el borde de arriba a medio tono en vez de negro. No es
+      // un capricho: es cómo sale de verdad en la plancha 130, donde el
+      // suavizado del navegador lo deja en gris 109 mientras el de abajo queda
+      // en 36. Ver la nota de `esTrazoTenue`.
+      pinta(x, marco.top + g, grisArriba)
       pinta(x, marco.bottom + g, 0)
     }
   }
@@ -268,6 +273,45 @@ describe("detectFrame", () => {
     expect(marco.right).toBeCloseTo(680, 0)
     expect(marco.top).toBeCloseTo(60, 0)
     expect(marco.bottom).toBeCloseTo(460, 0)
+  })
+
+  test("y también cuando ese borde es una línea fina a medio tono", () => {
+    // La plancha 130 (Gómez Plata). Sus dos bordes horizontales están impresos
+    // con distinto grosor, y el navegador deja el de arriba en gris 109 —toda la
+    // fila por debajo de 140, pero solo el 41 % por debajo de 110— mientras el
+    // de abajo queda en 36. El umbral fijo de `esTrazo` caía justo en medio.
+    //
+    // El resultado no era «no se pudo colocar», que se vería: era una hoja de
+    // 45 × 35 km en vez de 45 × 40, colocada sin más aviso que una línea en el
+    // panel. Cinco kilómetros de geología en el sitio equivocado.
+    const hoja = dibujarPlancha({ grisArriba: 130 })
+    const marco = detectFrame(hoja.gray, {
+      width: hoja.width,
+      height: hoja.height,
+      lineasX: [130, 180, 230, 280, 330, 380, 430, 480, 530, 580, 630],
+      lineasY: [110, 160, 210, 260, 310, 360, 410],
+    })
+
+    expect(marco.top).toBeCloseTo(60, 0)
+    expect(marco.complete).toBe(true)
+  })
+
+  test("la hoja entera sale con su alto de verdad, no un paso más corta", () => {
+    // La misma hoja, de punta a punta: sin el arreglo el borde de arriba se caía
+    // a la línea de cuadrícula de más adentro y la hoja salía un paso corta.
+    const hoja = dibujarPlancha({ grisArriba: 130 })
+    const resultado = georeferencePlancha({
+      items: hoja.items,
+      gray: hoja.gray,
+      width: hoja.width,
+      height: hoja.height,
+      cerca: [-74.87, 6.6],
+    })
+
+    expect(resultado.ok).toBe(true)
+    expect(resultado.frameComplete).toBe(true)
+    // 400 px de alto a 100 m/px son 40 km, que es lo que mide una 1:100.000.
+    expect(resultado.size[1]).toBeCloseTo(40000, -2)
   })
 })
 

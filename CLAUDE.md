@@ -538,6 +538,40 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     hay que repintarlo a propósito antes de leerlo: WebGL vacía el búfer en
     cuanto el navegador compone.
 
+34. **El gris de una línea fina no es una propiedad de la hoja, sino del
+    suavizado con que la dibuja el navegador.** La plancha 130 (Gómez Plata)
+    tiene sus dos bordes horizontales impresos con distinto grosor: pdf.js deja
+    el de arriba en **gris medio 109** —toda la fila por debajo de 140, pero solo
+    el 41 % por debajo de 110— y el de abajo en 36, casi negro. `esTrazo` exigía
+    el 70 % de la fila por debajo de 110, así que veía uno y no el otro.
+
+    El resultado no era «no se pudo colocar», que se vería: era **una hoja de
+    45 × 35 km en vez de 45 × 40**, recortada por la línea de cuadrícula
+    siguiente y colocada sin más aviso que una raya en el panel. Cinco
+    kilómetros de geología en el sitio equivocado, que es peor que no ponerla.
+
+    Ajustar el umbral no es la salida: 130 acierta en esta hoja, 110 la deja
+    corta por el norte y 150 la deja corta por el sur —a partir de ahí las
+    propias líneas de la cuadrícula pasan por marco—. Una ventana de veinte
+    niveles de gris no es una regla, es una casualidad.
+
+    Lo que se hace es preguntar por **contraste** y no por nivel —`esTrazoTenue`,
+    el mismo criterio de `detectGridLines`, que sí encontraba esa línea— y
+    mirarlo **un paso de cuadrícula más afuera**, que es donde el propio ajuste
+    dice que estaría la línea siguiente. Va al final de la búsqueda, solo donde
+    antes no se encontraba nada: donde el barrido ya da con el marco, no llega a
+    correr.
+
+    Y de paso, por qué esa línea no estaba emparejada: su rótulo va escrito
+    entero en la esquina —`1.240.000 mN`— y no en la fila de abreviados, así que
+    `fitGridAxis` nunca la vio y la búsqueda arrancaba desde la línea de más
+    adentro.
+
+    Nota de método: esto **no se puede reproducir rasterizando el PDF por fuera**.
+    Con pypdfium el mismo archivo daba 45 × 40 y marco completo, porque suaviza
+    distinto; el fallo solo aparece con pdf.js en un navegador. Para diagnosticar
+    una hoja hay que correr `prepararPlancha` en Chromium, no en Node.
+
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
   actual documenta el bug que motivó cada decisión — mantenlo, es lo que hace
   el código legible para alguien sin background en programación.
