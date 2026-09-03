@@ -84,6 +84,30 @@ export const cargarPdfjs = async () => {
   return pdfjs
 }
 
+/**
+ * Un fallo con el mismo nombre que usa el navegador al cancelar, para que quien
+ * llama no tenga que distinguir de dónde vino la cancelación.
+ */
+const cancelado = () => Object.assign(new Error("Cancelado"), { name: "AbortError" })
+
+/**
+ * Soltar el hilo un momento, y rendirse si ya no hace falta seguir.
+ *
+ * Dibujar una plancha son varios segundos de cálculo seguido, y mientras tanto
+ * el navegador no puede hacer **nada más**: ni pintar el mapa, ni atender un
+ * clic, ni dejar que salte el reloj que la cancela. Eso era lo que convertía una
+ * plancha lenta en un visor colgado, y lo que dejaba el aviso de «tardó
+ * demasiado» sin poder llegar nunca.
+ *
+ * Entre fase y fase se devuelve el hilo. Cuesta unos milisegundos y es lo que
+ * hace que una espera larga siga siendo una espera y no una caída.
+ */
+const respirar = (signal) =>
+  new Promise((sigue, para) => {
+    if (signal?.aborted) return para(cancelado())
+    setTimeout(() => (signal?.aborted ? para(cancelado()) : sigue()), 0)
+  })
+
 /** Lo más ancho que la tarjeta acepta como textura, sin pasarse del tope. */
 export const anchoMaximoDeTextura = (max = ANCHO_MAXIMO) => {
   try {
@@ -114,13 +138,19 @@ const luminancia = (datos, total) => {
  *
  * @param {ArrayBuffer} archivo el PDF entero
  * @param {[number,number]} cerca dónde tocó el usuario, para elegir el origen
+ * @param {Object} [opciones]
+ * @param {AbortSignal} [opciones.signal] para poder rendirse a medio camino
  * @returns {Promise<{ok:true, canvas:HTMLCanvasElement, ...}|{ok:false, reason:string}>}
  */
-export const prepararPlancha = async (archivo, cerca) => {
+export const prepararPlancha = async (archivo, cerca, { signal } = {}) => {
+  const reloj = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
+  const tiempos = {}
   const pdf = await cargarPdfjs()
   const documento = await pdf.getDocument({ data: archivo }).promise
   try {
     const pagina = await documento.getPage(1)
+    await respirar(signal)
+    const inicioMedida = reloj()
     const tamano = pagina.getViewport({ scale: 1 })
     const escalaMedida = Math.min(2, ANCHO_MEDIDA / Math.max(tamano.width, tamano.height))
     const vistaMedida = pagina.getViewport({ scale: escalaMedida })
@@ -134,9 +164,12 @@ export const prepararPlancha = async (archivo, cerca) => {
     pincel.fillStyle = "#ffffff"
     pincel.fillRect(0, 0, lienzo.width, lienzo.height)
     await pagina.render({ canvasContext: pincel, viewport: vistaMedida }).promise
+    await respirar(signal)
 
     const imagen = pincel.getImageData(0, 0, lienzo.width, lienzo.height)
     const gris = luminancia(imagen.data, lienzo.width * lienzo.height)
+    tiempos.medida = Math.round(reloj() - inicioMedida)
+    await respirar(signal)
 
     const texto = await pagina.getTextContent()
     const items = texto.items
@@ -150,6 +183,7 @@ export const prepararPlancha = async (archivo, cerca) => {
         return { text: item.str, x, y }
       })
 
+    const inicioGeo = reloj()
     const geo = georeferencePlancha({
       items,
       gray: gris,
@@ -157,15 +191,19 @@ export const prepararPlancha = async (archivo, cerca) => {
       height: lienzo.height,
       cerca,
     })
+    tiempos.geo = Math.round(reloj() - inicioGeo)
     // El lienzo de medida ya no hace falta: se le quita el tamaño para que el
     // navegador suelte los megas antes de pedirle el siguiente, que es más
     // grande. Sin esto los dos conviven un instante.
     lienzo.width = 1
     lienzo.height = 1
-    if (!geo.ok) return geo
+    if (!geo.ok) return { ...geo, tiempos }
 
+    await respirar(signal)
+    const inicioRecorte = reloj()
     const recorte = await recortarMapa(pagina, geo, escalaMedida)
-    return { ...geo, canvas: recorte.canvas, escala: recorte.escala }
+    tiempos.recorte = Math.round(reloj() - inicioRecorte)
+    return { ...geo, canvas: recorte.canvas, escala: recorte.escala, tiempos }
   } finally {
     // Cerrar el documento libera el worker y la memoria del PDF, que en una
     // plancha son decenas de megas.

@@ -34,6 +34,26 @@ const corrida = (shift) => {
   return partes.length ? partes.join(" y ") : null
 }
 
+/**
+ * En qué se fue el tiempo, dicho en segundos.
+ *
+ * `descarga` es la red y el resto es el navegador dibujando el PDF. Separarlos
+ * es lo único que permite responder a «va lentísimo» sin tener el equipo
+ * delante: si manda la descarga, el problema está en el SGC o en la conexión; si
+ * manda el dibujado, está en el aparato.
+ */
+const tardanza = (tiempos) => {
+  if (!tiempos) return null
+  const partes = [
+    ["descarga", tiempos.descarga],
+    ["dibujado", (tiempos.medida ?? 0) + (tiempos.recorte ?? 0)],
+    ["cuadrícula", tiempos.geo],
+  ]
+    .filter(([, ms]) => ms >= 100)
+    .map(([que, ms]) => `${(ms / 1000).toFixed(1)} s ${que}`)
+  return partes.length ? partes.join(" · ") : null
+}
+
 /** De píxeles de residuo a metros sobre el terreno, para poder contarlo. */
 const metrosDeResiduo = (residual, size, canvas) => {
   const anchoPx = canvas?.width
@@ -125,6 +145,12 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
                   : ""
               }`}
             />
+            {/* Cuánto tardó, y en qué. Las hojas son casi mil y pesan decenas de
+                megas cada una: cuando una tarda de más, lo primero que hay que
+                saber es si se fue el tiempo en la red o en dibujarla, porque son
+                dos problemas distintos y ninguno se distingue del otro mirando
+                la pantalla. */}
+            <Dato nombre="Tardó" valor={tardanza(plancha.tiempos)} />
             {corrida(plancha.shift) && (
               // **Esto no se calla.** Significa que la hoja se contradice a sí
               // misma —sus rótulos abreviados dicen una cosa y los de las
