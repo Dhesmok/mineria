@@ -1,5 +1,6 @@
 import {
   createBaseStyle,
+  createOverlayStyle,
   BASE_LAYERS,
   HILLSHADE_LAYER_ID,
   INITIAL_CENTER,
@@ -234,3 +235,24 @@ describe("TRANSPARENT_PIXEL", () => {
     imagenes.forEach((fuente) => expect(fuente.url).toBe(TRANSPARENT_PIXEL))
   })
 })
+
+describe("createOverlayStyle", () => {
+  it("crea un estilo sin capa de fondo (transparente) y con terreno 3D", () => {
+    const style = createOverlayStyle()
+    expect(style.version).toBe(8)
+    // Sin capa background para que el canvas sea 100% transparente
+    expect(style.layers.some((l) => l.type === "background")).toBe(false)
+    expect(style.sources[TERRAIN_SOURCE_ID]).toBeDefined()
+  })
+
+  it("declara las fuentes y capas ráster del SGC y de la ANH", () => {
+    const style = createOverlayStyle()
+    expect(style.sources["sgc-src-geologiaNacional"]).toBeDefined()
+    expect(style.sources["anh-src-tierras"]).toBeDefined()
+    expect(style.sources["plancha-src"]).toBeDefined()
+    expect(layerById(style, "sgc-geologiaNacional")).toBeDefined()
+    expect(layerById(style, "anh-tierras")).toBeDefined()
+    expect(layerById(style, "plancha-capa")).toBeDefined()
+  })
+})
+

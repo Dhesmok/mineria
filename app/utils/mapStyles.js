@@ -391,6 +391,34 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
 })
 
 /**
+ * Estilo para el lienzo superpuesto de fusión temática (Geología SGC, Hidrocarburos ANH, Plancha).
+ *
+ * Se usa en el mapa superior con `mix-blend-mode: multiply` (o normal).
+ * CRÍTICO:
+ * 1. NO lleva capa de fondo (`background`) para que el canvas de WebGL sea 100% transparente.
+ * 2. Incluye la fuente de terreno 3D (`terrain-rgb`) para sincronizarse con la malla de elevación en 3D.
+ * 3. Declara las fuentes y capas ráster de SGC, ANH y Planchas.
+ */
+export const createOverlayStyle = () => ({
+  version: 8,
+  sources: {
+    [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
+    ...sgcSources(),
+    ...anhSources(),
+    ...planchaSource(),
+    ...sgcAttributionSource(),
+    ...anhAttributionSource(),
+  },
+  layers: [
+    ...sgcLayers(),
+    ...anhLayers(),
+    planchaLayer(),
+    sgcAttributionLayer(),
+    anhAttributionLayer(),
+  ],
+})
+
+/**
  * Identificadores del resultado de la búsqueda por expediente.
  *
  * Va en capas propias, separadas de las cuatro de la ANM, por dos razones: se

@@ -166,7 +166,16 @@ const drawLabels = (ctx, etiquetas, escala) => {
   ctx.restore()
 }
 
-export const ImageExport = ({ map, crs, layerNames, sources, onClose }) => {
+export const ImageExport = ({
+  map,
+  overlayMap,
+  blendMode = "multiply",
+  hasActiveOverlayLayers = false,
+  crs,
+  layerNames,
+  sources,
+  onClose,
+}) => {
   const [pieces, setPieces] = useState(DEFAULTS)
   const [scale, setScale] = useState(2)
   const [working, setWorking] = useState(false)
@@ -250,6 +259,22 @@ export const ImageExport = ({ map, crs, layerNames, sources, onClose }) => {
       ctx.fillStyle = "#ffffff"
       ctx.fillRect(0, 0, salida.width, salida.height)
       ctx.drawImage(lienzo, 0, 0, ancho, alto)
+
+      if (pieces.layers && overlayMap && hasActiveOverlayLayers) {
+        try {
+          const overlayCanvas = overlayMap.getCanvas()
+          if (overlayCanvas) {
+            ctx.save()
+            if (blendMode === "multiply") {
+              ctx.globalCompositeOperation = "multiply"
+            }
+            ctx.drawImage(overlayCanvas, 0, 0, ancho, alto)
+            ctx.restore()
+          }
+        } catch (err) {
+          console.warn("No se pudo componer el lienzo temático en la exportación:", err)
+        }
+      }
 
       if (etiquetas.length > 0) drawLabels(ctx, etiquetas, scale)
 

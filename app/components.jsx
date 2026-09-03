@@ -99,6 +99,7 @@ export default function Component() {
    * error de hidratación tira la página entera y la vuelve a pintar. Se vio en
    * el navegador; en el código no se nota.
    */
+  const [blendMode, setBlendMode] = useState("multiply")
   const [prefsCargadas, setPrefsCargadas] = useState(false)
 
   /**
@@ -124,6 +125,7 @@ export default function Component() {
     setSelectedCoordinateSystem(prefs.crs)
     setLayers(prefs.layers)
     setLayerOrder(prefs.layerOrder)
+    setBlendMode(prefs.blendMode || "multiply")
     // El tamaño guardado, devuelto a lo que cabe en **esta** pantalla: un panel
     // ajustado en un monitor grande se abría igual de ancho en el portátil y
     // tapaba el mapa entero. Ver `fitPanelToViewport`.
@@ -171,6 +173,10 @@ export default function Component() {
   useEffect(() => {
     if (prefsCargadas) writePreferences({ crs: selectedCoordinateSystem })
   }, [selectedCoordinateSystem, prefsCargadas])
+
+  useEffect(() => {
+    if (prefsCargadas) writePreferences({ blendMode })
+  }, [blendMode, prefsCargadas])
 
   useEffect(() => {
     if (prefsCargadas) writePreferences({ panelWidth, panelHeight })
@@ -505,6 +511,38 @@ export default function Component() {
             </button>
           </div>
 
+          <div className="flex items-center justify-between border-b border-slate-100 py-2">
+            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+              Fusión de capas
+            </span>
+            <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setBlendMode("multiply")}
+                className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                  blendMode === "multiply"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+                title="Multiplicar: funde los colores con el relieve y el mapa base (como en ArcGIS)"
+              >
+                Multiplicar
+              </button>
+              <button
+                type="button"
+                onClick={() => setBlendMode("normal")}
+                className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                  blendMode === "normal"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+                title="Normal: transparencia simple estándar"
+              >
+                Normal
+              </button>
+            </div>
+          </div>
+
           <LayerPanel
             layers={layers}
             order={layerOrder}
@@ -621,6 +659,8 @@ export default function Component() {
           onLayerData={setLayerData}
           onSgcState={setSgcState}
           panelOpen={showSidebar}
+          blendMode={blendMode}
+          onBlendModeChange={setBlendMode}
         />
       </div>
       {showTable && (

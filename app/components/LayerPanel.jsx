@@ -138,8 +138,9 @@ const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
 )
 
 /** Cuántas de las hojas de un grupo están marcadas: todo, nada o parte. */
-const estadoDe = (ids, marcadas) => {
-  const puestas = ids.filter((id) => marcadas.includes(id)).length
+const estadoDe = (ids, marcadas = []) => {
+  if (!Array.isArray(ids)) return "nada"
+  const puestas = ids.filter((id) => (marcadas || []).includes(id)).length
   if (puestas === 0) return "nada"
   return puestas === ids.length ? "todo" : "parte"
 }
@@ -156,14 +157,14 @@ const estadoDe = (ids, marcadas) => {
  */
 const Departamento = ({ grupo, marcadas, onToggle }) => {
   const [abierto, setAbierto] = useState(false)
-  const hijos = grupo.children ?? []
-  const estado = estadoDe(grupo.ids, marcadas)
+  const hijos = grupo?.children ?? []
+  const estado = estadoDe(grupo?.ids, marcadas)
 
   return (
     <>
       <div className="flex items-center">
         <Casilla
-          label={grupo.label}
+          label={grupo?.label || `Capa ${grupo?.id}`}
           estado={estado}
           sangria="pl-11"
           fuerte
@@ -174,7 +175,7 @@ const Departamento = ({ grupo, marcadas, onToggle }) => {
             type="button"
             onClick={() => setAbierto((v) => !v)}
             aria-expanded={abierto}
-            aria-label={`Capas de ${grupo.label}`}
+            aria-label={`Capas de ${grupo?.label}`}
             className="-ml-2 mr-2 shrink-0 rounded p-1 text-slate-300 transition-colors hover:bg-white hover:text-slate-500"
           >
             <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180" : ""}`} />
@@ -210,7 +211,10 @@ const Departamento = ({ grupo, marcadas, onToggle }) => {
  */
 const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, children }) => {
   const [abierta, setAbierta] = useState(false)
-  const hayQueElegir = Boolean(state?.on) && (subLayers?.length ?? 0) > 0
+  const gruposValidos = Array.isArray(subLayers)
+    ? subLayers.filter((g) => Array.isArray(g?.ids) && g.ids.length > 0)
+    : []
+  const hayQueElegir = Boolean(state?.on) && gruposValidos.length > 0
 
   if (!hayQueElegir) return children
 
@@ -220,7 +224,7 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
   // geología— ningún departamento está nunca «completo», así que contar eso
   // habría dejado un «0 de 32 · 32 a medias» permanente que no informa de nada.
   // Que a uno le falte algo se ve en su propia casilla, con la raya.
-  const dibujados = subLayers.filter((g) => estadoDe(g.ids, marcadas) !== "nada").length
+  const dibujados = gruposValidos.filter((g) => estadoDe(g.ids, marcadas) !== "nada").length
 
   return (
     <>
@@ -233,14 +237,14 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
           className="flex w-full items-center justify-between gap-2 py-1.5 pl-11 pr-4 text-[11px] text-slate-500 transition-colors hover:text-slate-700"
         >
           <span>
-            {dibujados === 0 ? "Elige qué dibujar" : `${dibujados} de ${subLayers.length}`}
+            {dibujados === 0 ? "Elige qué dibujar" : `${dibujados} de ${gruposValidos.length}`}
           </span>
           <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${abierta ? "rotate-180" : ""}`} />
         </button>
 
         {abierta && (
           <div className="max-h-[13rem] overflow-y-auto pb-1.5">
-            {subLayers.map((grupo) => (
+            {gruposValidos.map((grupo) => (
               <Departamento
                 key={grupo.id}
                 grupo={grupo}

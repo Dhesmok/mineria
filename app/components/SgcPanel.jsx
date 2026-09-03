@@ -135,14 +135,14 @@ export const SgcPanel = ({
   // la consulta anterior, la respuesta —que es lo que se acaba de pedir— saldría
   // empujada fuera de la pantalla por doscientas filas de simbología.
   useEffect(() => {
-    if (featureInfo?.loading) setLeyendaAbierta(false)
-  }, [featureInfo?.loading])
+    if (featureInfo?.loading || featureInfo?.consultando) setLeyendaAbierta(false)
+  }, [featureInfo?.loading, featureInfo?.consultando])
 
   // Sin consulta no hay tarjeta: es un popup, no un panel fijo.
   if (!featureInfo) return null
 
-  const resultados = featureInfo.results ?? []
-  const consultando = Boolean(featureInfo.loading)
+  const resultados = featureInfo.results ?? featureInfo.resultados ?? []
+  const consultando = Boolean(featureInfo.loading || featureInfo.consultando)
 
   /**
    * Qué leyendas se enseñan.

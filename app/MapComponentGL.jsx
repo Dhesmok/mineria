@@ -15,6 +15,7 @@ import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
 import { useSgcLayersGL } from "./hooks/map/useSgcLayersGL"
 import { useAnhLayersGL } from "./hooks/map/useAnhLayersGL"
 import { usePlanchaGL } from "./hooks/map/usePlanchaGL"
+import { useDualMapSyncGL } from "./hooks/map/useDualMapSyncGL"
 import { useTerrainProfileGL } from "./hooks/map/useTerrainProfileGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
@@ -29,7 +30,8 @@ import { onMapTap } from "./utils/tapGesture"
 import { crsById } from "./utils/crs"
 import { whenSized } from "./utils/whenSized"
 import { ANM_LAYERS } from "./utils/anmLayers"
-import { anhLayerByKey } from "./utils/anhLayers"
+import { SGC_LAYERS } from "./utils/sgcLayers"
+import { ANH_LAYERS, anhLayerByKey } from "./utils/anhLayers"
 import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
 import { DrawToolbar } from "./components/DrawToolbar"
@@ -43,6 +45,7 @@ import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
+  Blend,
   Box,
   ChevronLeft,
   Compass,
@@ -105,12 +108,15 @@ export default function MapComponentGL({
   onLayerData,
   onSgcState,
   panelOpen = false,
+  blendMode = "multiply",
+  onBlendModeChange,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
   // podía apoderarse del div equivocado. Se deja por referencia porque además
   // es lo correcto en React: el id es un nombre global y la referencia no.
   const containerRef = useRef(null)
+  const overlayContainerRef = useRef(null)
   const mapRef = useRef(null)
   const [mapInstance, setMapInstance] = useState(null)
   const [error, setError] = useState(null)
@@ -147,14 +153,54 @@ export default function MapComponentGL({
     !queryingTerrain,
   )
 
-  // Las de geología del SGC. Van aparte porque llegan ya dibujadas: no hay que
-  // consultarlas por recuadro ni convertir geometrías. Lo que sí hace falta es
-  // lo contrario —preguntarle al servicio qué contiene y qué hay en un punto—,
-  // y de eso salen las cinco cosas que devuelve.
-  //
-  // Se apaga mientras está activa la consulta de altura por el mismo motivo que
-  // la ficha de los polígonos: en ese modo el clic significa «mide aquí», y dos
-  // respuestas distintas al mismo toque se leen como un fallo.
+  const {
+    is3D,
+    toggle3D,
+    showHillshade,
+    toggleHillshade,
+    exaggeration,
+    changeExaggeration,
+    bearing,
+    changeBearing,
+    resetNorth,
+    isSpinning,
+    spin,
+    pitch,
+    changePitch,
+    elevationAt,
+    terrainError,
+    dismissTerrainError,
+    setTerrainForQuery,
+    queryTerrain,
+  } = useTerrainGL(mapRef, mapInstance)
+
+  // Plancha geológica del SGC (PDF georreferenciado)
+  // Se declara con thematicMapRef para que pinte en el mapa superior con modo de fusión
+  const [planchaActive, setPlanchaActive] = useState(false)
+
+  const hasActiveOverlayLayers = useMemo(() => {
+    const sgcActiva = SGC_LAYERS.some(({ key }) => layerState?.[key]?.on)
+    const anhActiva = ANH_LAYERS.some(({ key }) => layerState?.[key]?.on)
+    return sgcActiva || anhActiva || planchaActive
+  }, [layerState, planchaActive])
+
+  // Lienzo superior sincronizado para la fusión mix-blend-mode: multiply
+  const { overlayMapRef, overlayMapInstance } = useDualMapSyncGL(
+    mapRef,
+    mapInstance,
+    overlayContainerRef,
+    {
+      blendMode,
+      is3D,
+      exaggeration,
+      hasActiveOverlayLayers,
+    },
+  )
+
+  const thematicMapRef = overlayMapRef.current ? overlayMapRef : mapRef
+  const thematicMapInstance = overlayMapInstance || mapInstance
+
+  // Las de geología del SGC sobre el mapa temático superpuesto con fusión
   const {
     sgcSubLayers,
     sgcChosenSub,
@@ -163,8 +209,12 @@ export default function MapComponentGL({
     sgcFeatureInfo,
     sgcFieldInfo,
     clearSgcFeatureInfo,
-  } = useSgcLayersGL(mapRef, mapInstance, layerState, { enabled: !queryingTerrain })
+  } = useSgcLayersGL(thematicMapRef, thematicMapInstance, layerState, {
+    enabled: !queryingTerrain,
+    clickMap: mapInstance,
+  })
 
+  // Las de hidrocarburos de la ANH sobre el mapa temático superpuesto con fusión
   const {
     subLayers: anhSubLayers,
     chosenSub: anhChosenSub,
@@ -172,11 +222,12 @@ export default function MapComponentGL({
     legends: anhLegends,
     featureInfo: anhFeatureInfo,
     clearFeatureInfo: clearAnhFeatureInfo,
-  } = useAnhLayersGL(mapRef, mapInstance, layerState, { enabled: !queryingTerrain })
+  } = useAnhLayersGL(thematicMapRef, thematicMapInstance, layerState, {
+    enabled: !queryingTerrain,
+    clickMap: mapInstance,
+  })
 
-  // Y la plancha en PDF que cuelga de la ficha de «Estado cartográfico»: se trae
-  // el archivo, se le lee la cuadrícula que trae dibujada y se coloca sobre el
-  // mapa. Ver `utils/planchaGeo.js` para el porqué de cada paso.
+  // Y la plancha en PDF que cuelga de la ficha de «Estado cartográfico»
   const {
     plancha,
     planchaOpacity,
@@ -184,7 +235,11 @@ export default function MapComponentGL({
     cargarPlancha,
     quitarPlancha,
     encuadrarPlancha,
-  } = usePlanchaGL(mapRef, mapInstance)
+  } = usePlanchaGL(thematicMapRef, thematicMapInstance)
+
+  useEffect(() => {
+    setPlanchaActive(Boolean(plancha?.canvas))
+  }, [plancha?.canvas])
 
   // La lista de subcapas sube al panel, que es quien dibuja las casillas. El
   // hook tiene que vivir aquí —necesita el mapa— pero las casillas van junto a
@@ -265,27 +320,6 @@ export default function MapComponentGL({
     handleLocateUser,
     handleToggleCompass360,
   } = useGeolocationGL(mapRef, setError, setShowErrorBanner)
-
-  const {
-    is3D,
-    toggle3D,
-    showHillshade,
-    toggleHillshade,
-    exaggeration,
-    changeExaggeration,
-    bearing,
-    changeBearing,
-    resetNorth,
-    isSpinning,
-    spin,
-    pitch,
-    changePitch,
-    elevationAt,
-    terrainError,
-    dismissTerrainError,
-    setTerrainForQuery,
-    queryTerrain,
-  } = useTerrainGL(mapRef, mapInstance)
 
   const { profileActive, toggleProfile, profile, profileHover, onProfileHover } =
     useTerrainProfileGL(mapRef, mapInstance, { elevationAt, setTerrainForQuery, startMode })
@@ -583,6 +617,11 @@ export default function MapComponentGL({
           gane. Leaflet no sufría esto porque su CSS no toca `position` en el
           contenedor. */}
       <div ref={containerRef} className="absolute inset-0 h-full w-full z-0" />
+      <div
+        ref={overlayContainerRef}
+        className="absolute inset-0 h-full w-full pointer-events-none z-[1]"
+        style={{ mixBlendMode: blendMode === "multiply" ? "multiply" : "normal" }}
+      />
 
       {/* Los controles del mapa van todos a la derecha y el panel de consulta se
           queda con la izquierda entera. Estaban los dos a la izquierda y se
@@ -763,19 +802,26 @@ export default function MapComponentGL({
           chosenSub={{ ...sgcChosenSub, ...anhChosenSub }}
           legends={{ ...sgcLegends, ...anhLegends }}
           featureInfo={
-            sgcFeatureInfo?.consultando || anhFeatureInfo?.consultando
+            (sgcFeatureInfo?.loading || sgcFeatureInfo?.consultando || anhFeatureInfo?.loading || anhFeatureInfo?.consultando)
               ? {
                   lngLat: sgcFeatureInfo?.lngLat || anhFeatureInfo?.lngLat,
+                  loading: true,
                   consultando: true,
+                  results: [],
                   resultados: [],
                 }
-              : sgcFeatureInfo || anhFeatureInfo
+              : (sgcFeatureInfo || anhFeatureInfo)
                 ? {
                     lngLat: sgcFeatureInfo?.lngLat || anhFeatureInfo?.lngLat,
+                    loading: false,
                     consultando: false,
+                    results: [
+                      ...(sgcFeatureInfo?.results || sgcFeatureInfo?.resultados || []),
+                      ...(anhFeatureInfo?.results || anhFeatureInfo?.resultados || []),
+                    ],
                     resultados: [
-                      ...(sgcFeatureInfo?.resultados || []),
-                      ...(anhFeatureInfo?.resultados || []),
+                      ...(sgcFeatureInfo?.results || sgcFeatureInfo?.resultados || []),
+                      ...(anhFeatureInfo?.results || anhFeatureInfo?.resultados || []),
                     ],
                   }
                 : null
@@ -856,6 +902,21 @@ export default function MapComponentGL({
           title="Levantar el terreno e inclinar la cámara"
         >
           {is3D ? "Volver a 2D" : "Ver en 3D"}
+        </MapButton>
+
+        <MapButton
+          onClick={() => onBlendModeChange?.(blendMode === "multiply" ? "normal" : "multiply")}
+          active={blendMode === "multiply"}
+          aria-pressed={blendMode === "multiply"}
+          icon={Blend}
+          badge={blendMode === "multiply" ? "MULT" : "NORM"}
+          title={
+            blendMode === "multiply"
+              ? "Modo de fusión: Multiplicar (funde capas temáticas con el relieve). Clic para cambiar a Normal"
+              : "Modo de fusión: Normal (transparencia simple). Clic para cambiar a Multiplicar"
+          }
+        >
+          {blendMode === "multiply" ? "Multiplicar" : "Fusión normal"}
         </MapButton>
 
         <MapButton
@@ -940,9 +1001,22 @@ export default function MapComponentGL({
       {exportandoImagen && (
         <ImageExport
           map={mapInstance}
+          overlayMap={overlayMapInstance}
+          blendMode={blendMode}
+          hasActiveOverlayLayers={hasActiveOverlayLayers}
           crs={crsById(coordinateSystem)}
-          layerNames={ANM_LAYERS.filter(({ key }) => layerState[key]?.on).map((l) => l.label)}
-          sources={["Agencia Nacional de Minería", basemapById(basemap).source].filter(Boolean)}
+          layerNames={[
+            ...ANM_LAYERS.filter(({ key }) => layerState[key]?.on).map((l) => l.label),
+            ...SGC_LAYERS.filter(({ key }) => layerState[key]?.on).map((l) => l.label),
+            ...ANH_LAYERS.filter(({ key }) => layerState[key]?.on).map((l) => l.label),
+            ...(plancha?.canvas ? [plancha.titulo || "Plancha Geológica"] : []),
+          ]}
+          sources={[
+            "Agencia Nacional de Minería",
+            SGC_LAYERS.some(({ key }) => layerState[key]?.on) ? "Servicio Geológico Colombiano" : null,
+            ANH_LAYERS.some(({ key }) => layerState[key]?.on) ? "Agencia Nacional de Hidrocarburos" : null,
+            basemapById(basemap).source,
+          ].filter(Boolean)}
           onClose={() => setExportandoImagen(false)}
         />
       )}

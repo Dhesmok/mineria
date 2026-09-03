@@ -74,6 +74,12 @@ describe("sanitizePreferences", () => {
     expect(orden).not.toContain("inventada")
     expect(orden.slice(0, 2)).toEqual(["title", "request"])
   })
+
+  it("valida y sanea el modo de fusión", () => {
+    expect(sanitizePreferences({ blendMode: "normal" }).blendMode).toBe("normal")
+    expect(sanitizePreferences({ blendMode: "multiply" }).blendMode).toBe("multiply")
+    expect(sanitizePreferences({ blendMode: "invalid-mode" }).blendMode).toBe("multiply")
+  })
 })
 
 describe("leer y escribir", () => {

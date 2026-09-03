@@ -204,4 +204,16 @@ describe("el cuadrito de color", () => {
       screen.getByRole("button", { name: /Cambiar el color de Títulos Vigentes/ }),
     ).toBeInTheDocument()
   })
+
+  it("tolera subcapas planas sin propiedad ids sin lanzar TypeError", async () => {
+    const user = userEvent.setup()
+    montar({
+      layers: { pozos: { on: true, opacity: 1 } },
+      subLayers: { pozos: [{ id: 0, name: "Pozos", defaultVisibility: true }] },
+      chosenSub: { pozos: [] },
+    })
+    const boton = screen.getByRole("button", { name: "Capas de Hidrocarburos" })
+    await user.click(boton)
+    expect(screen.getByText("Pozos de hidrocarburos")).toBeInTheDocument()
+  })
 })

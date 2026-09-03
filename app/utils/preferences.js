@@ -48,6 +48,9 @@ const BASEMAP_IDS = new Set(BASEMAPS.map((b) => b.id))
 const CRS_IDS = new Set(CRS_LIST.map((c) => c.id))
 const LAYER_KEYS = new Set(THEME_LAYERS.map((l) => l.key))
 
+export const BLEND_MODES = ["multiply", "normal"]
+export const DEFAULT_BLEND_MODE = "multiply"
+
 /** Los valores de fábrica, que es lo que se usa cuando no hay nada guardado. */
 export const defaultPreferences = () => ({
   basemap: DEFAULT_BASEMAP,
@@ -55,6 +58,7 @@ export const defaultPreferences = () => ({
   crs: SOURCE_CRS,
   layers: initialLayerState(),
   layerOrder: [...DEFAULT_ORDER],
+  blendMode: DEFAULT_BLEND_MODE,
   compassSize: COMPASS_SIZE_DEFAULT,
   panelWidth: PANEL_WIDTH_DEFAULT,
   panelHeight: PANEL_HEIGHT_DEFAULT,
@@ -119,6 +123,7 @@ export const sanitizePreferences = (raw) => {
     crs: CRS_IDS.has(raw.crs) ? raw.crs : base.crs,
     layers,
     layerOrder: sanitizeOrder(raw.layerOrder),
+    blendMode: BLEND_MODES.includes(raw.blendMode) ? raw.blendMode : base.blendMode,
     compassSize: dentroDelRango(raw.compassSize, COMPASS_SIZE_MIN, COMPASS_SIZE_MAX, base.compassSize),
     // Se acota contra el techo absoluto y no contra el tope de la ventana: aquí
     // se sanea lo *guardado*, y este módulo también corre en el servidor, donde

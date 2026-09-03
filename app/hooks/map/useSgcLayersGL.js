@@ -96,7 +96,8 @@ const pedirUnaVez = async ({ key, url, traducir, pedidas, guardar, vivo }) => {
   }
 }
 
-export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true } = {}) => {
+export const useSgcLayersGL = (mapRef, mapInstance, layerState, options = {}) => {
+  const { enabled = true, clickMap = null } = options
   /** `{clave: [{id, label, ids}]}` — lo que cada servicio dice tener dentro. */
   const [subLayers, setSubLayers] = useState({})
   /** `{clave: [ids]}` — qué subcapas quiere ver el usuario. */
@@ -279,11 +280,12 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
 
   /** Al mover el mapa, pero cuando pare: cada imagen tarda segundos en llegar. */
   useEffect(() => {
-    if (!mapInstance) return
+    const eventMap = clickMap || mapInstance
+    if (!eventMap) return
     const alParar = debounce(repintar, REDIBUJO_MS)
-    mapInstance.on("moveend", alParar)
+    eventMap.on("moveend", alParar)
     return () => {
-      mapInstance.off("moveend", alParar)
+      eventMap.off("moveend", alParar)
       // Y se anula la que estuviera esperando. Sin esto, el temporizador ya en
       // marcha dispara un repintado justo después de desengancharse, con el mapa
       // posiblemente ya destruido: `repintar` comprueba que exista `mapRef`, pero
@@ -292,7 +294,7 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
       // su consulta aplazada, y aquí faltaba.
       alParar.cancel()
     }
-  }, [mapInstance, repintar])
+  }, [clickMap, mapInstance, repintar])
 
   /** Y al encender una capa, apagarla o cambiar qué subcapas se quieren ver. */
   useEffect(() => {
@@ -356,7 +358,8 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
    * ver las dos, no la que el código mire primero.
    */
   useEffect(() => {
-    if (!mapInstance) return
+    const interactiveMap = clickMap || mapInstance
+    if (!interactiveMap) return
 
     const alTocar = async (evento) => {
       if (!enabledRef.current) return
@@ -367,14 +370,20 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
       if (activas.length === 0) return
 
       const punto = evento.lngLat
-      const lienzo = map.getCanvas()
-      const limites = map.getBounds()
+      const lienzo = interactiveMap.getCanvas()
+      const limites = interactiveMap.getBounds()
       const suroeste = mercator(limites.getWest(), limites.getSouth())
       const noreste = mercator(limites.getEast(), limites.getNorth())
       const bbox = `${suroeste[0]},${suroeste[1]},${noreste[0]},${noreste[1]}`
       const [mx, my] = mercator(punto.lng, punto.lat)
 
-      setFeatureInfo({ loading: true, lngLat: [punto.lng, punto.lat], results: [] })
+      setFeatureInfo({
+        loading: true,
+        consultando: true,
+        lngLat: [punto.lng, punto.lat],
+        results: [],
+        resultados: [],
+      })
 
       const control = new AbortController()
       const reloj = setTimeout(() => control.abort(), IDENTIFY_TIMEOUT_MS)
@@ -387,8 +396,8 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
               lng: mx,
               lat: my,
               bbox,
-              width: lienzo.clientWidth,
-              height: lienzo.clientHeight,
+              width: lienzo.clientWidth || lienzo.width || 800,
+              height: lienzo.clientHeight || lienzo.height || 600,
               sub: chosenRef.current[key] ?? [],
             })
             try {
@@ -402,7 +411,13 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
         )
 
         const resultados = respuestas.flat()
-        setFeatureInfo({ loading: false, lngLat: [punto.lng, punto.lat], results: resultados })
+        setFeatureInfo({
+          loading: false,
+          consultando: false,
+          lngLat: [punto.lng, punto.lat],
+          results: resultados,
+          resultados,
+        })
 
         // Y ahora, qué significan esos códigos. Va después y por separado a
         // propósito: la ficha ya está en pantalla con lo que el servicio
@@ -412,23 +427,33 @@ export const useSgcLayersGL = (mapRef, mapInstance, layerState, { enabled = true
           if (resultado.layerId === null) return
           pedirLosCampos(fieldInfoKey(resultado.layerKey, resultado.layerId), resultado)
         })
+      } catch (fallo) {
+        if (control.signal.aborted) return
+        setFeatureInfo({
+          loading: false,
+          consultando: false,
+          lngLat: [punto.lng, punto.lat],
+          results: [],
+          resultados: [],
+          error: fallo?.name === "AbortError" ? "El servicio tardó demasiado" : "No se pudo consultar",
+        })
       } finally {
         clearTimeout(reloj)
       }
     }
 
-    mapInstance.on("click", alTocar)
+    interactiveMap.on("click", alTocar)
     // Y lo mismo para los toques, por separado: en un teléfono el clic no llega.
     // `mapbox-gl-draw` cancela el `touchend` para manejar sus propios gestos, y
     // con ese evento cancelado el navegador no genera el clic de compatibilidad.
     // Ver `utils/tapGesture` para el diagnóstico completo.
-    const quitarToque = onMapTap(mapInstance, alTocar)
+    const quitarToque = onMapTap(interactiveMap, alTocar)
 
     return () => {
-      mapInstance.off("click", alTocar)
+      interactiveMap.off("click", alTocar)
       quitarToque()
     }
-  }, [mapInstance, mapRef, pedirLosCampos])
+  }, [clickMap, mapInstance, mapRef, pedirLosCampos])
 
   return {
     sgcSubLayers: subLayers,

@@ -34,7 +34,7 @@ const pedirUnaVez = async ({ key, url, traducir, pedidas, guardar, vivo }) => {
   }
 }
 
-export const useAnhLayersGL = (mapRef, mapInstance, layerState, { enabled = true } = {}) => {
+export const useAnhLayersGL = (mapRef, mapInstance, layerState, { enabled = true, clickMap = null } = {}) => {
   const [subLayers, setSubLayers] = useState({})
   const [chosenSub, setChosenSub] = useState({})
   const [legends, setLegends] = useState({})
@@ -65,11 +65,11 @@ export const useAnhLayersGL = (mapRef, mapInstance, layerState, { enabled = true
       pedirUnaVez({
         key,
         url: anhMetaUrl(key),
-        traducir: (json) => json.layers || [],
+        traducir: () => [],
         pedidas: metaPedida.current,
         vivo,
-        guardar: (capas) => {
-          setSubLayers((actual) => ({ ...actual, [key]: capas }))
+        guardar: () => {
+          setSubLayers((actual) => ({ ...actual, [key]: [] }))
         },
       })
 
@@ -161,14 +161,15 @@ export const useAnhLayersGL = (mapRef, mapInstance, layerState, { enabled = true
   }, [mapRef])
 
   useEffect(() => {
-    if (!mapInstance) return
+    const eventMap = clickMap || mapInstance
+    if (!eventMap) return
     const alParar = debounce(repintar, REDIBUJO_MS)
-    mapInstance.on("moveend", alParar)
+    eventMap.on("moveend", alParar)
     return () => {
-      mapInstance.off("moveend", alParar)
+      eventMap.off("moveend", alParar)
       alParar.cancel()
     }
-  }, [mapInstance, repintar])
+  }, [clickMap, mapInstance, repintar])
 
   useEffect(() => {
     repintar()
@@ -192,7 +193,8 @@ export const useAnhLayersGL = (mapRef, mapInstance, layerState, { enabled = true
   const clearFeatureInfo = useCallback(() => setFeatureInfo(null), [])
 
   useEffect(() => {
-    if (!mapInstance || !enabled) return
+    const interactiveMap = clickMap || mapInstance
+    if (!interactiveMap || !enabled) return
 
     const alTocar = async (event) => {
       const encendidas = ANH_LAYERS.filter(({ key }) => stateRef.current?.[key]?.on)
@@ -203,61 +205,78 @@ export const useAnhLayersGL = (mapRef, mapInstance, layerState, { enabled = true
       abortIdentify.current = control
       const reloj = setTimeout(() => control.abort(), IDENTIFY_TIMEOUT_MS)
 
-      const limites = mapInstance.getBounds()
+      const limites = interactiveMap.getBounds()
       const recuadroDeg = [
         limites.getWest(),
         limites.getSouth(),
         limites.getEast(),
         limites.getNorth(),
       ]
-      const lienzo = mapInstance.getCanvas()
+      const lienzo = interactiveMap.getCanvas()
       const size = [lienzo.width, lienzo.height]
 
-      setFeatureInfo({ lngLat: event.lngLat, consultando: true, resultados: [] })
+      setFeatureInfo({
+        lngLat: event.lngLat,
+        consultando: true,
+        loading: true,
+        resultados: [],
+        results: [],
+      })
 
       try {
         const peticiones = encendidas.map(async ({ key }) => {
           const elegidas = chosenRef.current[key] ?? []
           const url = anhIdentifyUrl({
             key,
-            lngLat: event.lngLat,
-            bbox: recuadroDeg,
+            lng: event.lngLat.lng,
+            lat: event.lngLat.lat,
+            bboxDeg: recuadroDeg,
             size,
             sub: elegidas,
           })
-          const r = await fetch(url, { signal: control.signal })
-          if (!r.ok) return []
-          const data = await r.json()
-          return (data.results || []).map((res) => ({
-            ...res,
-            layerKey: key,
-            attributes: Object.entries(res.attributes || {}).map(([field, value]) => ({
-              field,
-              value: String(value ?? ""),
-            })),
-          }))
+
+          try {
+            const respuesta = await fetch(url, { signal: control.signal })
+            if (!respuesta.ok) return []
+            const data = await respuesta.json()
+            return (data.results ?? []).map((res) => ({ ...res, layerKey: key }))
+          } catch {
+            return []
+          }
         })
 
         const todos = (await Promise.all(peticiones)).flat()
-        setFeatureInfo({ lngLat: event.lngLat, consultando: false, resultados: todos })
+        setFeatureInfo({
+          lngLat: event.lngLat,
+          consultando: false,
+          loading: false,
+          resultados: todos,
+          results: todos,
+        })
       } catch (err) {
         if (err.name !== "AbortError") {
-          setFeatureInfo({ lngLat: event.lngLat, consultando: false, resultados: [] })
+          setFeatureInfo({
+            lngLat: event.lngLat,
+            consultando: false,
+            loading: false,
+            resultados: [],
+            results: [],
+          })
         }
       } finally {
         clearTimeout(reloj)
       }
     }
 
-    mapInstance.on("click", alTocar)
-    const quitarToque = onMapTap(mapInstance, alTocar)
+    interactiveMap.on("click", alTocar)
+    const quitarToque = onMapTap(interactiveMap, alTocar)
 
     return () => {
-      mapInstance.off("click", alTocar)
+      interactiveMap.off("click", alTocar)
       quitarToque()
       abortIdentify.current?.abort()
     }
-  }, [mapInstance, enabled])
+  }, [clickMap, mapInstance, enabled])
 
   return {
     subLayers,
