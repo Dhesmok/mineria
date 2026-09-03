@@ -262,6 +262,15 @@ export const ImageExport = ({
 
       if (pieces.layers && overlayMap && hasActiveOverlayLayers) {
         try {
+          // Repintar el lienzo de arriba **antes** de leerlo. WebGL vacía el
+          // búfer en cuanto el navegador lo compone, así que lo que quedaba de
+          // ese mapa era de hace fotogramas o directamente nada: la foto salía
+          // con el mapa base y sin la geología encima. El de abajo se salvaba
+          // por casualidad, porque se le pide repintar unas líneas más arriba.
+          await new Promise((resolve) => {
+            overlayMap.once("idle", resolve)
+            overlayMap.triggerRepaint()
+          })
           const overlayCanvas = overlayMap.getCanvas()
           if (overlayCanvas) {
             ctx.save()

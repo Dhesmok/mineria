@@ -254,5 +254,24 @@ describe("createOverlayStyle", () => {
     expect(layerById(style, "anh-tierras")).toBeDefined()
     expect(layerById(style, "plancha-capa")).toBeDefined()
   })
+
+  it("y el de abajo no las lleva: un identificador, un mapa", () => {
+    // Estuvieron en los dos estilos a la vez, con los mismos identificadores, y
+    // eso no es una copia inofensiva: el hook que les pone la imagen le apunta a
+    // uno o a otro según el momento del arranque. La que se quedara con la copia
+    // del mapa de abajo se dibujaba sin fundir y congelada en el primer
+    // encuadre, por debajo de la buena.
+    const base = createBaseStyle()
+    const arriba = createOverlayStyle()
+
+    arriba.layers.forEach(({ id }) => {
+      expect(layerById(base, id)).toBeUndefined()
+    })
+    Object.keys(arriba.sources)
+      .filter((id) => id !== TERRAIN_SOURCE_ID)
+      .forEach((id) => {
+        expect(base.sources[id]).toBeUndefined()
+      })
+  })
 })
 

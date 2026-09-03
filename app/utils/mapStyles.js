@@ -365,11 +365,6 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     ...BASEMAP_SOURCES,
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
     [DERIVATIVE_SOURCE_ID]: DERIVATIVE_SOURCE,
-    ...sgcSources(),
-    ...anhSources(),
-    ...planchaSource(),
-    ...sgcAttributionSource(),
-    ...anhAttributionSource(),
     ...anmSources(),
   },
   layers: [
@@ -379,11 +374,12 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     { id: "fondo-neutro", type: "background", paint: { "background-color": "#eef2f6" } },
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
-    ...sgcLayers(),
-    ...anhLayers(),
-    planchaLayer(),
-    sgcAttributionLayer(),
-    anhAttributionLayer(),
+    // Aquí estaban también las del SGC, las de la ANH y la plancha. Se fueron al
+    // estilo de abajo, que es el del lienzo superpuesto, y **no pueden estar en
+    // los dos**: los identificadores son los mismos, así que con las dos copias
+    // el mismo hook le ponía la imagen a una o a otra según el momento del
+    // arranque, y la que se quedara con la copia de aquí la dibujaba sin fundir
+    // y congelada en el primer encuadre. Un identificador, un mapa.
     derivativeLayer(),
     ...anmLayers(),
     ...searchLayers(),

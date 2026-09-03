@@ -174,8 +174,9 @@ export default function MapComponentGL({
     queryTerrain,
   } = useTerrainGL(mapRef, mapInstance)
 
-  // Plancha geológica del SGC (PDF georreferenciado)
-  // Se declara con thematicMapRef para que pinte en el mapa superior con modo de fusión
+  // Si hay algo que enseñar en el lienzo de arriba. Mientras no lo haya, ese
+  // lienzo se apaga: son un contexto WebGL y un juego de teselas de más, y en un
+  // teléfono eso se nota.
   const [planchaActive, setPlanchaActive] = useState(false)
 
   const hasActiveOverlayLayers = useMemo(() => {
@@ -184,21 +185,28 @@ export default function MapComponentGL({
     return sgcActiva || anhActiva || planchaActive
   }, [layerState, planchaActive])
 
-  // Lienzo superior sincronizado para la fusión mix-blend-mode: multiply
+  // El lienzo de arriba, sincronizado con el de abajo, donde van las capas que
+  // se funden con el relieve.
   const { overlayMapRef, overlayMapInstance } = useDualMapSyncGL(
     mapRef,
     mapInstance,
     overlayContainerRef,
-    {
-      blendMode,
-      is3D,
-      exaggeration,
-      hasActiveOverlayLayers,
-    },
+    { is3D, exaggeration, hasActiveOverlayLayers },
   )
 
-  const thematicMapRef = overlayMapRef.current ? overlayMapRef : mapRef
-  const thematicMapInstance = overlayMapInstance || mapInstance
+  // Las capas temáticas viven **solo** en el mapa de arriba, y no hay respaldo
+  // al de abajo. Lo hubo, y era peor que no tenerlo: mientras el de arriba
+  // terminaba de construirse, los hooks le colgaban las capas al de abajo —que
+  // llevaba una copia con los mismos identificadores—, la dibujaba sin fundir y
+  // ahí se quedaba, congelada en el primer encuadre y por debajo de la buena.
+  // Con un solo destino, lo peor que pasa mientras tanto es que no se dibuje
+  // nada, que es un segundo y se arregla solo.
+  //
+  // `overlayMapRef` se pasa siempre; quien decide si hay mapa es la instancia,
+  // que es la que React sabe vigilar. Una referencia no dispara un repintado, y
+  // leerla al pintar dejaba a los hooks mirando el mapa de la vuelta anterior.
+  const thematicMapRef = overlayMapRef
+  const thematicMapInstance = overlayMapInstance
 
   // Las de geología del SGC sobre el mapa temático superpuesto con fusión
   const {
@@ -235,7 +243,7 @@ export default function MapComponentGL({
     cargarPlancha,
     quitarPlancha,
     encuadrarPlancha,
-  } = usePlanchaGL(thematicMapRef, thematicMapInstance)
+  } = usePlanchaGL(thematicMapRef, thematicMapInstance, mapRef)
 
   useEffect(() => {
     setPlanchaActive(Boolean(plancha?.canvas))
@@ -541,7 +549,12 @@ export default function MapComponentGL({
         // Sin esto, leer el lienzo devuelve una imagen en negro: WebGL descarta
         // el búfer en cuanto termina de pintar, salvo que se le pida guardarlo.
         // Es lo que hace posible exportar el mapa como imagen.
-        preserveDrawingBuffer: true,
+        //
+        // Y va **dentro de `canvasContextAttributes`**, que es donde MapLibre 6
+        // lo busca. Suelto se ignora sin decir nada, y la exportación seguía
+        // saliendo bien aquí solo por casualidad —se lee el lienzo en el mismo
+        // fotograma en que se pinta, antes de que el navegador lo descarte—.
+        canvasContextAttributes: { preserveDrawingBuffer: true },
         // La atribución propia de MapLibre se queda, en versión compacta: las
         // condiciones de uso de OSM la exigen. `false` la quitaría del todo.
         attributionControl: { compact: true },
@@ -617,11 +630,33 @@ export default function MapComponentGL({
           gane. Leaflet no sufría esto porque su CSS no toca `position` en el
           contenedor. */}
       <div ref={containerRef} className="absolute inset-0 h-full w-full z-0" />
+
+      {/* El lienzo de arriba, donde van las capas que se funden con el relieve.
+          Son **dos divs y no uno**, y es por la misma regla del comentario de
+          arriba: `.maplibregl-map` declara `position: relative` y pisa al
+          `absolute` de Tailwind. Al primer mapa eso no le hacía daño —es el
+          primero del flujo, así que aterriza igual en la esquina—, pero el
+          segundo se colocaba **detrás del primero en el flujo normal**, es
+          decir 900 px más abajo: fuera de la pantalla entera. El síntoma era
+          que ni la geología del SGC, ni los hidrocarburos de la ANH, ni la
+          plancha se veían nunca, mientras todo lo medible decía que estaban
+          bien —capa visible, imagen cargada, opacidad 0,6—. Se vio mirando
+          dónde caía el lienzo, no qué contenía.
+          Con el envoltorio, quien coloca es un div que MapLibre no toca, y el
+          de dentro se queda con el `position: relative` que quiera. */}
       <div
-        ref={overlayContainerRef}
-        className="absolute inset-0 h-full w-full pointer-events-none z-[1]"
-        style={{ mixBlendMode: blendMode === "multiply" ? "multiply" : "normal" }}
-      />
+        className="pointer-events-none absolute inset-0 z-[1] h-full w-full"
+        style={{
+          mixBlendMode: blendMode === "multiply" ? "multiply" : "normal",
+          // Escondido mientras no haya nada temático que enseñar: es un contexto
+          // WebGL y un juego de teselas de relieve de más, y en un teléfono eso
+          // se paga. Lo pone React al pintar y no un efecto a mano, para que el
+          // tamaño ya sea el bueno cuando los efectos vayan a medirlo.
+          display: hasActiveOverlayLayers ? "block" : "none",
+        }}
+      >
+        <div ref={overlayContainerRef} className="h-full w-full" />
+      </div>
 
       {/* Los controles del mapa van todos a la derecha y el panel de consulta se
           queda con la izquierda entera. Estaban los dos a la izquierda y se
