@@ -100,7 +100,40 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
       cancelar.current = control
       setPlancha({ cargando: true, titulo })
 
-      const reloj = setTimeout(() => control.abort(), TIMEOUT_MS)
+      // **Por qué se abortó, no solo si se abortó.** Son dos cosas distintas y
+      // este hook las trataba igual: que el usuario pida otra plancha —y
+      // entonces callar es lo correcto, porque la nueva petición ya puso su
+      // propio «cargando»— o que se acabe el tiempo, que hay que **decirlo**.
+      //
+      // Sin esta distinción, el `catch` de abajo se rendía en silencio ante el
+      // reloj y el panel se quedaba en «cargando» para siempre. El aviso de
+      // «tardó demasiado» estaba escrito y era inalcanzable: cuando llegaba,
+      // `signal.aborted` ya era cierto y el `return` de más arriba se lo comía.
+      let porTiempo = false
+      // En qué fase se quedó, para poder decirlo. «Tardó demasiado» a secas no
+      // sirve de nada: descargando apunta al SGC o a la conexión, y dibujando
+      // apunta al aparato. Son dos problemas y se arreglan por sitios distintos.
+      let fase = "descargando el PDF"
+      let dondeIba = null
+      const arrancado = Date.now()
+      const reloj = setTimeout(() => {
+        porTiempo = true
+        control.abort()
+      }, TIMEOUT_MS)
+      /** Se acabó el tiempo: decirlo, con la fase y los números. */
+      const seAcaboElTiempo = () => {
+        setPlancha({
+          titulo,
+          url,
+          error: `Se acabó el tiempo ${fase}.`,
+          detalle: [
+            `${Math.round((Date.now() - arrancado) / 1000)} s esperando, con ${TIMEOUT_MS / 1000} s de tope`,
+            dondeIba,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        })
+      }
       try {
         let archivo
         try {
@@ -121,11 +154,21 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           // —«se cortó»— es lo que distingue este caso de «el SGC no contesta».
           throw new FalloDeRed("La descarga se cortó antes de terminar.")
         }
-        if (control.signal.aborted) return
+        const descarga = Date.now() - arrancado
+        dondeIba = `${(archivo.byteLength / 1e6).toFixed(1)} MB bajados en ${Math.round(descarga / 1000)} s`
+        fase = "dibujando el PDF"
+        // Solo se calla si lo que abortó fue **otra petición**: esa ya puso su
+        // propio «cargando» y escribirle encima sería enseñar el fallo de algo
+        // que el usuario ya no espera. Si fue el reloj, se dice más abajo.
+        if (control.signal.aborted && !porTiempo) return
 
         let resultado
         try {
-          resultado = await prepararPlancha(archivo, cerca)
+          // La señal va también aquí, y no solo al `fetch`. Dibujar el PDF son
+          // varios segundos de cálculo, y sin esto el reloj saltaba mientras
+          // tanto sin poder detener nada: el navegador seguía trabajando en una
+          // plancha que ya nadie iba a ver.
+          resultado = await prepararPlancha(archivo, cerca, { signal: control.signal })
         } catch (fallo) {
           if (fallo?.name === "AbortError") throw fallo
           // Un PDF que llega incompleto revienta al abrirse, no al descargarse.
@@ -140,7 +183,9 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           })
           return
         }
-        if (control.signal.aborted) return
+        // Si llegó hasta aquí, el trabajo está hecho aunque el reloj haya
+        // saltado por los pelos: se enseña la plancha, que es mejor que tirarla.
+        if (control.signal.aborted && !porTiempo) return
 
         if (!resultado.ok) {
           setPlancha({
@@ -166,8 +211,24 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
         // un fotograma en el que la imagen nueva se dibuja con las esquinas
         // viejas, y la hoja aparece un instante en el sitio de la anterior.
         fuente.updateImage({ image: resultado.canvas, coordinates: resultado.corners })
-        setPlancha({ titulo, url, ...resultado })
+        setPlancha({
+          titulo,
+          url,
+          ...resultado,
+          // El tiempo de red se mide aquí, que es el único sitio que lo sabe; el
+          // resto lo trae `prepararPlancha`. Juntos son lo que el panel enseña.
+          tiempos: { ...resultado.tiempos, descarga },
+        })
       } catch (fallo) {
+        // Se acabó el tiempo: hay que decirlo. Aquí estaba el fallo que dejaba
+        // el panel girando para siempre — se comprobaba `signal.aborted`, que el
+        // reloj acababa de poner a cierto, y se salía sin escribir nada.
+        if (porTiempo) {
+          seAcaboElTiempo()
+          return
+        }
+        // Y si el aborto no fue del reloj, fue porque se pidió otra plancha: esa
+        // petición ya puso su propio «cargando» y pisar su estado sería peor.
         if (control.signal.aborted) return
         setPlancha({
           titulo,
