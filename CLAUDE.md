@@ -70,7 +70,9 @@ app/
     useAreaDownloadGL.js  Descarga por área (ZIP)
     useGeolocationGL.js   GPS y brújula
     useSgcLayersGL.js     Geología: encender, elegir departamento, consultar un punto
+    useAnhLayersGL.js     Lo mismo para las capas de hidrocarburos de la ANH
     usePlanchaGL.js       Traer la plancha en PDF y colocarla sobre el mapa
+    useDualMapSyncGL.js   El segundo mapa: el lienzo de arriba que se funde con el relieve
   utils/
     arcgis.js             fetch normalizado contra ArcGIS REST
     tenureLayers.js       Descubrimiento de índices de capa ANM
@@ -84,15 +86,19 @@ app/
     demTileLoader.js      Bajarlas, decodificarlas a alturas y recordarlas
     terrainRaster.js      Horn sobre el mosaico → los píxeles de la capa
     sgcLayers.js          Catálogo del SGC, direcciones y lectura de sus respuestas
+    anhLayers.js          Catálogo de la ANH: tierras, cuencas, pozos y sísmica
+    anmCache.js           Guarda un rato lo consultado a la ANM, acotado y con caducidad
     planchaGeo.js         Georreferenciar una plancha por la cuadrícula que trae dibujada
     planchaPdf.js         Abrir el PDF con pdf.js, medirlo y recortarle el mapa
     planchaUrl.js         Cuál de los enlaces de la ficha es la plancha, y cuál se deja pasar
     panelSize.js          Topes del panel de capas, que se puede redimensionar
     whenSized.js          Esperar a que un elemento mida algo antes de montarle un mapa
     mapUtils.js, mapLabelsGL.js, drawStyles.js
-  components/SgcPanel.jsx   Ficha del punto tocado y leyenda del SGC
+  components/SgcPanel.jsx   Ficha del punto tocado y leyenda del SGC y de la ANH
   components/PlanchaPanel.jsx  La plancha colocada: opacidad, encuadre y con qué error se ajustó
+  components/AttributeTable.jsx  La tabla de atributos, paginada
   api/sgc/route.js        Intermediario del SGC: imagen, árbol de capas, campos, identify y leyenda
+  api/anh/route.js        Lo mismo para la ANH
   api/plancha/route.js    Intermediario para el PDF de una plancha, con lista de dominios permitidos
 components/ui/            shadcn
 scripts/
@@ -498,7 +504,39 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     a 4–9 teselas DEM). MapLibre proyecta automáticamente la imagen rasterizada
     sobre la malla 3D del relieve.
 
-## Convenciones
+32. **El segundo mapa no se coloca solo por llevar las mismas clases que el
+    primero.** Las capas que se funden con el relieve —geología del SGC,
+    hidrocarburos de la ANH y la plancha— viven en un mapa aparte, encima, para
+    poder multiplicarlo contra el de abajo con `mix-blend-mode`. Ese contenedor
+    llevaba `absolute inset-0`, igual que el del mapa de abajo, y **acababa 900
+    píxeles por debajo del borde inferior de la pantalla**: es la trampa nº 25
+    otra vez, `.maplibregl-map` declarando `position: relative` y pisando al
+    `absolute` de Tailwind. Al primer mapa no le hacía daño porque es el primero
+    del flujo y aterriza igual en la esquina; al segundo lo mandaba detrás del
+    primero.
+
+    El resultado era que **ninguna de esas capas se veía nunca**, y es otra vez
+    la trampa nº 10: todo lo que se puede medir decía que estaban bien —capa
+    `visible`, imagen cargada, textura creada, opacidad 0,6, esquinas correctas—.
+    Se vio preguntando por el `getBoundingClientRect()` del lienzo, o sea mirando
+    **dónde** cae en vez de **qué** lleva. Ahora son dos divs: el de fuera coloca
+    y funde, y el de dentro es el único que toca MapLibre.
+
+    Y de paso: **el mismo identificador de capa no puede existir en los dos
+    mapas.** Estuvo en los dos estilos, y no es una copia inofensiva —el hook que
+    les pone la imagen apunta a uno o a otro según cómo caiga el arranque, y la
+    que se quedara con la copia de abajo se dibujaba sin fundir y congelada en el
+    primer encuadre—. Las capas temáticas están **solo** en `createOverlayStyle`.
+
+33. **En MapLibre 6 los atributos del lienzo van dentro de
+    `canvasContextAttributes`.** Sueltos en las opciones del mapa —que es donde
+    estaban, y donde los pone toda la documentación vieja— se ignoran **sin un
+    aviso**. El que importa es `preserveDrawingBuffer`: sin él, leer el lienzo
+    para exportar la imagen devuelve negro. El mapa de abajo se salvaba de
+    casualidad, porque se le pide repintar y se lee en el mismo fotograma; el de
+    arriba no, y la foto salía con el mapa base y sin la geología encima. Además
+    hay que repintarlo a propósito antes de leerlo: WebGL vacía el búfer en
+    cuanto el navegador compone.
 
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
   actual documenta el bug que motivó cada decisión — mantenlo, es lo que hace

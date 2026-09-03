@@ -48,7 +48,18 @@ const MENSAJES = {
   "origen-desconocido": "La cuadrícula no cae cerca de esta plancha en ninguno de los orígenes conocidos.",
 }
 
-export const usePlanchaGL = (mapRef, mapInstance) => {
+/**
+ * @param {Object} mapRef mapa donde se **dibuja** la plancha (el lienzo de arriba)
+ * @param {Object} mapInstance ese mismo mapa, como estado, para saber cuándo existe
+ * @param {Object} cameraRef mapa que se **mueve** al pulsar «Encuadrar»
+ *
+ * Son dos mapas distintos y tienen que serlo. La plancha se pinta arriba, en el
+ * lienzo que se funde con el relieve, pero ese lienzo no manda: solo sigue al de
+ * abajo. Con `fitBounds` sobre él, el botón de encuadrar no hacía nada visible
+ * —el de arriba se movía y el primer movimiento del de abajo lo devolvía a su
+ * sitio—. La cámara la lleva siempre el mapa de abajo.
+ */
+export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
   /** `null` | `{cargando:true}` | `{plancha}` | `{error}` */
   const [plancha, setPlancha] = useState(null)
   const [opacity, setOpacity] = useState(1)
@@ -179,7 +190,7 @@ export const usePlanchaGL = (mapRef, mapInstance) => {
 
   /** Lleva el mapa a la hoja entera. */
   const encuadrar = useCallback(() => {
-    const map = mapRef.current
+    const map = cameraRef.current
     const esquinas = plancha?.corners
     if (!map || !esquinas) return
     const lngs = esquinas.map(([lng]) => lng)
@@ -191,7 +202,7 @@ export const usePlanchaGL = (mapRef, mapInstance) => {
       ],
       { padding: 40, duration: 600 },
     )
-  }, [mapRef, plancha])
+  }, [cameraRef, plancha])
 
   // Al desmontar, cortar lo que estuviera en marcha: una plancha tarda decenas
   // de segundos y el usuario puede irse antes.
