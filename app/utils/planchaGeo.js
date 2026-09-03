@@ -479,13 +479,14 @@ export const detectFrame = (
       esTrazo(gray, { width, height, vertical, i, dentroX, dentroY, oscuro, cobertura })
 
     /** El centro del trazo que pasa por `i`, midiéndolo a los dos lados. */
-    const centro = (i) => {
+    const centroDe = (i, cumple) => {
       let uno = i
-      while (solo(uno - 1)) uno -= 1
+      while (cumple(uno - 1)) uno -= 1
       let otro = i
-      while (solo(otro + 1)) otro += 1
+      while (cumple(otro + 1)) otro += 1
       return (uno + otro) / 2
     }
+    const centro = (i) => centroDe(i, solo)
 
     // **Primero, si la última línea de la cuadrícula ya es el marco.** Pasa
     // siempre que la hoja está recortada por un valor redondo de la cuadrícula,
@@ -517,6 +518,28 @@ export const detectFrame = (
       // devuelve su centro, que es donde está la coordenada; quedarse con el
       // primer píxel lo correría medio trazo hacia afuera.
       if (solo(i)) return centro(i)
+    }
+
+    // Y si el barrido no encontró nada, **un paso de cuadrícula más afuera**.
+    //
+    // Ahí es exactamente donde estaría la siguiente línea, y en muchas hojas el
+    // borde del mapa *es* esa línea: lo que pasa es que su rótulo va escrito
+    // entero en la esquina —«1.240.000 mN»— y no en la fila de rótulos
+    // abreviados, así que el ajuste nunca la emparejó y la búsqueda arrancaba
+    // desde la línea de más adentro.
+    //
+    // Va al final y con el criterio de contraste a propósito: solo se pregunta
+    // donde hoy no se encontraba nada y la hoja salía corta —un paso entero de
+    // cuadrícula, cinco kilómetros en una 1:100.000—. Donde el barrido sí
+    // encuentra el marco, esto no llega a correr y nada cambia.
+    const predicho = Math.round(desde + hacia * paso)
+    const tenue = (i) =>
+      i >= 0 && i <= limite &&
+      esTrazoTenue(gray, { width, height, vertical, i, dentroX, dentroY, cobertura })
+    for (let d = 0; d <= 3; d += 1) {
+      for (const i of [predicho - d, predicho + d]) {
+        if (tenue(i)) return centroDe(i, tenue)
+      }
     }
     return null
   }
@@ -561,6 +584,46 @@ const esTrazo = (gray, { width, height, vertical, i, dentroX, dentroY, oscuro, c
   for (let j = desdeJ; j <= hastaJ; j += 1) {
     const valor = vertical ? gray[j * width + k] : gray[k * width + j]
     if (valor < oscuro) cuenta += 1
+  }
+  return cuenta / largo > cobertura
+}
+
+/**
+ * Lo mismo, pero mirando **cuánto más oscuro** es el trazo que lo que tiene al
+ * lado, en vez de exigirle un gris concreto.
+ *
+ * Hace falta porque el nivel de gris de una línea fina no es una propiedad de la
+ * hoja sino del suavizado con que el navegador la dibuja. En la plancha 130
+ * (Gómez Plata) el borde de arriba del mapa sale con **media 109**: toda la fila
+ * por debajo de 140, pero solo el 41 % por debajo de 110, que es lo que pedía
+ * `esTrazo`. El de abajo, en la misma hoja, sale a media 36. Los dos bordes del
+ * mismo papel, uno casi negro y el otro a medio tono, y el umbral fijo caía justo
+ * en medio: el marco se quedaba sin borde de arriba y la hoja salía cinco
+ * kilómetros corta.
+ *
+ * Es el mismo criterio que usa `detectGridLines` —que sí encontraba esa línea— y
+ * no lleva ningún número sobre cómo tiene que verse una hoja.
+ */
+const esTrazoTenue = (
+  gray,
+  { width, height, vertical, i, dentroX, dentroY, cobertura, contraste = 12, separacion = 4 },
+) => {
+  const desdeJ = Math.max(0, Math.round(vertical ? dentroY[0] : dentroX[0]))
+  const hastaJ = Math.min((vertical ? height : width) - 1, Math.round(vertical ? dentroY[1] : dentroX[1]))
+  const largo = hastaJ - desdeJ
+  if (largo < 10) return false
+
+  const k = Math.round(i)
+  const tope = (vertical ? width : height) - 1
+  const d = Math.max(2, Math.round(separacion))
+  if (k - d < 0 || k + d > tope) return false
+
+  let cuenta = 0
+  for (let j = desdeJ; j <= hastaJ; j += 1) {
+    const centro = vertical ? gray[j * width + k] : gray[k * width + j]
+    const antes = vertical ? gray[j * width + k - d] : gray[(k - d) * width + j]
+    const despues = vertical ? gray[j * width + k + d] : gray[(k + d) * width + j]
+    if ((antes + despues) / 2 - centro > contraste) cuenta += 1
   }
   return cuenta / largo > cobertura
 }
