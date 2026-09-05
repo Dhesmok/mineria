@@ -283,41 +283,6 @@ export default function MapComponentGL({
     }
   }, [basemapOpen])
 
-  // Recapturar automáticamente la textura del área seleccionada al cambiar mapa base
-  useEffect(() => {
-    if (!blockModelOpen || !selectedRectangle?.bbox || !mapRef.current) return
-    const map = mapRef.current
-
-    const updateTexture = () => {
-      try {
-        const [minLng, minLat, maxLng, maxLat] = selectedRectangle.bbox
-        const p1 = map.project([minLng, maxLat])
-        const p2 = map.project([maxLng, minLat])
-        const mapCanvas = map.getCanvas?.()
-        if (mapCanvas && p1 && p2) {
-          const x = Math.min(p1.x, p2.x)
-          const y = Math.min(p1.y, p2.y)
-          const w = Math.abs(p2.x - p1.x)
-          const h = Math.abs(p2.y - p1.y)
-          if (w > 10 && h > 10 && x >= 0 && y >= 0 && x + w <= mapCanvas.width && y + h <= mapCanvas.height) {
-            const offCanvas = document.createElement("canvas")
-            offCanvas.width = 1024
-            offCanvas.height = 1024
-            const ctx = offCanvas.getContext("2d")
-            if (ctx) {
-              ctx.drawImage(mapCanvas, x, y, w, h, 0, 0, 1024, 1024)
-              const newTex = offCanvas.toDataURL("image/jpeg", 0.9)
-              setSelectedRectangle((prev) => (prev ? { ...prev, textureDataUrl: newTex } : null))
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    map.once("idle", updateTexture)
-  }, [basemap, blockModelOpen, selectedRectangle?.bbox])
 
   const [terrainOpen, setTerrainOpen] = useState(false)
   const terrainBtnRef = useRef(null)

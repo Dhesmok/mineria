@@ -22,7 +22,7 @@ import {
 } from "lucide-react"
 
 import { loadMosaic } from "../utils/demTileLoader"
-import { tileRangeFor, tilesOf, DEM_MAX_ZOOM, TILE_SIZE } from "../utils/demTiles"
+import { TILE_SIZE } from "../utils/demTiles"
 import { TERRAIN_TILE_TEMPLATE } from "../utils/mapStyles"
 
 /**
@@ -37,34 +37,34 @@ function createHomogeneousEarthTexture() {
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
 
-  // 1. Degradado base de tierra natural cálida
+  // 1. Degradado base de tierra natural cálida (estilo suelo vivo / corte geológico)
   const grad = ctx.createLinearGradient(0, 0, 0, 512)
-  grad.addColorStop(0, "#5a3d28")   // Capa superior orgánica (humus)
-  grad.addColorStop(0.12, "#7a5336") // Suelo fértil cálido
-  grad.addColorStop(0.5, "#885f40")  // Estrato de tierra franca / arcillosa
-  grad.addColorStop(0.85, "#6d472c") // Subsuelo denso
-  grad.addColorStop(1, "#52331c")    // Base profunda
+  grad.addColorStop(0, "#5a3a22")    // Capa superficial orgánica (humus)
+  grad.addColorStop(0.15, "#784f30") // Suelo fértil cálido
+  grad.addColorStop(0.48, "#8e623d") // Estrato de tierra franca arcillosa
+  grad.addColorStop(0.82, "#6f4829") // Subsuelo compacto
+  grad.addColorStop(1, "#52331b")    // Base profunda
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, 512, 512)
 
   // 2. Gránulos minerales y motas de suelo natural (efecto tierra compacta)
-  for (let i = 0; i < 4500; i++) {
+  for (let i = 0; i < 5000; i++) {
     const px = Math.random() * 512
     const py = Math.random() * 512
-    const sz = 0.9 + Math.random() * 2.2
+    const sz = 0.8 + Math.random() * 2.0
     const rnd = Math.random()
-    if (rnd < 0.4) {
-      ctx.fillStyle = "rgba(45, 26, 12, 0.28)" // Mota de humus oscuro
-    } else if (rnd < 0.75) {
-      ctx.fillStyle = "rgba(168, 122, 85, 0.25)" // Partícula arcillosa clara
+    if (rnd < 0.38) {
+      ctx.fillStyle = "rgba(35, 20, 10, 0.32)" // Humus oscuro
+    } else if (rnd < 0.72) {
+      ctx.fillStyle = "rgba(180, 130, 90, 0.28)" // Partícula arcillosa clara
     } else {
-      ctx.fillStyle = "rgba(235, 205, 175, 0.18)" // Mota mineral / cuarzo
+      ctx.fillStyle = "rgba(235, 205, 175, 0.20)" // Mota mineral / cuarzo
     }
     ctx.fillRect(px, py, sz, sz)
   }
 
-  // 3. Finas micro-láminas horizontales orgánicas
-  for (let y = 0; y < 512; y += 12) {
+  // 3. Finas micro-láminas horizontales orgánicas de sedimentación
+  for (let y = 0; y < 512; y += 10) {
     const alpha = 0.03 + Math.random() * 0.04
     ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`
     ctx.fillRect(0, y, 512, 1.5)
@@ -77,95 +77,232 @@ function createHomogeneousEarthTexture() {
 }
 
 /**
- * Textura topográfica por defecto en caso de no haber captura disponible
+ * Textura topográfica de relieve sombreado de alta definición si no hay satélite
  */
-function createFallbackTerrainTexture() {
-  if (typeof document === "undefined") return null
+function createReliefBasemapTexture(grid, segX, segZ) {
+  if (typeof document === "undefined" || !grid || grid.length === 0) return null
+  const width = segX + 1
+  const height = segZ + 1
   const canvas = document.createElement("canvas")
   canvas.width = 1024
   canvas.height = 1024
   const ctx = canvas.getContext("2d")
-  if (!ctx) return null
+  if (!ctx || typeof ctx.createImageData !== "function") return null
 
-  const grad = ctx.createLinearGradient(0, 1024, 0, 0)
-  grad.addColorStop(0, "#4a5d3e")
-  grad.addColorStop(0.5, "#6b6255")
-  grad.addColorStop(1, "#8c8275")
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, 1024, 1024)
+  let minH = Infinity
+  let maxH = -Infinity
+  for (let i = 0; i < grid.length; i++) {
+    const h = grid[i]
+    if (h < minH) minH = h
+    if (h > maxH) maxH = h
+  }
+  const span = Math.max(1, maxH - minH)
 
+  const imgData = ctx.createImageData(1024, 1024)
+  const data = imgData.data
+
+  for (let py = 0; py < 1024; py++) {
+    const v = py / 1023
+    const gy = v * (height - 1)
+    const y0 = Math.floor(gy)
+    const y1 = Math.min(height - 1, y0 + 1)
+    const fy = gy - y0
+
+    for (let px = 0; px < 1024; px++) {
+      const u = px / 1023
+      const gx = u * (width - 1)
+      const x0 = Math.floor(gx)
+      const x1 = Math.min(width - 1, x0 + 1)
+      const fx = gx - x0
+
+      const h00 = grid[y0 * width + x0] || minH
+      const h10 = grid[y0 * width + x1] || minH
+      const h01 = grid[y1 * width + x0] || minH
+      const h11 = grid[y1 * width + x1] || minH
+
+      const h = (1 - fx) * (1 - fy) * h00 + fx * (1 - fy) * h10 + (1 - fx) * fy * h01 + fx * fy * h11
+      const normH = (h - minH) / span
+
+      // Gradiente hipsométrico sobrio y elegante (verde valle -> ocre -> pardo alta montaña)
+      let r = 70, g = 90, b = 60
+      if (normH < 0.25) {
+        const t = normH / 0.25
+        r = 55 + t * 40
+        g = 85 + t * 30
+        b = 55 + t * 15
+      } else if (normH < 0.6) {
+        const t = (normH - 0.25) / 0.35
+        r = 95 + t * 55
+        g = 115 + t * 25
+        b = 70 + t * 15
+      } else {
+        const t = (normH - 0.6) / 0.4
+        r = 150 + t * 45
+        g = 140 + t * 45
+        b = 115 + t * 55
+      }
+
+      const idx = (py * 1024 + px) * 4
+      data[idx] = Math.round(r)
+      data[idx + 1] = Math.round(g)
+      data[idx + 2] = Math.round(b)
+      data[idx + 3] = 255
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0)
   const texture = new THREE.CanvasTexture(canvas)
-  texture.wrapS = THREE.ClampToEdgeWrapping
-  texture.wrapT = THREE.ClampToEdgeWrapping
+  texture.generateMipmaps = true
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.magFilter = THREE.LinearFilter
   return texture
 }
 
 /**
- * Muestreo bilineal preciso sobre el mosaico de alturas para preservar
- * la fidelidad de 30 metros del SRTM sin escalones artificiales.
+ * Genera un Normal Map de Máxima Definición (Algoritmo Sobel / Horn 3x3)
+ * directamente sobre el grid de elevación del DEM.
+ * Convierte cada pendiente, cresta, cañón y relieve en micro-sombras y brillos nítidos.
  */
-function sampleMosaicBilinear(lng, lat, heights, range) {
-  const nTiles = 2 ** range.zoom
-  const mercX = ((lng + 180) / 360) * nTiles
-  const sinLat = Math.sin((lat * Math.PI) / 180)
-  const mercY =
-    ((1 - Math.log((1 + sinLat) / (1 - sinLat)) / (2 * Math.PI)) / 2) * nTiles
+function createNormalMapFromDEM(grid, segX, segZ, metersPerThreeUnit, exag) {
+  if (typeof document === "undefined" || !grid || grid.length === 0) return null
+  const width = segX + 1
+  const height = segZ + 1
+  const outW = 1024
+  const outH = 1024
+  const canvas = document.createElement("canvas")
+  canvas.width = outW
+  canvas.height = outH
+  const ctx = canvas.getContext("2d")
+  if (!ctx || typeof ctx.createImageData !== "function") return null
 
-  const colF = (mercX - range.minX) * TILE_SIZE
-  const rowF = (mercY - range.minY) * TILE_SIZE
+  const imgData = ctx.createImageData(outW, outH)
+  const data = imgData.data
 
-  const c0 = Math.floor(colF)
-  const r0 = Math.floor(rowF)
-  const fx = colF - c0
-  const fy = rowF - r0
+  const getH = (x, y) => grid[y * width + x] || 0
 
-  const getH = (c, r) => {
-    const cc = Math.max(0, Math.min(range.cols - 1, c))
-    const rr = Math.max(0, Math.min(range.rows - 1, r))
-    const v = heights[rr * range.cols + cc]
-    return Number.isFinite(v) && v > -500 && v < 9000 ? v : null
+  // Factor de escala normalizado para acentuar el relieve físico de forma orgánica
+  const scale = (Math.max(exag, 0.5) / Math.max(metersPerThreeUnit, 1)) * 36.0
+
+  for (let py = 0; py < outH; py++) {
+    const gy = (py / (outH - 1)) * (height - 1)
+    const y0 = Math.max(0, Math.floor(gy) - 1)
+    const yC = Math.floor(gy)
+    const y1 = Math.min(height - 1, Math.floor(gy) + 1)
+
+    for (let px = 0; px < outW; px++) {
+      const gx = (px / (outW - 1)) * (width - 1)
+      const x0 = Math.max(0, Math.floor(gx) - 1)
+      const xC = Math.floor(gx)
+      const x1 = Math.min(width - 1, Math.floor(gx) + 1)
+
+      // Operador Sobel 3x3 para derivada continua suave libre de artefactos
+      const z00 = getH(x0, y0)
+      const z10 = getH(xC, y0)
+      const z20 = getH(x1, y0)
+      const z01 = getH(x0, yC)
+      const z21 = getH(x1, yC)
+      const z02 = getH(x0, y1)
+      const z12 = getH(xC, y1)
+      const z22 = getH(x1, y1)
+
+      const dx = (z20 + 2 * z21 + z22) - (z00 + 2 * z01 + z02)
+      const dy = (z02 + 2 * z12 + z22) - (z00 + 2 * z10 + z20)
+
+      // Vector normal en el espacio tangente
+      let nx = -dx * scale
+      let ny = dy * scale
+      let nz = 8.0
+
+      const len = Math.hypot(nx, ny, nz)
+      nx /= len
+      ny /= len
+      nz /= len
+
+      const idx = (py * outW + px) * 4
+      data[idx] = Math.round((nx * 0.5 + 0.5) * 255)
+      data[idx + 1] = Math.round((ny * 0.5 + 0.5) * 255)
+      data[idx + 2] = Math.round((nz * 0.5 + 0.5) * 255)
+      data[idx + 3] = 255
+    }
   }
 
-  const h00 = getH(c0, r0)
-  const h10 = getH(c0 + 1, r0) ?? h00
-  const h01 = getH(c0, r0 + 1) ?? h00
-  const h11 = getH(c0 + 1, r0 + 1) ?? h00
+  ctx.putImageData(imgData, 0, 0)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.wrapS = THREE.ClampToEdgeWrapping
+  tex.wrapT = THREE.ClampToEdgeWrapping
+  tex.generateMipmaps = true
+  tex.minFilter = THREE.LinearMipmapLinearFilter
+  tex.magFilter = THREE.LinearFilter
+  tex.needsUpdate = true
+  return tex
+}
 
-  if (h00 === null) return null
-  return (1 - fx) * (1 - fy) * h00 + fx * (1 - fy) * h10 + (1 - fx) * fy * h01 + fx * fy * h11
+/**
+ * Calcula de forma determinista el zoom óptimo para teselas satelitales
+ * permitiendo hasta 49 teselas para garantizar nitidez nativa fotorealista (2048x2048)
+ */
+function getOptimalSatelliteTileZoom(minLng, minLat, maxLng, maxLat, maxTiles = 49) {
+  for (let z = 18; z >= 12; z--) {
+    const n = 2 ** z
+    const lng2t = (lon) => Math.floor(((lon + 180) / 360) * n)
+    const lat2normY = (lat) => {
+      const sin = Math.sin((lat * Math.PI) / 180)
+      const clampedSin = Math.max(-0.9999, Math.min(0.9999, sin))
+      return (1 - Math.log((1 + clampedSin) / (1 - clampedSin)) / (2 * Math.PI)) / 2
+    }
+    const lat2t = (lat) => Math.floor(lat2normY(lat) * n)
+
+    const x0 = lng2t(minLng)
+    const x1 = lng2t(maxLng)
+    const y0 = lat2t(maxLat)
+    const y1 = lat2t(minLat)
+    const tx = Math.max(1, x1 - x0 + 1)
+    const ty = Math.max(1, y1 - y0 + 1)
+    if (tx * ty <= maxTiles) {
+      return { zoom: z, minX: x0, maxX: x1, minY: y0, maxY: y1, tilesX: tx, tilesY: ty }
+    }
+  }
+  return { zoom: 13, minX: 0, maxX: 1, minY: 0, maxY: 1, tilesX: 2, tilesY: 2 }
+}
+
+/**
+ * Calcula el zoom óptimo para el DEM permitiendo hasta nivel 15 (AWS Terrarium nativo)
+ */
+function getOptimalDemZoom(minLng, minLat, maxLng, maxLat, maxTiles = 25) {
+  for (let z = 15; z >= 11; z--) {
+    const n = 2 ** z
+    const lng2t = (lon) => Math.floor(((lon + 180) / 360) * n)
+    const lat2normY = (lat) => {
+      const sin = Math.sin((lat * Math.PI) / 180)
+      const clampedSin = Math.max(-0.9999, Math.min(0.9999, sin))
+      return (1 - Math.log((1 + clampedSin) / (1 - clampedSin)) / (2 * Math.PI)) / 2
+    }
+    const lat2t = (lat) => Math.floor(lat2normY(lat) * n)
+
+    const minX = lng2t(minLng)
+    const maxX = lng2t(maxLng)
+    const minY = lat2t(maxLat)
+    const maxY = lat2t(minLat)
+    const tx = Math.max(1, maxX - minX + 1)
+    const ty = Math.max(1, maxY - minY + 1)
+    if (tx * ty <= maxTiles) {
+      return { zoom: z, minX, maxX, minY, maxY, tilesX: tx, tilesY: ty, cols: tx * TILE_SIZE, rows: ty * TILE_SIZE }
+    }
+  }
+  return { zoom: 11, minX: 0, maxX: 1, minY: 0, maxY: 1, tilesX: 2, tilesY: 2, cols: 512, rows: 512 }
 }
 
 /**
  * Descarga y compone directamente las teselas de satélite a resolución nativa
- * para el recuadro especificado, sin tocar el mapa principal de MapLibre.
+ * para el recuadro especificado con máxima nitidez (2048x2048) y soporte de todos los mapas base.
  */
-async function loadHighResSatelliteTexture(bbox, basemap = "satellite") {
+async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
   if (typeof document === "undefined" || !bbox) return null
   const [minLng, minLat, maxLng, maxLat] = bbox
 
-  const dLng = Math.abs(maxLng - minLng)
-  const dLat = Math.abs(maxLat - minLat)
-  const maxSpan = Math.max(dLng, dLat)
-  let zoom = 15
-  if (maxSpan > 0.25) zoom = 13
-  else if (maxSpan > 0.1) zoom = 14
-  else if (maxSpan < 0.035) zoom = 16
-
+  const opt = getOptimalSatelliteTileZoom(minLng, minLat, maxLng, maxLat, 49)
+  const { zoom, minX, maxX, minY, maxY, tilesX, tilesY } = opt
   const nTiles = 2 ** zoom
-  const lng2tile = (lon) => Math.floor(((lon + 180) / 360) * nTiles)
-  const lat2tile = (lat) => {
-    const sin = Math.sin((lat * Math.PI) / 180)
-    const clampedSin = Math.max(-0.9999, Math.min(0.9999, sin))
-    return Math.floor(((1 - Math.log((1 + clampedSin) / (1 - clampedSin)) / (2 * Math.PI)) / 2) * nTiles)
-  }
-
-  const minX = lng2tile(minLng)
-  const maxX = lng2tile(maxLng)
-  const minY = lat2tile(maxLat)
-  const maxY = lat2tile(minLat)
-
-  const tilesX = Math.max(1, maxX - minX + 1)
-  const tilesY = Math.max(1, maxY - minY + 1)
 
   // Plantilla de URL según mapa base
   const getTileUrl = (x, y, z) => {
@@ -178,7 +315,10 @@ async function loadHighResSatelliteTexture(bbox, basemap = "satellite") {
     if (basemap === "esri" || basemap === "esriImagery") {
       return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`
     }
-    // Google Satellite por defecto
+    if (basemap === "positron") {
+      return `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`
+    }
+    // Google Satellite por defecto con subdominio balanceado
     const s = Math.abs((x + y) % 4)
     return `https://mt${s}.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${z}`
   }
@@ -198,14 +338,19 @@ async function loadHighResSatelliteTexture(bbox, basemap = "satellite") {
     for (let tx = 0; tx < tilesX; tx++) {
       const tileX = minX + tx
       const tileY = minY + ty
-      const url = getTileUrl(tileX, tileY, zoom)
+      // Añadir parámetro para forzar lectura CORS limpia sin riesgo de caché contaminada
+      const url = getTileUrl(tileX, tileY, zoom) + (getTileUrl(tileX, tileY, zoom).includes("?") ? "&" : "?") + "_cb=1"
 
       const p = new Promise((resolve) => {
         const img = new Image()
         img.crossOrigin = "anonymous"
         img.onload = () => {
-          fullCtx.drawImage(img, tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX)
-          resolve(true)
+          try {
+            fullCtx.drawImage(img, tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX)
+            resolve(true)
+          } catch {
+            resolve(false)
+          }
         }
         img.onerror = () => resolve(false)
         img.src = url
@@ -216,7 +361,7 @@ async function loadHighResSatelliteTexture(bbox, basemap = "satellite") {
 
   await Promise.all(tilePromises)
 
-  // Recorte georreferenciado exacto del bbox dentro del mosaico
+  // Recorte georreferenciado exacto del bbox dentro del mosaico descargado
   const tile2lng = (x) => (x / nTiles) * 360 - 180
   const tile2lat = (y) => {
     const n = Math.PI - (2 * Math.PI * y) / nTiles
@@ -246,6 +391,7 @@ async function loadHighResSatelliteTexture(bbox, basemap = "satellite") {
 
   if (cropW <= 0 || cropH <= 0) return null
 
+  // Salida a 2048x2048 de ultra alta nitidez con filtrado bilineal de alta precisión
   const finalCanvas = document.createElement("canvas")
   finalCanvas.width = 2048
   finalCanvas.height = 2048
@@ -256,91 +402,62 @@ async function loadHighResSatelliteTexture(bbox, basemap = "satellite") {
   finalCtx.imageSmoothingQuality = "high"
   finalCtx.drawImage(fullCanvas, cropX, cropY, cropW, cropH, 0, 0, 2048, 2048)
 
-  return finalCanvas.toDataURL("image/jpeg", 0.95)
+  return finalCanvas
 }
 
 /**
- * Muestreo de cota en un punto a partir de la función elevationAt o MapLibre
- */
-function sampleElevation(lng, lat, elevationAt, map) {
-  if (typeof elevationAt === "function") {
-    try {
-      const e = elevationAt({ lng, lat })
-      if (typeof e === "number" && !isNaN(e) && e > -500 && e < 9000) {
-        return e
-      }
-    } catch {
-      // continuar
-    }
-  }
-
-  if (map?.queryTerrainElevation) {
-    try {
-      const e = map.queryTerrainElevation([lng, lat])
-      if (typeof e === "number" && !isNaN(e)) {
-        return e
-      }
-    } catch {
-      // continuar
-    }
-  }
-
-  return 1800
-}
-
-/**
- * Crea la etiqueta 2D del Pin (Tag micro-proporcionado, nítido y estilizado)
+ * Crea la etiqueta 2D del Pin (Micro-tag estilizado, discreto y nítido)
  */
 function createPinSprite(text, color = "#10b981") {
   if (typeof document === "undefined") return null
   const canvas = document.createElement("canvas")
-  canvas.width = 512
-  canvas.height = 140
+  canvas.width = 320
+  canvas.height = 96
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
 
   // Sombra suave proyectada debajo de la cápsula
   ctx.shadowColor = "rgba(0, 0, 0, 0.45)"
-  ctx.shadowBlur = 12
-  ctx.shadowOffsetY = 6
+  ctx.shadowBlur = 10
+  ctx.shadowOffsetY = 4
 
-  // Fondo cápsula redondeada blanca moderna
-  ctx.fillStyle = "#ffffff"
+  // Fondo cápsula redondeada oscura moderna (estilo HUD técnico minimalista)
+  ctx.fillStyle = "rgba(15, 23, 42, 0.92)"
   ctx.beginPath()
-  if (ctx.roundRect) ctx.roundRect(16, 16, 480, 100, 28)
-  else ctx.rect(16, 16, 480, 100)
+  if (ctx.roundRect) ctx.roundRect(10, 10, 300, 76, 20)
+  else ctx.rect(10, 10, 300, 76)
   ctx.fill()
 
   // Borde sutil
   ctx.shadowColor = "transparent"
-  ctx.lineWidth = 3.5
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.08)"
+  ctx.lineWidth = 2.5
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)"
   ctx.stroke()
 
   // Punto indicador de color a la izquierda
   ctx.fillStyle = color
   ctx.beginPath()
-  ctx.arc(58, 66, 16, 0, Math.PI * 2)
+  ctx.arc(42, 48, 11, 0, Math.PI * 2)
   ctx.fill()
 
-  // Texto nítido de alta legibilidad
-  ctx.fillStyle = "#0f172a"
-  ctx.font = "bold 38px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+  // Texto nítido y esbelto
+  ctx.fillStyle = "#ffffff"
+  ctx.font = "600 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
   ctx.textAlign = "left"
   ctx.textBaseline = "middle"
-  ctx.fillText(text.slice(0, 18), 90, 68)
+  ctx.fillText(text.slice(0, 16), 68, 49)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.minFilter = THREE.LinearFilter
   const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false })
   const sprite = new THREE.Sprite(spriteMat)
-  // Escala delicada y proporcional (no invasiva sobre el terreno)
-  sprite.scale.set(0.48, 0.13, 1)
+  // Micro-escala delicada (no invasiva)
+  sprite.scale.set(0.32, 0.096, 1)
   return sprite
 }
 
 /**
- * Crea el objeto 3D de un Pin estilizado (micro-aguja fina + bolita en tierra + etiqueta mini)
+ * Crea el objeto 3D de un Pin arquitectónico esbelto
  */
 function buildPinMesh(pin) {
   const group = new THREE.Group()
@@ -348,25 +465,25 @@ function buildPinMesh(pin) {
   group.userData = { pinId: pin.id }
 
   // 1. Bolita de contacto precisa en el suelo
-  const dotGeom = new THREE.SphereGeometry(0.018, 12, 12)
+  const dotGeom = new THREE.SphereGeometry(0.012, 12, 12)
   const dotMat = new THREE.MeshStandardMaterial({
     color: pin.color || 0x10b981,
-    metalness: 0.85,
-    roughness: 0.2,
+    metalness: 0.9,
+    roughness: 0.15,
     emissive: pin.color || 0x10b981,
-    emissiveIntensity: 0.25,
+    emissiveIntensity: 0.3,
   })
   const dot = new THREE.Mesh(dotGeom, dotMat)
-  dot.position.y = 0.012
+  dot.position.y = 0.008
   group.add(dot)
 
-  // 2. Mástil / aguja metálica fina plateada (proporcional y esbelta)
-  const needleHeight = 0.35
-  const needleGeom = new THREE.CylinderGeometry(0.007, 0.007, needleHeight, 8)
+  // 2. Mástil / aguja metálica fina (fina y arquitectónica)
+  const needleHeight = 0.24
+  const needleGeom = new THREE.CylinderGeometry(0.004, 0.004, needleHeight, 8)
   const needleMat = new THREE.MeshStandardMaterial({
-    color: 0xe2e8f0,
+    color: 0xf1f5f9,
     metalness: 0.95,
-    roughness: 0.15,
+    roughness: 0.1,
   })
   const needle = new THREE.Mesh(needleGeom, needleMat)
   needle.position.y = needleHeight / 2
@@ -375,7 +492,7 @@ function buildPinMesh(pin) {
   // 3. Etiqueta / Sprite proporcionada
   const sprite = createPinSprite(pin.text, pin.color || "#10b981")
   if (sprite) {
-    sprite.position.y = needleHeight + 0.09
+    sprite.position.y = needleHeight + 0.06
     group.add(sprite)
   }
 
@@ -384,14 +501,14 @@ function buildPinMesh(pin) {
 }
 
 /**
- * Componente de Bloque 3D del Terreno (Fidelidad Maqueta Diorama Física)
+ * Componente de Bloque 3D del Terreno (Máxima Definición Topográfica y Fotorrealismo)
  */
 export default function BlockModel3D({
   isOpen,
   onClose,
   rectangle,
   elevationAt,
-  map,
+  map: _map,
   basemap = "satellite",
   onRedrawRectangle,
   isMaximized,
@@ -428,7 +545,7 @@ export default function BlockModel3D({
 
   const [wireframe, setWireframe] = useState(false)
   const [studioTheme, setStudioTheme] = useState("dark") // Por defecto oscuro
-  const [demLoaded, setDemLoaded] = useState(false)
+  const [_demLoaded, setDemLoaded] = useState(false)
 
   // Sistema interactivo de Pines personalizados
   const [pins, setPins] = useState([])
@@ -466,6 +583,10 @@ export default function BlockModel3D({
     [metersPerThreeUnit],
   )
 
+  // Resolución de malla densa (200x200 = 40,000 vértices para capturar cada arista y cañón)
+  const segX = 200
+  const segZ = 200
+
   // 1. Inicialización de Escena Three.js
   useEffect(() => {
     if (!isOpen || !containerRef.current) return
@@ -480,11 +601,11 @@ export default function BlockModel3D({
     sceneRef.current = scene
 
     // 2. Camera
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000)
-    camera.position.set(13.5, 11, 14.5)
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 1000)
+    camera.position.set(13.5, 10.5, 14.5)
     cameraRef.current = camera
 
-    // 3. Renderer
+    // 3. Renderer con alta precisión y antialiasing
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: "high-performance",
@@ -510,18 +631,19 @@ export default function BlockModel3D({
     controls.target.set(0, 0, 0)
     controlsRef.current = controls
 
-    // 5. Luces de Estudio Fotorrealistas
+    // 5. Iluminación de Estudio: Luz solar rasante para crear contraste y sombras de relieve
     const hemiLight = new THREE.HemisphereLight(
-      studioTheme === "light" ? 0xffffff : 0x384252,
+      studioTheme === "light" ? 0xffffff : 0x475569,
       studioTheme === "light" ? 0xd0d5cc : 0x18181b,
-      studioTheme === "light" ? 1.1 : 0.75,
+      studioTheme === "light" ? 1.0 : 0.65,
     )
     hemiLight.position.set(0, 50, 0)
     scene.add(hemiLight)
     hemiLightRef.current = hemiLight
 
-    const dirLight = new THREE.DirectionalLight(0xfffaed, 2.8)
-    dirLight.position.set(12, 22, 12)
+    // Luz solar rasante (altura 13 en lugar de cenital) para que valles y crestas proyecten relieve real
+    const dirLight = new THREE.DirectionalLight(0xfffaed, 3.4)
+    dirLight.position.set(13, 13, 13)
     dirLight.castShadow = true
     dirLight.shadow.mapSize.width = 2048
     dirLight.shadow.mapSize.height = 2048
@@ -531,13 +653,13 @@ export default function BlockModel3D({
     dirLight.shadow.camera.right = 16
     dirLight.shadow.camera.top = 16
     dirLight.shadow.camera.bottom = -16
-    dirLight.shadow.bias = -0.0004
-    dirLight.shadow.normalBias = 0.02
+    dirLight.shadow.bias = -0.0003
+    dirLight.shadow.normalBias = 0.025
     scene.add(dirLight)
     sunLightRef.current = dirLight
 
-    const fillLight = new THREE.DirectionalLight(0xa5c4d4, studioTheme === "light" ? 0.65 : 0.4)
-    fillLight.position.set(-14, 12, -14)
+    const fillLight = new THREE.DirectionalLight(0xa5c4d4, studioTheme === "light" ? 0.6 : 0.4)
+    fillLight.position.set(-13, 9, -13)
     scene.add(fillLight)
 
     // 6. Construcción del Bloque Geológico Fotorrealista
@@ -545,11 +667,7 @@ export default function BlockModel3D({
     scene.add(blockGroup)
     blockGroupRef.current = blockGroup
 
-    // Resolución de malla densa (160x160 = 25,600 vértices para topografía SRTM 30m real)
-    const segX = 160
-    const segZ = 160
-
-    // Cuestreo inicial síncrono
+    // Muestreo inicial síncrono rápido
     const grid = []
     let minElev = Infinity
     let maxElev = -Infinity
@@ -560,7 +678,13 @@ export default function BlockModel3D({
       for (let i = 0; i <= segX; i++) {
         const u = i / segX
         const lng = minLng + u * (maxLng - minLng)
-        const e = sampleElevation(lng, lat, elevationAt, map)
+        let e = 1800
+        if (typeof elevationAt === "function") {
+          try {
+            const val = elevationAt({ lng, lat })
+            if (Number.isFinite(val)) e = val
+          } catch {}
+        }
         grid.push(e)
         if (e < minElev) minElev = e
         if (e > maxElev) maxElev = e
@@ -586,28 +710,11 @@ export default function BlockModel3D({
     topPos.needsUpdate = true
     topGeom.computeVertexNormals()
 
-    // Textura de superficie
-    let terrainTexture = null
-    if (rectangle?.textureDataUrl) {
-      const img = new Image()
-      img.crossOrigin = "anonymous"
-      img.src = rectangle.textureDataUrl
-      terrainTexture = new THREE.Texture(img)
-      terrainTexture.generateMipmaps = true
-      terrainTexture.minFilter = THREE.LinearMipmapLinearFilter
-      terrainTexture.magFilter = THREE.LinearFilter
-      if (renderer?.capabilities) {
-        terrainTexture.anisotropy = renderer.capabilities.getMaxAnisotropy()
-      }
-      img.onload = () => {
-        terrainTexture.needsUpdate = true
-      }
-    } else {
-      terrainTexture = createFallbackTerrainTexture()
-    }
+    // Textura inicial mientras carga el mosaico de satélite en alta resolución
+    const fallbackTex = createReliefBasemapTexture(grid, segX, segZ)
 
     const topMat = new THREE.MeshStandardMaterial({
-      map: terrainTexture,
+      map: fallbackTex,
       roughness: 0.75,
       metalness: 0.04,
       flatShading: false,
@@ -734,32 +841,40 @@ export default function BlockModel3D({
       controls.dispose()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, aspect, maxLat, minLat, maxLng, minLng, studioTheme, elevationAt, map, computeHeight, exaggeration, W, D])
+  }, [isOpen, aspect, maxLat, minLat, maxLng, minLng, studioTheme, computeHeight, exaggeration, W, D])
 
-  // --- Carga de Teselas de Satélite en Ultra Alta Resolución (2048x2048 nativas) ---
+  // --- Carga de Teselas de Satélite en Ultra Alta Resolución Nativa (2048x2048) ---
   useEffect(() => {
     if (!isOpen || !rectangle?.bbox) return
     let canceled = false
 
-    loadHighResSatelliteTexture(rectangle.bbox, basemap).then((highResDataUrl) => {
-      if (canceled || !highResDataUrl || !topMeshRef.current?.material) return
-      const img = new Image()
-      img.crossOrigin = "anonymous"
-      img.src = highResDataUrl
-      img.onload = () => {
-        if (canceled) return
-        const tex = new THREE.Texture(img)
-        tex.generateMipmaps = true
-        tex.minFilter = THREE.LinearMipmapLinearFilter
-        tex.magFilter = THREE.LinearFilter
-        if (rendererRef.current?.capabilities) {
-          tex.anisotropy = rendererRef.current.capabilities.getMaxAnisotropy()
-        }
-        tex.needsUpdate = true
-        if (topMeshRef.current?.material) {
-          topMeshRef.current.material.map = tex
+    if (basemap === "relief") {
+      // Si el mapa base es relieve, generar textura hipsométrica analítica directa
+      if (elevationGridRef.current && elevationGridRef.current.length > 0 && topMeshRef.current?.material) {
+        const reliefTex = createReliefBasemapTexture(elevationGridRef.current, segX, segZ)
+        if (reliefTex) {
+          topMeshRef.current.material.map = reliefTex
           topMeshRef.current.material.needsUpdate = true
         }
+      }
+      return
+    }
+
+    loadHighResSatelliteCanvas(rectangle.bbox, basemap).then((canvas) => {
+      if (canceled || !canvas || !topMeshRef.current?.material) return
+
+      const tex = new THREE.CanvasTexture(canvas)
+      tex.generateMipmaps = true
+      tex.minFilter = THREE.LinearMipmapLinearFilter
+      tex.magFilter = THREE.LinearFilter
+      if (rendererRef.current?.capabilities) {
+        tex.anisotropy = rendererRef.current.capabilities.getMaxAnisotropy()
+      }
+      tex.needsUpdate = true
+
+      if (topMeshRef.current?.material) {
+        topMeshRef.current.material.map = tex
+        topMeshRef.current.material.needsUpdate = true
       }
     })
 
@@ -768,39 +883,73 @@ export default function BlockModel3D({
     }
   }, [isOpen, rectangle?.bbox, basemap])
 
-  // --- Carga Asíncrona del DEM Real de 30 metros (Nivel nativo SRTM 13) ---
+  // --- Carga Asíncrona del DEM Real de Alta Definición (Nivel nativo hasta 15 con interpolación bilineal) ---
   useEffect(() => {
     if (!isOpen || !rectangle?.bbox) return
 
     let canceled = false
     const [minLng, minLat, maxLng, maxLat] = rectangle.bbox
 
-    // Nivel 13 = resolución nativa de 30m de SRTM
-    const targetZoom = DEM_MAX_ZOOM
-    const range = tileRangeFor({ west: minLng, east: maxLng, south: minLat, north: maxLat }, targetZoom)
-    const tiles = tilesOf(range)
+    // Selección de zoom óptimo de DEM (hasta nivel 15 = celdas de ~3 metros)
+    const range = getOptimalDemZoom(minLng, minLat, maxLng, maxLat, 25)
+
+    const tiles = []
+    for (let y = range.minY; y <= range.maxY; y++) {
+      for (let x = range.minX; x <= range.maxX; x++) {
+        tiles.push({
+          z: range.zoom,
+          x,
+          y,
+          colOffset: (x - range.minX) * TILE_SIZE,
+          rowOffset: (y - range.minY) * TILE_SIZE,
+        })
+      }
+    }
 
     loadMosaic(TERRAIN_TILE_TEMPLATE, tiles, range)
       .then(({ heights, missing }) => {
         if (canceled || missing === tiles.length) return
 
-        const segX = 160
-        const segZ = 160
         const realGrid = []
         let rMin = Infinity
         let rMax = -Infinity
 
+        const celdas = TILE_SIZE * (2 ** range.zoom)
+        const lat2normY = (lat) => {
+          const sin = Math.sin((lat * Math.PI) / 180)
+          const clampedSin = Math.max(-0.9999, Math.min(0.9999, sin))
+          return (1 - Math.log((1 + clampedSin) / (1 - clampedSin)) / (2 * Math.PI)) / 2
+        }
+
+        // Muestreo con INTERPOLACIÓN BILINEAL SUAVE Y CONTINUA
         for (let j = 0; j <= segZ; j++) {
           const v = j / segZ
           const lat = maxLat - v * (maxLat - minLat)
+          const exactRow = lat2normY(lat) * celdas - range.minY * TILE_SIZE
+          const r0 = Math.max(0, Math.min(range.rows - 1, Math.floor(exactRow)))
+          const r1 = Math.max(0, Math.min(range.rows - 1, r0 + 1))
+          const fy = Math.max(0, Math.min(1, exactRow - r0))
+
           for (let i = 0; i <= segX; i++) {
             const u = i / segX
             const lng = minLng + u * (maxLng - minLng)
-            const val = sampleMosaicBilinear(lng, lat, heights, range)
-            let elev = val
-            if (elev === null) {
-              elev = sampleElevation(lng, lat, elevationAt, map)
+            const exactCol = ((lng + 180) / 360) * celdas - range.minX * TILE_SIZE
+            const c0 = Math.max(0, Math.min(range.cols - 1, Math.floor(exactCol)))
+            const c1 = Math.max(0, Math.min(range.cols - 1, c0 + 1))
+            const fx = Math.max(0, Math.min(1, exactCol - c0))
+
+            const h00 = heights[r0 * range.cols + c0]
+            const h10 = heights[r0 * range.cols + c1]
+            const h01 = heights[r1 * range.cols + c0]
+            const h11 = heights[r1 * range.cols + c1]
+
+            let elev = 1800
+            if (Number.isFinite(h00) && Number.isFinite(h10) && Number.isFinite(h01) && Number.isFinite(h11)) {
+              elev = (1 - fx) * (1 - fy) * h00 + fx * (1 - fy) * h10 + (1 - fx) * fy * h01 + fx * fy * h11
+            } else if (Number.isFinite(h00)) {
+              elev = h00
             }
+
             realGrid.push(elev)
             if (elev < rMin) rMin = elev
             if (elev > rMax) rMax = elev
@@ -815,7 +964,7 @@ export default function BlockModel3D({
         elevationGridRef.current = realGrid
         setDemLoaded(true)
 
-        // Deformar la geometría con la topografía real SRTM 30m
+        // Deformar la geometría con la topografía real SRTM de alta definición
         if (topMeshRef.current && wallsMeshRef.current) {
           const topPos = topMeshRef.current.geometry.attributes.position
           for (let k = 0; k < topPos.count; k++) {
@@ -825,7 +974,24 @@ export default function BlockModel3D({
           topPos.needsUpdate = true
           topMeshRef.current.geometry.computeVertexNormals()
 
-          // Actualizar paredes laterales
+          // Generar Normal Map fotorealista Horn 3x3 para resaltar crestas, cañones y laderas
+          const normalTex = createNormalMapFromDEM(realGrid, segX, segZ, metersPerThreeUnit, exaggeration)
+          if (normalTex && topMeshRef.current.material) {
+            topMeshRef.current.material.normalMap = normalTex
+            topMeshRef.current.material.normalScale.set(2.2, 2.2)
+            topMeshRef.current.material.needsUpdate = true
+          }
+
+          // Si el mapa base es relieve, actualizar la textura de relieve
+          if (basemap === "relief") {
+            const reliefTex = createReliefBasemapTexture(realGrid, segX, segZ)
+            if (reliefTex) {
+              topMeshRef.current.material.map = reliefTex
+              topMeshRef.current.material.needsUpdate = true
+            }
+          }
+
+          // Actualizar paredes laterales de falda
           const wallPos = wallsMeshRef.current.geometry.attributes.position
           let idx = 0
 
@@ -859,19 +1025,17 @@ export default function BlockModel3D({
     return () => {
       canceled = true
     }
-  }, [isOpen, rectangle?.bbox, exaggeration, elevationAt, map, computeHeight])
+  }, [isOpen, rectangle?.bbox, exaggeration, computeHeight, metersPerThreeUnit, basemap])
 
-  // Actualización de exageración vertical
+  // Actualización reactiva de exageración vertical
   useEffect(() => {
     if (!topMeshRef.current || !wallsMeshRef.current) return
     const grid = elevationGridRef.current
     if (!grid || grid.length === 0) return
 
     const minElev = elevationMinRef.current
-    const segX = 160
-    const segZ = 160
 
-    // Top
+    // Top Mesh
     const topPos = topMeshRef.current.geometry.attributes.position
     for (let k = 0; k < topPos.count; k++) {
       const e = grid[k] ?? minElev
@@ -879,6 +1043,14 @@ export default function BlockModel3D({
     }
     topPos.needsUpdate = true
     topMeshRef.current.geometry.computeVertexNormals()
+
+    // Actualizar normal map con la nueva exageración
+    const normalTex = createNormalMapFromDEM(grid, segX, segZ, metersPerThreeUnit, exaggeration)
+    if (normalTex && topMeshRef.current.material) {
+      topMeshRef.current.material.normalMap = normalTex
+      topMeshRef.current.material.normalScale.set(2.2, 2.2)
+      topMeshRef.current.material.needsUpdate = true
+    }
 
     // Paredes
     const wallPos = wallsMeshRef.current.geometry.attributes.position
@@ -916,10 +1088,10 @@ export default function BlockModel3D({
         }
       })
     }
-  }, [exaggeration, computeHeight, pins])
+  }, [exaggeration, computeHeight, metersPerThreeUnit, pins])
 
   // Actualización de ángulo solar y sombras
-  const updateSunAngle = useCallback((deg, height = 18, intensity = 2.8, color = 0xfffaed) => {
+  const updateSunAngle = useCallback((deg, height = 13, intensity = 3.4, color = 0xfffaed) => {
     setSunAngle(deg)
     if (!sunLightRef.current) return
     const rad = (deg * Math.PI) / 180
@@ -934,11 +1106,11 @@ export default function BlockModel3D({
   const changeSunPreset = useCallback((preset) => {
     setSunPreset(preset)
     if (preset === "morning") {
-      updateSunAngle(120, 8, 2.2, 0xffedd5)
+      updateSunAngle(120, 7, 2.8, 0xffedd5)
     } else if (preset === "noon") {
-      updateSunAngle(45, 22, 2.8, 0xfffaed)
+      updateSunAngle(45, 13, 3.4, 0xfffaed)
     } else if (preset === "sunset") {
-      updateSunAngle(310, 5, 2.3, 0xfdba74)
+      updateSunAngle(310, 5, 3.0, 0xfdba74)
     }
   }, [updateSunAngle])
 
@@ -971,37 +1143,34 @@ export default function BlockModel3D({
       if (!isAddingPin || !containerRef.current || !cameraRef.current || !topMeshRef.current) return
 
       const rect = containerRef.current.getBoundingClientRect()
-      const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1
-      const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      const mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      )
 
       const raycaster = new THREE.Raycaster()
-      raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), cameraRef.current)
-      const intersects = raycaster.intersectObject(topMeshRef.current)
+      raycaster.setFromCamera(mouse, cameraRef.current)
 
+      const intersects = raycaster.intersectObject(topMeshRef.current)
       if (intersects.length > 0) {
         const hit = intersects[0]
         const p = hit.point
 
-        const halfW = W / 2
-        const halfD = D / 2
-        const u = Math.max(0, Math.min(1, (p.x + halfW) / W))
-        const v = Math.max(0, Math.min(1, (p.z + halfD) / D))
-
-        const lng = minLng + u * (maxLng - minLng)
-        const lat = maxLat - v * (maxLat - minLat)
-
+        // Convertir coordenadas 3D a cota estimada
         const minElev = elevationMinRef.current
-        const realElev = minElev + (p.y / Math.max(exaggeration, 0.1)) * metersPerThreeUnit
+        const maxElev = elevationMaxRef.current
+        const reliefSpan = maxElev - minElev
+        const relY = Math.max(0, p.y)
+        const totalHeight = computeHeight(maxElev, minElev, exaggeration)
+        const elev = Math.round(minElev + (totalHeight > 0 ? (relY / totalHeight) * reliefSpan : 0))
 
         const newPin = {
-          id: Date.now(),
+          id: "pin_" + Date.now(),
           x: p.x,
           y: p.y,
           z: p.z,
-          lng,
-          lat,
-          elev: Math.round(realElev),
-          text: `Punto ${pins.length + 1}`,
+          elev,
+          text: `Punto ${pins.length + 1} (${elev}m)`,
           color: "#10b981",
         }
 
@@ -1011,397 +1180,326 @@ export default function BlockModel3D({
         setIsAddingPin(false)
       }
     },
-    [isAddingPin, W, D, minLng, maxLng, minLat, maxLat, exaggeration, metersPerThreeUnit, pins.length],
+    [isAddingPin, pins.length, exaggeration, computeHeight],
   )
 
-  const handleResetCamera = useCallback(() => {
-    if (!cameraRef.current || !controlsRef.current) return
-    cameraRef.current.position.set(13.5, 11, 14.5)
-    controlsRef.current.target.set(0, 0, 0)
-    controlsRef.current.update()
-    if (blockGroupRef.current) blockGroupRef.current.rotation.y = 0
-  }, [])
-
-  const handleSnapshot = useCallback(() => {
+  const handleCaptureScreenshot = () => {
     if (!rendererRef.current) return
     const dataUrl = rendererRef.current.domElement.toDataURL("image/png")
     const a = document.createElement("a")
     a.href = dataUrl
-    a.download = "bloque_3d_terreno.png"
+    a.download = `bloque-3d-${Date.now()}.png`
     a.click()
-  }, [])
+  }
+
+  const handleResetCamera = () => {
+    if (!cameraRef.current || !controlsRef.current) return
+    cameraRef.current.position.set(13.5, 10.5, 14.5)
+    controlsRef.current.target.set(0, 0, 0)
+    controlsRef.current.update()
+  }
+
+  const handleDeletePin = (id) => {
+    setPins((prev) => prev.filter((p) => p.id !== id))
+    if (selectedPinId === id) {
+      setSelectedPinId(null)
+      setEditingPinText("")
+    }
+  }
+
+  const handleUpdatePinText = (id, text) => {
+    setPins((prev) => prev.map((p) => (p.id === id ? { ...p, text } : p)))
+  }
+
+  const handleUpdatePinColor = (id, color) => {
+    setPins((prev) => prev.map((p) => (p.id === id ? { ...p, color } : p)))
+  }
 
   if (!isOpen) return null
 
-  const isLight = studioTheme === "light"
-  const selectedPin = pins.find((p) => p.id === selectedPinId)
-
   return (
-    <div
-      className={`relative h-full w-full overflow-hidden flex flex-col select-none transition-colors duration-300 ${
-        isLight ? "bg-[#dfe6dc]" : "bg-[#09090b]"
-      }`}
-    >
-      {/* Barra de cabecera Studio */}
-      <div
-        className={`absolute top-3 left-3 right-3 z-20 flex items-center justify-between rounded-2xl border px-4 py-2.5 shadow-2xl backdrop-blur-2xl transition-all ${
-          isLight
-            ? "border-zinc-300/80 bg-white/85 text-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.08)]"
-            : "border-zinc-800/80 bg-[#09090b]/85 text-zinc-100 shadow-[0_8px_30px_rgb(0,0,0,0.5)]"
-        }`}
-      >
-        <div className="flex items-center gap-2.5">
-          <div
-            className={`flex h-8 w-8 items-center justify-center rounded-xl border ${
-              isLight
-                ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-            }`}
-          >
-            <Square className="h-4 w-4" />
+    <div className="relative h-full w-full select-none overflow-hidden bg-[#09090b] text-zinc-100 font-sans">
+      {/* 1. Barra de Herramientas Superior Flotante */}
+      <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between pointer-events-none">
+        {/* Lado Izquierdo: Título y Datos Topográficos Reales */}
+        <div className="pointer-events-auto flex items-center gap-2 rounded-xl bg-zinc-900/90 px-3 py-2 border border-zinc-800 shadow-2xl backdrop-blur-xl">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+            <Compass className="h-4 w-4" />
           </div>
-          <div>
+          <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-semibold tracking-tight">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
                 Bloque 3D del Terreno
               </span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-medium border ${
-                  demLoaded
-                    ? isLight
-                      ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                      : "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                    : "bg-zinc-200 text-zinc-700 border-zinc-300"
-                }`}
-              >
-                {demLoaded ? "DEM Real 30m" : "Relieve Real"}
+              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                Relieve Real
               </span>
             </div>
-            <p className={`text-[11px] ${isLight ? "text-zinc-600" : "text-zinc-400"}`}>
-              {widthKm} km × {heightKm} km · Cota: {Math.round(elevationMinRef.current)} m a {Math.round(elevationMaxRef.current)} m
-            </p>
+            <span className="text-[11px] text-zinc-400">
+              {widthKm} km × {heightKm} km • Cota {Math.round(elevationMinRef.current)}m - {Math.round(elevationMaxRef.current)}m
+            </span>
           </div>
         </div>
 
-        {/* Acciones de cabecera */}
-        <div className="flex items-center gap-1.5">
+        {/* Lado Derecho: Acciones y Cierre */}
+        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl bg-zinc-900/90 p-1.5 border border-zinc-800 shadow-2xl backdrop-blur-xl">
           {onRedrawRectangle && (
             <button
               type="button"
               onClick={onRedrawRectangle}
-              title="Cambiar área (dibujar otro rectángulo con zoom libre)"
-              className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11.5px] font-medium transition-all active:scale-95 ${
-                isLight
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                  : "border-emerald-500/30 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/40"
-              }`}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+              title="Seleccionar otra área en el mapa"
             >
-              <Square className="h-3.5 w-3.5" />
+              <Square className="h-3.5 w-3.5 text-emerald-400" />
               <span>Cambiar área</span>
             </button>
           )}
 
-          {/* Botón interactivo para añadir pin personalizado */}
           <button
             type="button"
-            onClick={() => setIsAddingPin((p) => !p)}
-            title={isAddingPin ? "Cancelar colocación de pin" : "Colocar un pin sobre el relieve 3D"}
-            className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11.5px] font-medium transition-all active:scale-95 ${
-              isAddingPin
-                ? "border-amber-500 bg-amber-500/20 text-amber-300 animate-pulse"
-                : isLight
-                ? "border-zinc-300 bg-white/90 text-zinc-700 hover:bg-zinc-100"
-                : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
+            onClick={handleCaptureScreenshot}
+            className="flex items-center gap-1 rounded-lg p-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+            title="Capturar imagen en alta resolución"
           >
-            <MapPin className="h-3.5 w-3.5" />
-            <span>{isAddingPin ? "Haz clic en el mapa" : "Agregar Pin"}</span>
+            <Camera className="h-4 w-4" />
           </button>
 
-          {/* Toggle de tema de estudio */}
-          <button
-            type="button"
-            onClick={() => setStudioTheme((t) => (t === "light" ? "dark" : "light"))}
-            title={isLight ? "Cambiar a estudio oscuro" : "Cambiar a estudio claro (diorama)"}
-            className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all active:scale-95 ${
-              isLight
-                ? "border-zinc-300 bg-white/90 text-zinc-700 hover:bg-zinc-100"
-                : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <Palette className="h-3.5 w-3.5" />
-          </button>
-
-          {/* Restablecer cámara */}
           <button
             type="button"
             onClick={handleResetCamera}
-            title="Restablecer posición de cámara 3D"
-            className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all active:scale-95 ${
-              isLight
-                ? "border-zinc-300 bg-white/90 text-zinc-700 hover:bg-zinc-100"
-                : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
+            className="flex items-center gap-1 rounded-lg p-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+            title="Restablecer vista de cámara"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
+            <RotateCcw className="h-4 w-4" />
           </button>
 
-          {/* Captura de pantalla PNG */}
-          <button
-            type="button"
-            onClick={handleSnapshot}
-            title="Descargar imagen PNG del bloque 3D"
-            className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all active:scale-95 ${
-              isLight
-                ? "border-zinc-300 bg-white/90 text-zinc-700 hover:bg-zinc-100"
-                : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <Camera className="h-3.5 w-3.5" />
-          </button>
-
-          {/* Maximizar / Restaurar panel */}
           {onToggleMaximize && (
             <button
               type="button"
               onClick={onToggleMaximize}
-              title={isMaximized ? "Restaurar pantalla dividida" : "Maximizar vista del bloque 3D"}
-              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all active:scale-95 ${
-                isLight
-                  ? "border-zinc-300 bg-white/90 text-zinc-700 hover:bg-zinc-100"
-                  : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-              }`}
+              className="flex items-center gap-1 rounded-lg p-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+              title={isMaximized ? "Restaurar vista dividida" : "Pantalla completa"}
             >
-              {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
           )}
 
-          {/* Botón cerrar */}
           <button
             type="button"
             onClick={onClose}
+            className="flex items-center gap-1 rounded-lg p-1.5 text-zinc-400 hover:bg-red-500/20 hover:text-red-400 transition-colors"
             title="Cerrar bloque 3D del terreno"
-            className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all active:scale-95 ${
-              isLight
-                ? "border-zinc-300 bg-white/90 text-zinc-700 hover:bg-red-50 hover:text-red-600"
-                : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-red-950/40 hover:text-red-400"
-            }`}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Editor flotante de Pin Seleccionado */}
-      {selectedPin && (
-        <div
-          className={`absolute top-16 right-3 z-30 flex flex-col gap-2 rounded-2xl border p-3 shadow-2xl backdrop-blur-2xl transition-all animate-in fade-in zoom-in-95 ${
-            isLight
-              ? "border-zinc-300 bg-white/95 text-zinc-800"
-              : "border-zinc-800 bg-[#09090b]/95 text-zinc-100"
-          } w-64`}
-        >
-          <div className="flex items-center justify-between border-b pb-2 border-zinc-200 dark:border-zinc-800">
-            <div className="flex items-center gap-1.5 text-xs font-semibold">
-              <MapPin className="h-3.5 w-3.5 text-emerald-500" />
-              <span>Editar Marcador 3D</span>
-            </div>
+      {/* 2. Lienzo WebGL Three.js con soporte para clics de pines */}
+      <div
+        ref={containerRef}
+        onClick={handleCanvasClick}
+        className={`h-full w-full cursor-grab active:cursor-grabbing ${
+          isAddingPin ? "cursor-crosshair active:cursor-crosshair" : ""
+        }`}
+      />
+
+      {/* 3. Panel Flotante Inferior de Controles Fotorrealistas */}
+      <div className="absolute bottom-4 left-4 right-4 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        {/* Controles Topográficos y de Iluminación */}
+        <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-2xl bg-zinc-900/90 p-2 border border-zinc-800 shadow-2xl backdrop-blur-xl">
+          {/* Exageración Vertical Fotorrealista */}
+          <div className="flex items-center gap-2 rounded-xl bg-zinc-950/60 px-2.5 py-1.5 border border-zinc-800/80">
+            <span className="text-[11px] font-semibold text-zinc-400">Exageración:</span>
+            <input
+              type="range"
+              min="0.5"
+              max="5"
+              step="0.1"
+              value={exaggeration}
+              onChange={(e) => setExaggeration(parseFloat(e.target.value))}
+              aria-label="Exageración vertical"
+              className="w-16 h-1.5 accent-emerald-500 bg-zinc-800 rounded cursor-pointer"
+            />
+            <span className="text-xs font-bold text-emerald-400 min-w-[2.2rem]">
+              {exaggeration.toFixed(1)}×
+            </span>
+          </div>
+
+          {/* Iluminación Solar */}
+          <div className="flex items-center gap-1.5 rounded-xl bg-zinc-950/60 px-2.5 py-1.5 border border-zinc-800/80">
+            <Sun className="h-3.5 w-3.5 text-amber-400" />
+            <span className="text-[11px] font-semibold text-zinc-400">Sol:</span>
+            <input
+              type="range"
+              min="0"
+              max="360"
+              value={sunAngle}
+              onChange={(e) => updateSunAngle(parseInt(e.target.value))}
+              title="Girar posición del sol para ver sombras dinámicas"
+              aria-label="Posición solar"
+              className="w-14 h-1.5 accent-amber-400 bg-zinc-800 rounded cursor-pointer"
+            />
+            <span className="text-xs font-bold text-amber-400 min-w-[2rem]">
+              {sunAngle}°
+            </span>
+            {[
+              { id: "morning", label: "Mañana" },
+              { id: "noon", label: "Mediodía" },
+              { id: "sunset", label: "Tarde" },
+            ].map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => changeSunPreset(p.id)}
+                className={`rounded-md px-2 py-0.5 text-xs font-medium transition-all ${
+                  sunPreset === p.id
+                    ? "bg-amber-500 text-zinc-950 font-bold shadow-md shadow-amber-500/20"
+                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Giro Automático */}
+          <button
+            type="button"
+            onClick={() => setAutoRotate((r) => !r)}
+            className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all border ${
+              autoRotate
+                ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-lg shadow-emerald-500/10"
+                : "bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            }`}
+            title="Rotar automáticamente el bloque"
+          >
+            {autoRotate ? <Pause className="h-3.5 w-3.5 text-emerald-400" /> : <Play className="h-3.5 w-3.5" />}
+            <span>Girar</span>
+          </button>
+
+          {/* Malla Wireframe */}
+          <button
+            type="button"
+            onClick={() => setWireframe((w) => !w)}
+            className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all border ${
+              wireframe
+                ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                : "bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            }`}
+            title="Alternar vista de malla de triángulos"
+          >
+            <Grid3X3 className="h-3.5 w-3.5" />
+            <span>Malla</span>
+          </button>
+
+          {/* Tema del Estudio (Oscuro por defecto / Claro) */}
+          <button
+            type="button"
+            onClick={() => setStudioTheme((t) => (t === "dark" ? "light" : "dark"))}
+            className="flex items-center gap-1.5 rounded-xl bg-zinc-950/60 px-2.5 py-1.5 text-xs font-medium text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-zinc-200 transition-all"
+            title="Alternar fondo de estudio"
+          >
+            <Palette className="h-3.5 w-3.5 text-zinc-400" />
+            <span>{studioTheme === "dark" ? "Fondo Claro" : "Fondo Oscuro"}</span>
+          </button>
+        </div>
+
+        {/* Sistema de Pines Personalizados */}
+        <div className="pointer-events-auto flex items-center gap-2 rounded-2xl bg-zinc-900/90 p-2 border border-zinc-800 shadow-2xl backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => setIsAddingPin((p) => !p)}
+            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all border ${
+              isAddingPin
+                ? "bg-emerald-500 text-zinc-950 border-emerald-400 shadow-lg shadow-emerald-500/25 animate-pulse"
+                : "bg-zinc-950/60 border-zinc-800/80 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            }`}
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            <span>{isAddingPin ? "Haz clic en el terreno" : "+ Agregar Pin"}</span>
+          </button>
+
+          {pins.length > 0 && (
+            <span className="text-[11px] font-medium text-zinc-400 px-1">
+              {pins.length} {pins.length === 1 ? "pin" : "pines"}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* 4. Modal / Drawer para editar texto y color del pin seleccionado */}
+      {selectedPinId && (
+        <div className="absolute top-16 right-4 z-40 w-72 rounded-2xl bg-zinc-900/95 p-3.5 border border-zinc-800 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-right-4">
+          <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800">
+            <span className="text-xs font-bold text-zinc-200">Editar Marcador</span>
             <button
               type="button"
               onClick={() => setSelectedPinId(null)}
-              className="rounded p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
             >
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-medium text-zinc-400">Texto del Pin:</label>
-            <div className="flex items-center gap-1">
+          <div className="flex flex-col gap-2.5">
+            <div>
+              <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                Etiqueta
+              </label>
               <input
                 type="text"
                 value={editingPinText}
-                onChange={(e) => setEditingPinText(e.target.value)}
-                maxLength={20}
-                className={`flex-1 rounded-lg border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-emerald-500 ${
-                  isLight
-                    ? "border-zinc-300 bg-zinc-50 text-zinc-800"
-                    : "border-zinc-700 bg-zinc-900 text-zinc-100"
-                }`}
+                onChange={(e) => {
+                  setEditingPinText(e.target.value)
+                  handleUpdatePinText(selectedPinId, e.target.value)
+                }}
+                className="w-full rounded-lg bg-zinc-950 px-2.5 py-1.5 text-xs text-white border border-zinc-700 focus:border-emerald-500 focus:outline-none"
+                placeholder="Nombre del punto..."
               />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                Color
+              </label>
+              <div className="flex items-center gap-2">
+                {["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"].map((col) => (
+                  <button
+                    key={col}
+                    type="button"
+                    onClick={() => handleUpdatePinColor(selectedPinId, col)}
+                    className="h-5 w-5 rounded-full border border-white/20 transition-transform hover:scale-110 flex items-center justify-center"
+                    style={{ backgroundColor: col }}
+                  >
+                    {pins.find((p) => p.id === selectedPinId)?.color === col && (
+                      <Check className="h-3 w-3 text-white" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80">
               <button
                 type="button"
-                onClick={() => {
-                  setPins((prev) =>
-                    prev.map((p) => (p.id === selectedPin.id ? { ...p, text: editingPinText } : p)),
-                  )
-                }}
-                title="Guardar texto"
-                className="rounded-lg bg-emerald-600 p-1.5 text-white hover:bg-emerald-700"
+                onClick={() => handleDeletePin(selectedPinId)}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
               >
-                <Check className="h-3 w-3" />
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Eliminar</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPinId(null)}
+                className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-semibold text-zinc-950 hover:bg-emerald-400 transition-colors"
+              >
+                Listo
               </button>
             </div>
           </div>
-
-          <div className="flex flex-col gap-1.5 pt-1">
-            <label className="text-[11px] font-medium text-zinc-400">Color:</label>
-            <div className="flex items-center gap-2">
-              {[
-                { label: "Verde", hex: "#10b981" },
-                { label: "Ámbar", hex: "#f59e0b" },
-                { label: "Azul", hex: "#3b82f6" },
-                { label: "Rosa", hex: "#ec4899" },
-                { label: "Púrpura", hex: "#8b5cf6" },
-              ].map((c) => (
-                <button
-                  key={c.hex}
-                  type="button"
-                  onClick={() => {
-                    setPins((prev) =>
-                      prev.map((p) => (p.id === selectedPin.id ? { ...p, color: c.hex } : p)),
-                    )
-                  }}
-                  className={`h-5 w-5 rounded-full border-2 transition-transform hover:scale-110 ${
-                    selectedPin.color === c.hex ? "scale-110 border-white" : "border-transparent"
-                  }`}
-                  style={{ backgroundColor: c.hex }}
-                  title={c.label}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-400">
-            <span>Cota: {selectedPin.elev} m</span>
-            <button
-              type="button"
-              onClick={() => {
-                setPins((prev) => prev.filter((p) => p.id !== selectedPin.id))
-                setSelectedPinId(null)
-              }}
-              className="flex items-center gap-1 text-red-400 hover:text-red-300"
-            >
-              <Trash2 className="h-3 w-3" />
-              <span>Eliminar</span>
-            </button>
-          </div>
         </div>
       )}
-
-      {/* Contenedor del Lienzo Three.js */}
-      <div
-        ref={containerRef}
-        onClick={handleCanvasClick}
-        className={`relative h-full w-full ${
-          isAddingPin ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
-        }`}
-      />
-
-      {/* Barra de Controles Studio Inferior */}
-      <div
-        className={`absolute bottom-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-2.5 shadow-2xl backdrop-blur-2xl transition-all ${
-          isLight
-            ? "border-zinc-300/80 bg-white/85 text-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.08)]"
-            : "border-zinc-800/80 bg-[#09090b]/90 text-zinc-100 shadow-[0_8px_30px_rgb(0,0,0,0.5)]"
-        }`}
-      >
-        {/* Control de Exageración Vertical (Métrica Rigurosa 1:1) */}
-        <div className="flex items-center gap-2.5">
-          <span className={`text-[11px] font-medium uppercase tracking-wider ${isLight ? "text-zinc-600" : "text-zinc-400"}`}>
-            Exageración:
-          </span>
-          <input
-            type="range"
-            aria-label="Exageración vertical"
-            min="0.5"
-            max="4.0"
-            step="0.1"
-            value={exaggeration}
-            onChange={(e) => setExaggeration(parseFloat(e.target.value))}
-            className="h-1.5 w-24 accent-emerald-500 cursor-pointer bg-zinc-300 dark:bg-zinc-800 rounded-lg"
-          />
-          <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold w-8">
-            {exaggeration.toFixed(1)}×
-          </span>
-        </div>
-
-        {/* Presets de Iluminación Solar */}
-        <div className={`flex items-center gap-1 border-l pl-3 ${isLight ? "border-zinc-200" : "border-zinc-800"}`}>
-          <Sun className={`h-3.5 w-3.5 mr-1 ${isLight ? "text-zinc-500" : "text-zinc-400"}`} />
-          {[
-            { id: "morning", label: "Amanecer" },
-            { id: "noon", label: "Mediodía" },
-            { id: "sunset", label: "Atardecer" },
-          ].map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => changeSunPreset(preset.id)}
-              className={`rounded-lg px-2 py-0.5 text-[10.5px] font-medium transition-all ${
-                sunPreset === preset.id
-                  ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700"
-                  : isLight
-                  ? "text-zinc-600 hover:bg-zinc-100"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-              }`}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Control de Ángulo Solar Continuo */}
-        <div className={`flex items-center gap-2 border-l pl-3 ${isLight ? "border-zinc-200" : "border-zinc-800"}`}>
-          <Compass className={`h-3.5 w-3.5 ${isLight ? "text-zinc-500" : "text-zinc-400"}`} />
-          <span className={`text-[10.5px] font-medium ${isLight ? "text-zinc-600" : "text-zinc-400"}`}>Luz:</span>
-          <input
-            type="range"
-            min="0"
-            max="360"
-            step="5"
-            value={sunAngle}
-            onChange={(e) => updateSunAngle(parseInt(e.target.value))}
-            className="h-1.5 w-20 accent-amber-500 cursor-pointer bg-zinc-300 dark:bg-zinc-800 rounded-lg"
-            title="Girar posición del sol para ver sombras dinámicas"
-          />
-          <span className={`font-mono text-[10.5px] w-8 ${isLight ? "text-zinc-700" : "text-zinc-300"}`}>
-            {sunAngle}°
-          </span>
-        </div>
-
-        {/* Giro continuo y Malla */}
-        <div className={`flex items-center gap-1 border-l pl-3 ${isLight ? "border-zinc-200" : "border-zinc-800"}`}>
-          <button
-            type="button"
-            onClick={() => setAutoRotate((v) => !v)}
-            title={autoRotate ? "Pausar rotación continua" : "Activar rotación continua"}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${
-              autoRotate
-                ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                : isLight
-                ? "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-100"
-                : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-            }`}
-          >
-            {autoRotate ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setWireframe((v) => !v)}
-            title="Alternar modo alambre / wireframe"
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all ${
-              wireframe
-                ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                : isLight
-                ? "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-100"
-                : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-            }`}
-          >
-            <Grid3X3 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
