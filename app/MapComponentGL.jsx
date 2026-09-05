@@ -43,16 +43,12 @@ import { SgcPanel, activeRasterKeys } from "./components/SgcPanel"
 import { PlanchaPanel } from "./components/PlanchaPanel"
 import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
-import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
+import { MapBottomDock } from "./components/MapBottomDock"
+import { MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
-  Blend,
   Box,
   ChevronLeft,
   Compass,
-  Crosshair,
-  Download,
-  Loader2,
-  ImageDown,
   MountainSnow,
   PencilRuler,
   Spline,
@@ -61,7 +57,6 @@ import {
   Mountain,
   Play,
   Square,
-  User,
 } from "lucide-react"
 
 /**
@@ -109,7 +104,7 @@ export default function MapComponentGL({
   onSgcState,
   panelOpen = false,
   blendMode = "multiply",
-  onBlendModeChange,
+  _onBlendModeChange,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
@@ -883,139 +878,29 @@ export default function MapComponentGL({
           onQuitar={quitarPlancha}
         />
 
-        {/* La función diferenciadora: dibujar un polígono y salir con los
-            archivos de las capas encendidas dentro de esa área. Va en la columna
-            de acciones del mapa y no en el panel de dibujo, para que se vea sin
-            abrirlo; solo aparece cuando hay un área dibujada. */}
-        {hasArea && (
-          <MapButton
-            onClick={downloadArea}
-            disabled={isDownloading}
-            icon={isDownloading ? Loader2 : Download}
-            title="Descargar en un ZIP las capas encendidas dentro del área dibujada"
-            className={`!border-emerald-700 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-60 ${
-              isDownloading ? "[&_svg]:animate-spin" : ""
-            }`}
-          >
-            {isDownloading ? "Preparando…" : "Descargar área"}
-          </MapButton>
-        )}
-
-        {/* Las herramientas de dibujo. Estaban sueltas sobre el mapa, en una
-            esquina distinta según el tamaño de la pantalla; ahora salen de aquí,
-            que es donde el usuario ya busca lo demás. */}
-        <MapButton
-          onClick={() => setDibujoAbierto((abierto) => !abierto)}
-          active={dibujoAbierto || mode.startsWith("draw_")}
-          icon={PencilRuler}
-          badge={resumenDibujo}
-          title="Dibujar y medir polígonos, líneas y puntos"
-        >
-          Dibujo
-        </MapButton>
-
-        {/* Relieve, pendiente, orientación y la consulta de cota eran cuatro
-            botones seguidos que hacen lo mismo: mirar el terreno. Juntos ocupaban
-            casi media columna en un teléfono. El 3D se queda fuera a propósito:
-            es un interruptor que se usa a cada rato y esconderlo tras dos toques
-            sería peor que el problema que se está resolviendo. */}
-        <MapButton
-          onClick={(event) => abrirMenu("terreno", event)}
-          active={menuAbierto?.id === "terreno" || Boolean(terrenoActivo)}
-          icon={Mountain}
-          badge={terrenoActivo}
-          title="Relieve, pendiente, orientación y consulta de cota"
-        >
-          Terreno
-        </MapButton>
-
-        <MapButton
-          onClick={toggle3D}
-          active={is3D}
-          aria-pressed={is3D}
-          icon={Box}
-          title="Levantar el terreno e inclinar la cámara"
-        >
-          {is3D ? "Volver a 2D" : "Ver en 3D"}
-        </MapButton>
-
-        <MapButton
-          onClick={() => onBlendModeChange?.(blendMode === "multiply" ? "normal" : "multiply")}
-          active={blendMode === "multiply"}
-          aria-pressed={blendMode === "multiply"}
-          icon={Blend}
-          badge={blendMode === "multiply" ? "MULT" : "NORM"}
-          title={
-            blendMode === "multiply"
-              ? "Modo de fusión: Multiplicar (funde capas temáticas con el relieve). Clic para cambiar a Normal"
-              : "Modo de fusión: Normal (transparencia simple). Clic para cambiar a Multiplicar"
-          }
-        >
-          {blendMode === "multiply" ? "Multiplicar" : "Fusión normal"}
-        </MapButton>
-
-        <MapButton
-          onClick={handleLocateUser}
-          active={hasLocated}
-          icon={Crosshair}
-          title="Mostrar tu ubicación con el GPS"
-          className={isLocating ? "animate-pulse [&_svg]:animate-spin" : ""}
-        >
-          {isLocating ? "Ubicando…" : hasLocated ? "Ubicación activa" : "Activar GPS"}
-        </MapButton>
-
-        {/* La brújula 360° se dibuja encima del marcador del GPS: sin ubicación
-            no hay dónde ponerla. Estaba siempre visible y pulsarla sin el GPS
-            encendido no hacía nada, que es la peor respuesta posible. */}
-        {hasLocated && (
-          <MapButton
-            onClick={handleToggleCompass360}
-            active={isCompassActive}
-            aria-pressed={isCompassActive}
-            icon={Compass}
-            title="Girar una rosa de los vientos con la orientación del celular"
-          >
-            {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
-          </MapButton>
-        )}
-
-        <MapButton
-          onClick={() => setExportandoImagen(true)}
-          icon={ImageDown}
-          title="Guardar el mapa como imagen, sin los controles"
-        >
-          Exportar imagen
-        </MapButton>
-
-        {/* Se llamaba «Satélite» y alternaba entre dos fondos. Con cinco, un
-            botón que va rotando obliga a pasar por todos para llegar al que se
-            quiere, así que ahora abre una lista.
-
-            Va abajo del todo, pegado a la firma: el fondo se elige una vez al
-            empezar y no se vuelve a tocar, mientras que relieve, 3D y GPS se
-            encienden y apagan a cada rato. Lo que más se usa queda más cerca
-            del pulgar. */}
-        <MapButton
-          onClick={(event) => abrirMenu("fondo", event)}
-          active={menuAbierto?.id === "fondo"}
-          icon={Layers}
-          badge={basemapById(basemap).short}
-          title="Elegir el mapa de fondo"
-        >
-          Mapa base
-        </MapButton>
-
-        <MapButton
-          onClick={() =>
-            window.open("https://www.linkedin.com/in/fabio-espinosa/", "_blank", "noopener,noreferrer")
-          }
-          icon={User}
-          title="Perfil del autor en LinkedIn"
-        >
-          Fabio A. Espinosa
-        </MapButton>
         </div>
       </div>
+
+      {/* Centro de mando: Dock ergonómico inferior (Spatial Studio) */}
+      <MapBottomDock
+        onToggleDraw={() => setDibujoAbierto((abierto) => !abierto)}
+        isDrawActive={dibujoAbierto || mode.startsWith("draw_")}
+        drawBadge={resumenDibujo}
+        onOpenMenu={abrirMenu}
+        activeMenu={menuAbierto?.id}
+        terrenoActivo={terrenoActivo}
+        is3D={is3D}
+        onToggle3D={toggle3D}
+        onLocateUser={handleLocateUser}
+        isLocating={isLocating}
+        hasLocated={hasLocated}
+        isCompassActive={isCompassActive}
+        onToggleCompass={handleToggleCompass360}
+        hasArea={hasArea}
+        isDownloadingArea={isDownloading}
+        onDownloadArea={downloadArea}
+        onExportImage={() => setExportandoImagen(true)}
+      />
 
       {/* La caja de escribir coordenadas acompaña a la herramienta de punto: es
           la otra forma de hacer lo mismo. */}

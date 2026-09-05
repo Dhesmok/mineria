@@ -14,6 +14,7 @@ import { AreaFilters } from "./components/AreaFilters"
 import { AttributeTable } from "./components/AttributeTable"
 import { CrsPicker } from "./components/CrsPicker"
 import { ExpedientSearch } from "./components/ExpedientSearch"
+import { TopOmniBar } from "./components/TopOmniBar"
 import { matchesFilters } from "./utils/layerFilters"
 import { readPreferences, writePreferences } from "./utils/preferences"
 import {
@@ -402,43 +403,33 @@ export default function Component() {
     setMapInitialized(true)
   }, [])
 
+  const activeLayerCount = useMemo(
+    () => Object.values(layers).filter((l) => Boolean(l?.on)).length,
+    [layers],
+  )
+
   return (
-    <div className="relative flex w-full h-screen bg-gray-100">
+    <div className="relative flex w-full h-screen bg-gray-100 overflow-hidden">
+      {/* Barra superior unificada (Spatial Studio) */}
+      <TopOmniBar
+        selectedCoordinateSystem={selectedCoordinateSystem}
+        onSelectCrs={setSelectedCoordinateSystem}
+        blendMode={blendMode}
+        onBlendModeChange={setBlendMode}
+        activeLayerCount={activeLayerCount}
+        sidebarOpen={showSidebar}
+        onToggleSidebar={() => setShowSidebar((v) => !v)}
+        onOpenSearch={() => setSearchPopover({ areaId: "mineria", el: document.body })}
+        onExportShp={handleExportSHP}
+        hasArea={coordinatesAvailable}
+        onOpenCoordinates={coordinatesAvailable ? handleShowCoordinates : null}
+      />
+
       {/* El panel y su pestaña se mueven juntos.
-
-          Antes eran dos mandos distintos: una X dentro del panel para
-          esconderlo y, cuando estaba escondido, un botón redondo en la esquina
-          de la pantalla para volver a sacarlo. Dos sitios y dos formas para una
-          sola cosa. Ahora es una pestaña pegada al costado del panel: la
-          pestaña se desliza con él y queda asomando, así que ocultar y mostrar
-          se hacen siempre en el mismo punto y la flecha dice hacia dónde va.
-
-          El título «Títulos y Solicitudes» desapareció: el panel ya no es solo
-          de la ANM —agrupa Geología, Hidrocarburos y Catastro—, y un encabezado
-          que nombra a una sola de las cuatro áreas confunde más de lo que
-          orienta. Sin él, el panel arranca 44 px más arriba. */}
+          En pantalla ancha el panel es una columna a la izquierda que arranca
+          debajo de la TopOmniBar (md:top-16) para no solaparse con la barra. */}
       <div
-        // **Dos disposiciones, una sola marca.**
-        //
-        // En pantalla ancha el panel es una columna a la izquierda con su
-        // pestaña al costado, y se esconde deslizándose hacia la izquierda. En
-        // un teléfono eso no cabe: 350 px de columna sobre una pantalla de 390
-        // tapan el mapa entero. Ahí el panel pasa a ser una hoja que sube desde
-        // abajo con la pestaña arriba, que es el gesto que ya usan todas las
-        // aplicaciones de mapas y no hay que explicar.
-        //
-        // Se resuelve con clases por tamaño y no con JavaScript a propósito: un
-        // `window.innerWidth` leído al montar no coincide con lo que pintó el
-        // servidor, y eso tira la página entera para volver a pintarla —ya pasó
-        // con las preferencias—.
-        //
-        // La cuenta del desplazamiento horizontal no es evidente: el bloque mide
-        // el panel (350) más la pestaña (24) = 374, y arranca a 16 del borde.
-        // Para que el panel salga entero hay que correrlo 366, o sea 100 % menos
-        // media unidad. Con «100 % menos la pestaña» —que es lo que parece—
-        // quedaba una franja de 16 px asomando, y eso solo se vio en una
-        // captura.
-        className={`fixed inset-x-0 bottom-0 z-10 flex max-h-[75vh] flex-col-reverse transition-transform duration-300 ease-out md:absolute md:inset-x-auto md:bottom-auto md:left-4 md:top-4 md:max-h-[calc(100vh-5rem)] md:flex-row md:items-start ${
+        className={`fixed inset-x-0 bottom-0 z-10 flex max-h-[75vh] flex-col-reverse transition-transform duration-300 ease-out md:absolute md:inset-x-auto md:bottom-auto md:left-4 md:top-16 md:max-h-[calc(100vh-5.5rem)] md:flex-row md:items-start ${
           showSidebar
             ? "translate-y-0 md:translate-x-0"
             : "translate-y-[calc(100%-2.75rem)] md:translate-y-0 md:-translate-x-[calc(100%-0.5rem)]"
