@@ -51,6 +51,8 @@ import {
   Layers,
   Map as MapIcon,
   PencilRuler,
+  Square,
+  X,
 } from "lucide-react"
 
 /**
@@ -111,11 +113,100 @@ export default function MapComponentGL({
   const [error, setError] = useState(null)
   const [showErrorBanner, setShowErrorBanner] = useState(false)
 
-  // División de pantalla y Modelo de Bloque 3D (Forge3D)
+  // División de pantalla y Modelo de Bloque 3D del Terreno
   const [blockModelOpen, setBlockModelOpen] = useState(false)
   const [splitRatio, setSplitRatio] = useState(0.5)
   const [isDraggingSplit, setIsDraggingSplit] = useState(false)
   const splitContainerRef = useRef(null)
+
+  const [selectedRectangle, setSelectedRectangle] = useState(null)
+  const [isDrawingBox, setIsDrawingBox] = useState(false)
+  const [boxDragStart, setBoxDragStart] = useState(null)
+  const [boxDragCurrent, setBoxDragCurrent] = useState(null)
+
+  const handleStartDrawBox = useCallback(() => {
+    setBlockModelOpen(false)
+    setIsDrawingBox(true)
+    setBoxDragStart(null)
+    setBoxDragCurrent(null)
+    requestAnimationFrame(() => {
+      mapRef.current?.resize()
+    })
+  }, [])
+
+  const handleBoxPointerDown = useCallback((e) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const lngLat = mapRef.current?.unproject([x, y])
+    if (!lngLat) return
+    setBoxDragStart({ x, y, lng: lngLat.lng, lat: lngLat.lat })
+    setBoxDragCurrent({ x, y, lng: lngLat.lng, lat: lngLat.lat })
+  }, [])
+
+  const handleBoxPointerMove = useCallback((e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const lngLat = mapRef.current?.unproject([x, y])
+    if (!lngLat) return
+    setBoxDragCurrent((prev) => (prev ? { x, y, lng: lngLat.lng, lat: lngLat.lat } : null))
+  }, [])
+
+  const handleBoxPointerUp = useCallback((e) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      // ignore
+    }
+
+    setBoxDragStart((start) => {
+      setBoxDragCurrent((current) => {
+        if (start && current) {
+          const dx = Math.abs(current.x - start.x)
+          const dy = Math.abs(current.y - start.y)
+          if (dx > 20 && dy > 20) {
+            const minLng = Math.min(start.lng, current.lng)
+            const maxLng = Math.max(start.lng, current.lng)
+            const minLat = Math.min(start.lat, current.lat)
+            const maxLat = Math.max(start.lat, current.lat)
+
+            let textureDataUrl = null
+            try {
+              const mapCanvas = mapRef.current?.getCanvas()
+              if (mapCanvas) {
+                const cropX = Math.min(start.x, current.x)
+                const cropY = Math.min(start.y, current.y)
+                const offCanvas = document.createElement("canvas")
+                offCanvas.width = 1024
+                offCanvas.height = 1024
+                const ctx = offCanvas.getContext("2d")
+                if (ctx) {
+                  ctx.drawImage(mapCanvas, cropX, cropY, dx, dy, 0, 0, 1024, 1024)
+                  textureDataUrl = offCanvas.toDataURL("image/jpeg", 0.88)
+                }
+              }
+            } catch {
+              // fallback a textura procedural
+            }
+
+            setSelectedRectangle({
+              bbox: [minLng, minLat, maxLng, maxLat],
+              center: [(minLng + maxLng) / 2, (minLat + maxLat) / 2],
+              textureDataUrl,
+            })
+            setIsDrawingBox(false)
+            setBlockModelOpen(true)
+            requestAnimationFrame(() => mapRef.current?.resize())
+          }
+        }
+        return null
+      })
+      return null
+    })
+  }, [])
 
   const handleSplitPointerDown = useCallback((e) => {
     e.preventDefault()
@@ -729,6 +820,28 @@ export default function MapComponentGL({
         >
           <div ref={overlayContainerRef} className="h-full w-full" />
         </div>
+
+        {/* Capa interactiva para dibujar el rectángulo del bloque 3D */}
+        {isDrawingBox && (
+          <div
+            onPointerDown={handleBoxPointerDown}
+            onPointerMove={handleBoxPointerMove}
+            onPointerUp={handleBoxPointerUp}
+            className="absolute inset-0 z-30 cursor-crosshair select-none touch-none bg-black/15"
+          >
+            {boxDragStart && boxDragCurrent && (
+              <div
+                className="absolute border-2 border-emerald-400 bg-emerald-500/25 rounded shadow-[0_0_20px_rgba(16,185,129,0.4)] pointer-events-none"
+                style={{
+                  left: Math.min(boxDragStart.x, boxDragCurrent.x),
+                  top: Math.min(boxDragStart.y, boxDragCurrent.y),
+                  width: Math.abs(boxDragCurrent.x - boxDragStart.x),
+                  height: Math.abs(boxDragCurrent.y - boxDragStart.y),
+                }}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Divisor Arrastrable (Split Divider) */}
@@ -746,7 +859,7 @@ export default function MapComponentGL({
         </div>
       )}
 
-      {/* Vista Modelo Geológico 3D Derecha (Forge3D) */}
+      {/* Vista Bloque 3D del Terreno Derecha */}
       {blockModelOpen && (
         <div
           className="relative h-full overflow-hidden shrink-0"
@@ -761,7 +874,10 @@ export default function MapComponentGL({
                 overlayMapRef.current?.resize()
               })
             }}
-            expedientCode={expedientCode}
+            rectangle={selectedRectangle}
+            elevationAt={elevationAt}
+            map={mapRef.current}
+            onRedrawRectangle={handleStartDrawBox}
             isMaximized={splitRatio <= 0.05}
             onToggleMaximize={() => {
               setSplitRatio((r) => (r <= 0.05 ? 0.5 : 0.02))
@@ -957,24 +1073,39 @@ export default function MapComponentGL({
 
         {/* Controles de navegación y HUD unificados del mapa */}
         <div className="flex flex-col items-end gap-2">
-          {/* Botón Modelo Geológico 3D (Forge3D) */}
+          {/* Botón Bloque 3D del Terreno */}
           <button
             type="button"
             onClick={() => {
-              setBlockModelOpen((v) => {
-                const next = !v
+              if (blockModelOpen) {
+                setBlockModelOpen(false)
                 requestAnimationFrame(() => {
                   mapRef.current?.resize()
                   overlayMapRef.current?.resize()
                 })
-                return next
-              })
+              } else {
+                if (selectedRectangle) {
+                  setBlockModelOpen(true)
+                  requestAnimationFrame(() => {
+                    mapRef.current?.resize()
+                    overlayMapRef.current?.resize()
+                  })
+                } else {
+                  handleStartDrawBox()
+                }
+              }
             }}
-            title={blockModelOpen ? "Cerrar modelo geológico 3D" : "Modelo geológico 3D (Forge3D) - Estratigrafía y relieve"}
-            aria-label="Modelo geológico 3D"
+            title={
+              blockModelOpen
+                ? "Cerrar bloque 3D del terreno"
+                : isDrawingBox
+                ? "Dibujando rectángulo sobre el mapa..."
+                : "Generar bloque 3D del terreno (dibuja un rectángulo)"
+            }
+            aria-label="Bloque 3D del terreno"
             aria-expanded={blockModelOpen}
             className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
-              blockModelOpen
+              blockModelOpen || isDrawingBox
                 ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
                 : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
             }`}
@@ -1172,6 +1303,26 @@ export default function MapComponentGL({
       )}
 
       <CursorCoordinates map={mapInstance} crsId={coordinateSystem} />
+
+      {/* Banner de instrucción para dibujar el rectángulo del bloque 3D */}
+      {isDrawingBox && (
+        <div className="pointer-events-auto fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full border border-emerald-500/50 bg-[#09090b]/95 px-5 py-2.5 text-xs sm:text-sm font-medium text-emerald-300 shadow-2xl backdrop-blur-2xl animate-in fade-in slide-in-from-top-4">
+          <Square className="h-4 w-4 text-emerald-400 shrink-0" />
+          <span>Haz clic y arrastra sobre el mapa para definir el área del bloque 3D</span>
+          <button
+            type="button"
+            onClick={() => {
+              setIsDrawingBox(false)
+              setBoxDragStart(null)
+              setBoxDragCurrent(null)
+            }}
+            className="ml-2 rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+            title="Cancelar selección"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {showRotateHint && <RotateHint onClose={hideRotateHint} />}
 

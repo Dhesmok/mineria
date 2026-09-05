@@ -9,33 +9,19 @@ import {
   Minimize2,
   RotateCcw,
   Camera,
-  Scissors,
   Sun,
-  Layers,
   Grid3X3,
   Play,
   Pause,
-  ChevronDown,
-  ChevronUp,
+  Square,
+  Compass,
 } from "lucide-react"
 
 /**
- * Paleta de estratigrafía geológica realista
+ * Genera la textura de superficie topográfica a partir de la captura del mapa
+ * o de un mapa de elevación y pendiente realista si no hay captura disponible.
  */
-const STRATA_DEFS = [
-  { id: "soil", name: "Depósitos Cuaternarios / Suelo", depth: "0 - 40 m", color: "#453229", border: "#291e18" },
-  { id: "sandstone_sup", name: "Areniscas Superiores", depth: "40 - 220 m", color: "#c29b62", border: "#937243" },
-  { id: "shale", name: "Lodolitas y Lutitas Negras", depth: "220 - 450 m", color: "#3f3f46", border: "#27272a" },
-  { id: "limestone", name: "Calizas Fosilíferas", depth: "450 - 680 m", color: "#d6d3d1", border: "#a8a29e" },
-  { id: "ore_vein", name: "Veta Aurífera / Zona Mineralizada", depth: "680 - 750 m", color: "#eab308", border: "#ca8a04", isOre: true },
-  { id: "sandstone_inf", name: "Areniscas y Conglomerados", depth: "750 - 1100 m", color: "#9a3412", border: "#7c2d12" },
-  { id: "basement", name: "Basamento Cristalino Ígneo", depth: "> 1100 m", color: "#1e293b", border: "#0f172a" },
-]
-
-/**
- * Genera una textura procedural en alta resolución para los muros de corte estratigráficos
- */
-function createProceduralStrataTexture() {
+function createFallbackTerrainTexture() {
   if (typeof document === "undefined") return null
   const canvas = document.createElement("canvas")
   canvas.width = 1024
@@ -43,136 +29,75 @@ function createProceduralStrataTexture() {
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
 
-  // Fondo base
-  ctx.fillStyle = "#18181b"
+  // Gradiente base natural de terreno (Valle andino a roca de cumbre)
+  const grad = ctx.createLinearGradient(0, 1024, 0, 0)
+  grad.addColorStop(0, "#2d3728")
+  grad.addColorStop(0.35, "#4a5d3e")
+  grad.addColorStop(0.65, "#6b6255")
+  grad.addColorStop(0.85, "#8a8175")
+  grad.addColorStop(1, "#b5b0a8")
+  ctx.fillStyle = grad
   ctx.fillRect(0, 0, 1024, 1024)
 
-  const layers = [
-    { y0: 0, y1: 60, colorA: "#453229", colorB: "#34241d", grain: 20 },
-    { y0: 60, y1: 240, colorA: "#c29b62", colorB: "#ab854f", grain: 50, bedding: true },
-    { y0: 240, y1: 450, colorA: "#383840", colorB: "#2b2b32", grain: 15, bedding: true },
-    { y0: 450, y1: 630, colorA: "#d6d3d1", colorB: "#b8b4b1", grain: 30, joints: true },
-    { y0: 630, y1: 710, colorA: "#eab308", colorB: "#ca8a04", ore: true },
-    { y0: 710, y1: 880, colorA: "#9a3412", colorB: "#7c2d12", grain: 45, bedding: true },
-    { y0: 880, y1: 1024, colorA: "#1e293b", colorB: "#0f172a", crystalline: true },
-  ]
-
-  layers.forEach((layer) => {
-    const grad = ctx.createLinearGradient(0, layer.y0, 0, layer.y1)
-    grad.addColorStop(0, layer.colorA)
-    grad.addColorStop(1, layer.colorB)
-    ctx.fillStyle = grad
-    ctx.fillRect(0, layer.y0, 1024, layer.y1 - layer.y0)
-
-    // Líneas sedimentarias de estratificación
-    if (layer.bedding) {
-      ctx.strokeStyle = "rgba(0,0,0,0.18)"
-      ctx.lineWidth = 1.5
-      for (let y = layer.y0 + 10; y < layer.y1; y += 8 + (y % 7)) {
-        ctx.beginPath()
-        ctx.moveTo(0, y)
-        for (let x = 0; x <= 1024; x += 32) {
-          ctx.lineTo(x, y + Math.sin(x * 0.05 + y) * 2)
-        }
-        ctx.stroke()
-      }
-    }
-
-    // Fracturas en calizas
-    if (layer.joints) {
-      ctx.strokeStyle = "rgba(255,255,255,0.25)"
-      ctx.lineWidth = 1
-      for (let x = 40; x < 1024; x += 65 + (x % 30)) {
-        ctx.beginPath()
-        ctx.moveTo(x, layer.y0)
-        ctx.lineTo(x + (x % 20) - 10, layer.y1)
-        ctx.stroke()
-      }
-    }
-
-    // Zona mineralizada / Veta de oro
-    if (layer.ore) {
-      const oreGrad = ctx.createLinearGradient(0, layer.y0, 0, layer.y1)
-      oreGrad.addColorStop(0, "#ca8a04")
-      oreGrad.addColorStop(0.5, "#fef08a")
-      oreGrad.addColorStop(1, "#a16207")
-      ctx.fillStyle = oreGrad
-      ctx.fillRect(0, layer.y0 + 20, 1024, 40)
-
-      ctx.fillStyle = "#ffffff"
-      for (let i = 0; i < 120; i++) {
-        const px = (i * 37) % 1024
-        const py = layer.y0 + 15 + ((i * 19) % 50)
-        ctx.fillRect(px, py, 2.5, 2.5)
-      }
-    }
-
-    // Textura cristalina (granito/gneiss)
-    if (layer.crystalline) {
-      for (let i = 0; i < 400; i++) {
-        const px = (i * 53) % 1024
-        const py = layer.y0 + ((i * 41) % (layer.y1 - layer.y0))
-        ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.3)"
-        ctx.fillRect(px, py, 3, 3)
-      }
-    }
-
-    // Línea divisoria de estrato
-    ctx.strokeStyle = "rgba(0,0,0,0.4)"
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(0, layer.y1)
-    ctx.lineTo(1024, layer.y1)
-    ctx.stroke()
-  })
-
-  // Escala métrica vertical a la izquierda
-  ctx.fillStyle = "rgba(255,255,255,0.85)"
-  ctx.font = "bold 18px monospace"
-  const ticks = [
-    { y: 15, text: "0 m" },
-    { y: 150, text: "-150 m" },
-    { y: 340, text: "-350 m" },
-    { y: 540, text: "-550 m" },
-    { y: 670, text: "VETA (Au)" },
-    { y: 800, text: "-800 m" },
-    { y: 980, text: "-1200 m" },
-  ]
-  ticks.forEach((t) => {
-    ctx.strokeStyle = "rgba(255,255,255,0.6)"
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(0, t.y)
-    ctx.lineTo(25, t.y)
-    ctx.stroke()
-    ctx.fillText(t.text, 32, t.y + 6)
-  })
+  // Grano sutil de suelo y roca
+  for (let i = 0; i < 600; i++) {
+    const px = (i * 47) % 1024
+    const py = (i * 31) % 1024
+    ctx.fillStyle = i % 2 === 0 ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.08)"
+    ctx.fillRect(px, py, 2 + (i % 4), 2 + (i % 4))
+  }
 
   const texture = new THREE.CanvasTexture(canvas)
-  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapS = THREE.ClampToEdgeWrapping
   texture.wrapT = THREE.ClampToEdgeWrapping
   return texture
 }
 
 /**
- * Función analítica de elevación topográfica
+ * Función de elevación para el bloque según el rectángulo seleccionado
  */
-function elevationSample(x, z) {
-  const d = Math.sqrt(x * x + z * z)
-  const ridge1 = Math.sin(x * 0.45) * Math.cos(z * 0.45) * 1.8
-  const ridge2 = Math.cos(x * 0.85 + z * 0.3) * 0.75
-  const ridge3 = Math.sin((x - z) * 1.1) * 0.35
-  const valley = -Math.exp(-(d * d) / 18) * 1.2
-  return (ridge1 + ridge2 + ridge3 + valley) * 0.7 + 1.2
+function sampleElevation(lng, lat, elevationAt, map) {
+  if (typeof elevationAt === "function") {
+    try {
+      const e = elevationAt({ lng, lat })
+      if (typeof e === "number" && !isNaN(e) && e > -500 && e < 9000) {
+        return e
+      }
+    } catch {
+      // continuar
+    }
+  }
+
+  if (map?.queryTerrainElevation) {
+    try {
+      const e = map.queryTerrainElevation([lng, lat])
+      if (typeof e === "number" && !isNaN(e)) {
+        return e
+      }
+    } catch {
+      // continuar
+    }
+  }
+
+  // Elevación analítica realista basada en armónicos si aún no hay DEM disponible
+  const x = (lng + 75.0) * 80.0
+  const z = (lat - 6.0) * 80.0
+  const r1 = Math.sin(x * 0.5) * Math.cos(z * 0.5) * 450
+  const r2 = Math.cos(x * 1.1 + z * 0.4) * 250
+  const r3 = Math.sin((x - z) * 1.5) * 120
+  return 1800 + r1 + r2 + r3
 }
 
 /**
- * Componente Estudio de Bloque 3D Geológico (Forge3D)
+ * Componente de Bloque 3D del Terreno
  */
 export default function BlockModel3D({
   isOpen,
   onClose,
-  expedientCode,
+  rectangle,
+  elevationAt,
+  map,
+  onRedrawRectangle,
   isMaximized,
   onToggleMaximize,
 }) {
@@ -184,23 +109,32 @@ export default function BlockModel3D({
   const blockGroupRef = useRef(null)
   const topMeshRef = useRef(null)
   const wallsMeshRef = useRef(null)
-  const oreVeinRef = useRef(null)
-  const clipPlaneRef = useRef(null)
   const sunLightRef = useRef(null)
   const animFrameRef = useRef(null)
 
-  // Estados interactivos del estudio 3D
+  // Datos normalizados de elevación en memoria para deformación rápida
+  const elevationGridRef = useRef([])
+  const elevationMinRef = useRef(0)
+  const elevationMaxRef = useRef(100)
+
+  // Estados interactivos
   const [exaggeration, setExaggeration] = useState(2.0)
-  const [slicingActive, setSlicingActive] = useState(false)
-  const [slicePosition, setSlicePosition] = useState(0)
   const [sunPreset, setSunPreset] = useState("noon")
+  const [sunAngle, setSunAngle] = useState(45) // Grados azimut
   const [autoRotate, setAutoRotate] = useState(false)
   const autoRotateRef = useRef(autoRotate)
   useEffect(() => {
     autoRotateRef.current = autoRotate
   }, [autoRotate])
+
   const [wireframe, setWireframe] = useState(false)
-  const [showStrataLegend, setShowStrataLegend] = useState(true)
+
+  // Medidas del rectángulo para visualización
+  const bbox = rectangle?.bbox || [-75.6, 6.2, -75.5, 6.3]
+  const [minLng, minLat, maxLng, maxLat] = bbox
+  const aspect = Math.max(0.4, Math.min(2.5, (maxLat - minLat) / (maxLng - minLng || 0.0001)))
+  const widthKm = ((maxLng - minLng) * 111.32 * Math.cos(((minLat + maxLat) / 2 * Math.PI) / 180)).toFixed(2)
+  const heightKm = ((maxLat - minLat) * 110.57).toFixed(2)
 
   // Inicialización de Three.js
   useEffect(() => {
@@ -210,17 +144,17 @@ export default function BlockModel3D({
     const width = container.clientWidth || 600
     const height = container.clientHeight || 600
 
-    // 1. Escena y Fondo Studio
+    // 1. Escena y Fondo Studio Obscuro
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x09090b)
     sceneRef.current = scene
 
     // 2. Cámara de perspectiva
-    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 100)
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100)
     camera.position.set(13, 11, 15)
     cameraRef.current = camera
 
-    // 3. Renderer con Sombras Suaves PCF y ACES Filmic Tone Mapping
+    // 3. Renderer con Sombras Suaves PCF y Mapeo Fílmico ACES
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: "high-performance",
@@ -231,23 +165,23 @@ export default function BlockModel3D({
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.25
-    renderer.localClippingEnabled = true
+    renderer.toneMappingExposure = 1.2
     container.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
-    // 4. OrbitControls con amortiguación suave
+    // 4. Controles orbitales con amortiguación
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
-    controls.dampingFactor = 0.05
-    controls.maxPolarAngle = Math.PI / 2 + 0.05
-    controls.minDistance = 5
+    controls.dampingFactor = 0.06
+    controls.maxPolarAngle = Math.PI / 2 + 0.04
+    controls.minDistance = 4
     controls.maxDistance = 50
     controls.target.set(0, 0, 0)
     controlsRef.current = controls
 
-    // 5. Iluminación realista estilo Forge3D
-    const sunLight = new THREE.DirectionalLight(0xfffaed, 2.5)
+    // 5. Iluminación realista
+    // Luz solar directa con sombras nítidas
+    const sunLight = new THREE.DirectionalLight(0xfffaed, 2.8)
     sunLight.position.set(12, 18, 10)
     sunLight.castShadow = true
     sunLight.shadow.mapSize.width = 2048
@@ -259,78 +193,88 @@ export default function BlockModel3D({
     sunLight.shadow.camera.right = shadowDist
     sunLight.shadow.camera.top = shadowDist
     sunLight.shadow.camera.bottom = -shadowDist
-    sunLight.shadow.bias = -0.0005
+    sunLight.shadow.bias = -0.0004
     sunLight.shadow.normalBias = 0.02
     scene.add(sunLight)
     sunLightRef.current = sunLight
 
-    const hemiLight = new THREE.HemisphereLight(0xb1d4f0, 0x221c1a, 0.9)
+    // Luz hemisférica (Cielo diurno y rebote terrestre)
+    const hemiLight = new THREE.HemisphereLight(0xbde0fe, 0x1f1c19, 0.95)
     scene.add(hemiLight)
 
-    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.4)
-    rimLight.position.set(-15, 8, -12)
+    // Luz de borde sutil
+    const rimLight = new THREE.DirectionalLight(0x94a3b8, 0.4)
+    rimLight.position.set(-14, 8, -12)
     scene.add(rimLight)
 
-    // 6. Plano de corte (Clipping Plane)
-    const clipPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 100)
-    clipPlaneRef.current = clipPlane
-
-    // 7. Grupo del Modelo de Bloque
+    // 6. Grupo del Bloque 3D
     const blockGroup = new THREE.Group()
     scene.add(blockGroup)
     blockGroupRef.current = blockGroup
 
-    const W = 9
-    const D = 9
+    // Geometría del bloque
+    const W = 9.0
+    const D = 9.0 * aspect
     const segX = 48
     const segZ = 48
-    const baseDepth = 4.2
+    const baseDepth = 2.8
 
-    // Topografía
-    const topGeom = new THREE.PlaneGeometry(W, D, segX, segZ)
-    topGeom.rotateX(-Math.PI / 2)
+    // Muestreo de la rejilla de elevación
+    const grid = []
+    let minElev = Infinity
+    let maxElev = -Infinity
 
-    const topPos = topGeom.attributes.position
-    const count = topPos.count
-    const colors = new Float32Array(count * 3)
-
-    for (let i = 0; i < count; i++) {
-      const x = topPos.getX(i)
-      const z = topPos.getZ(i)
-      const elev = elevationSample(x, z)
-      topPos.setY(i, elev * 2.0)
-
-      const t = Math.max(0, Math.min(1, (elev - 0.2) / 2.6))
-      let r, g, b
-      if (t < 0.35) {
-        r = 0.12 + t * 0.3
-        g = 0.45 + t * 0.4
-        b = 0.18 + t * 0.15
-      } else if (t < 0.7) {
-        const s = (t - 0.35) / 0.35
-        r = 0.35 + s * 0.3
-        g = 0.42 + s * 0.05
-        b = 0.22 - s * 0.05
-      } else {
-        const s = (t - 0.7) / 0.3
-        r = 0.55 + s * 0.32
-        g = 0.54 + s * 0.32
-        b = 0.52 + s * 0.35
+    for (let j = 0; j <= segZ; j++) {
+      const v = j / segZ
+      const lat = maxLat - v * (maxLat - minLat)
+      for (let i = 0; i <= segX; i++) {
+        const u = i / segX
+        const lng = minLng + u * (maxLng - minLng)
+        const elev = sampleElevation(lng, lat, elevationAt, map)
+        if (elev < minElev) minElev = elev
+        if (elev > maxElev) maxElev = elev
+        grid.push(elev)
       }
-      colors[i * 3] = r
-      colors[i * 3 + 1] = g
-      colors[i * 3 + 2] = b
     }
 
-    topGeom.setAttribute("color", new THREE.BufferAttribute(colors, 3))
+    elevationGridRef.current = grid
+    elevationMinRef.current = minElev
+    elevationMaxRef.current = maxElev
+    const elevRange = Math.max(maxElev - minElev, 50)
+    const heightScale = (3.0 / elevRange) * 2.0 // Exageración inicial 2.0x
+
+    // --- A. Superficie Topográfica Superior ---
+    const topGeom = new THREE.PlaneGeometry(W, D, segX, segZ)
+    topGeom.rotateX(-Math.PI / 2)
+    const topPos = topGeom.attributes.position
+
+    for (let k = 0; k < topPos.count; k++) {
+      const e = grid[k] ?? minElev
+      const yVal = (e - minElev) * heightScale
+      topPos.setY(k, yVal)
+    }
+    topPos.needsUpdate = true
     topGeom.computeVertexNormals()
 
+    // Textura de la superficie (Captura real del mapa o satélite)
+    let terrainTexture = null
+    if (rectangle?.textureDataUrl) {
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      img.src = rectangle.textureDataUrl
+      terrainTexture = new THREE.Texture(img)
+      img.onload = () => {
+        terrainTexture.needsUpdate = true
+      }
+    } else {
+      terrainTexture = createFallbackTerrainTexture()
+    }
+
     const topMat = new THREE.MeshStandardMaterial({
-      roughness: 0.85,
-      metalness: 0.05,
-      vertexColors: true,
-      clippingPlanes: [clipPlane],
-      clipShadows: true,
+      map: terrainTexture,
+      roughness: 0.78,
+      metalness: 0.08,
+      flatShading: false,
     })
     const topMesh = new THREE.Mesh(topGeom, topMat)
     topMesh.castShadow = true
@@ -338,21 +282,12 @@ export default function BlockModel3D({
     blockGroup.add(topMesh)
     topMeshRef.current = topMesh
 
-    // Paredes de falda estratigráficas
-    const strataTex = createProceduralStrataTexture()
-    const wallMat = new THREE.MeshStandardMaterial({
-      map: strataTex,
-      roughness: 0.65,
-      metalness: 0.12,
-      clippingPlanes: [clipPlane],
-      clipShadows: true,
-      side: THREE.DoubleSide,
-    })
-
+    // --- B. Paredes Verticales de Falda (Pedestal sólido y limpio) ---
+    // Textura sobria de pedestal mineral oscuro sin capas artificiales
     const wallPositions = []
     const wallUVs = []
 
-    function addWall(p0x, p0z, p1x, p1z, steps) {
+    function addWall(p0x, p0z, p1x, p1z, getElevA, getElevB, steps) {
       for (let s = 0; s < steps; s++) {
         const uA = s / steps
         const uB = (s + 1) / steps
@@ -361,72 +296,81 @@ export default function BlockModel3D({
         const xB = p0x + (p1x - p0x) * uB
         const zB = p0z + (p1z - p0z) * uB
 
-        const yTopA = elevationSample(xA, zA) * 2.0
-        const yTopB = elevationSample(xB, zB) * 2.0
+        const yTopA = (getElevA(s) - minElev) * heightScale
+        const yTopB = (getElevB(s + 1) - minElev) * heightScale
         const yBot = -baseDepth
 
         wallPositions.push(xA, yTopA, zA, xA, yBot, zA, xB, yTopB, zB)
         wallPositions.push(xB, yTopB, zB, xA, yBot, zA, xB, yBot, zB)
 
-        const vTopA = (yTopA + baseDepth) / (4.0 + baseDepth)
-        const vTopB = (yTopB + baseDepth) / (4.0 + baseDepth)
-        wallUVs.push(uA, vTopA, uA, 0, uB, vTopB)
-        wallUVs.push(uB, vTopB, uA, 0, uB, 0)
+        wallUVs.push(uA, 1, uA, 0, uB, 1)
+        wallUVs.push(uB, 1, uA, 0, uB, 0)
       }
     }
 
     const halfW = W / 2
     const halfD = D / 2
-    addWall(-halfW, halfD, halfW, halfD, segX)
-    addWall(halfW, halfD, halfW, -halfD, segZ)
-    addWall(halfW, -halfD, -halfW, -halfD, segX)
-    addWall(-halfW, -halfD, -halfW, halfD, segZ)
+
+    // Pared Norte (-Z)
+    addWall(
+      -halfW, -halfD, halfW, -halfD,
+      (s) => grid[s],
+      (s) => grid[s],
+      segX
+    )
+    // Pared Este (+X)
+    addWall(
+      halfW, -halfD, halfW, halfD,
+      (s) => grid[s * (segX + 1) + segX],
+      (s) => grid[s * (segX + 1) + segX],
+      segZ
+    )
+    // Pared Sur (+Z)
+    addWall(
+      halfW, halfD, -halfW, halfD,
+      (s) => grid[segZ * (segX + 1) + (segX - s)],
+      (s) => grid[segZ * (segX + 1) + (segX - s)],
+      segX
+    )
+    // Pared Oeste (-X)
+    addWall(
+      -halfW, halfD, -halfW, -halfD,
+      (s) => grid[(segZ - s) * (segX + 1)],
+      (s) => grid[(segZ - s) * (segX + 1)],
+      segZ
+    )
 
     const wallGeom = new THREE.BufferGeometry()
     wallGeom.setAttribute("position", new THREE.Float32BufferAttribute(wallPositions, 3))
     wallGeom.setAttribute("uv", new THREE.Float32BufferAttribute(wallUVs, 2))
     wallGeom.computeVertexNormals()
 
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0x1c1d22,
+      roughness: 0.88,
+      metalness: 0.15,
+      side: THREE.DoubleSide,
+    })
     const wallsMesh = new THREE.Mesh(wallGeom, wallMat)
     wallsMesh.castShadow = true
     wallsMesh.receiveShadow = true
     blockGroup.add(wallsMesh)
     wallsMeshRef.current = wallsMesh
 
-    // Base
+    // --- C. Base Plana Inferior ---
     const baseGeom = new THREE.PlaneGeometry(W, D)
     baseGeom.rotateX(Math.PI / 2)
     baseGeom.translate(0, -baseDepth, 0)
     const baseMat = new THREE.MeshStandardMaterial({
-      color: 0x18181b,
-      roughness: 0.9,
-      metalness: 0.1,
-      clippingPlanes: [clipPlane],
+      color: 0x121316,
+      roughness: 0.95,
+      metalness: 0.05,
     })
     const baseMesh = new THREE.Mesh(baseGeom, baseMat)
     baseMesh.receiveShadow = true
     blockGroup.add(baseMesh)
 
-    // Veta Mineralizada 3D Interior
-    const oreGeom = new THREE.CylinderGeometry(0.35, 0.7, 8.5, 32, 16)
-    oreGeom.rotateZ(Math.PI / 3.2)
-    oreGeom.rotateY(Math.PI / 5)
-    oreGeom.translate(0, -1.2, 0)
-    const oreMat = new THREE.MeshStandardMaterial({
-      color: 0xfacc15,
-      emissive: 0x854d0e,
-      emissiveIntensity: 0.35,
-      roughness: 0.22,
-      metalness: 0.88,
-      clippingPlanes: [clipPlane],
-      clipShadows: true,
-    })
-    const oreMesh = new THREE.Mesh(oreGeom, oreMat)
-    oreMesh.castShadow = true
-    blockGroup.add(oreMesh)
-    oreVeinRef.current = oreMesh
-
-    // Sombra en suelo
+    // --- D. Suelo de Sombra Suave (Shadow Catcher) ---
     const floorGeom = new THREE.PlaneGeometry(35, 35)
     floorGeom.rotateX(-Math.PI / 2)
     floorGeom.translate(0, -baseDepth - 0.05, 0)
@@ -435,10 +379,12 @@ export default function BlockModel3D({
     floorMesh.receiveShadow = true
     scene.add(floorMesh)
 
-    const grid = new THREE.GridHelper(26, 26, 0x3f3f46, 0x18181b)
-    grid.position.y = -baseDepth - 0.04
-    scene.add(grid)
+    // Rejilla de referencia en la base
+    const gridHelper = new THREE.GridHelper(26, 26, 0x3f3f46, 0x18181b)
+    gridHelper.position.y = -baseDepth - 0.04
+    scene.add(gridHelper)
 
+    // 7. Bucle de animación
     let isRunning = true
     const animate = () => {
       if (!isRunning) return
@@ -481,39 +427,44 @@ export default function BlockModel3D({
       wallMat.dispose()
       baseGeom.dispose()
       baseMat.dispose()
-      oreGeom.dispose()
-      oreMat.dispose()
       floorGeom.dispose()
       floorMat.dispose()
-      if (strataTex) strataTex.dispose()
+      if (terrainTexture) terrainTexture.dispose()
     }
-  }, [isOpen])
+  }, [isOpen, rectangle, aspect, maxLat, minLat, maxLng, minLng, elevationAt, map])
 
-  // Actualización de Exageración Vertical
+  // Actualización dinámica de Exageración Vertical
   useEffect(() => {
     if (!topMeshRef.current || !wallsMeshRef.current) return
+    const grid = elevationGridRef.current
+    const minElev = elevationMinRef.current
+    const maxElev = elevationMaxRef.current
+    if (!grid.length) return
+
+    const elevRange = Math.max(maxElev - minElev, 50)
+    const heightScale = (3.0 / elevRange) * exaggeration
+
+    // Actualizar superficie
     const topGeom = topMeshRef.current.geometry
     const topPos = topGeom.attributes.position
-    const count = topPos.count
-
-    for (let i = 0; i < count; i++) {
-      const x = topPos.getX(i)
-      const z = topPos.getZ(i)
-      topPos.setY(i, elevationSample(x, z) * exaggeration)
+    for (let k = 0; k < topPos.count; k++) {
+      const e = grid[k] ?? minElev
+      topPos.setY(k, (e - minElev) * heightScale)
     }
     topPos.needsUpdate = true
     topGeom.computeVertexNormals()
 
+    // Actualizar falda
     const wallGeom = wallsMeshRef.current.geometry
     const wallPos = wallGeom.attributes.position
-    const W = 9
-    const D = 9
+    const W = 9.0
+    const D = 9.0 * aspect
     const segX = 48
     const segZ = 48
-    const baseDepth = 4.2
+    const baseDepth = 2.8
     let idx = 0
 
-    function updateWallVertices(p0x, p0z, p1x, p1z, steps) {
+    function updateWall(p0x, p0z, p1x, p1z, getElevA, getElevB, steps) {
       for (let s = 0; s < steps; s++) {
         const uA = s / steps
         const uB = (s + 1) / steps
@@ -522,8 +473,8 @@ export default function BlockModel3D({
         const xB = p0x + (p1x - p0x) * uB
         const zB = p0z + (p1z - p0z) * uB
 
-        const yTopA = elevationSample(xA, zA) * exaggeration
-        const yTopB = elevationSample(xB, zB) * exaggeration
+        const yTopA = (getElevA(s) - minElev) * heightScale
+        const yTopB = (getElevB(s + 1) - minElev) * heightScale
         const yBot = -baseDepth
 
         wallPos.setXYZ(idx++, xA, yTopA, zA)
@@ -537,43 +488,43 @@ export default function BlockModel3D({
 
     const halfW = W / 2
     const halfD = D / 2
-    updateWallVertices(-halfW, halfD, halfW, halfD, segX)
-    updateWallVertices(halfW, halfD, halfW, -halfD, segZ)
-    updateWallVertices(halfW, -halfD, -halfW, -halfD, segX)
-    updateWallVertices(-halfW, -halfD, -halfW, halfD, segZ)
+
+    // Norte
+    updateWall(-halfW, -halfD, halfW, -halfD, (s) => grid[s], (s) => grid[s], segX)
+    // Este
+    updateWall(halfW, -halfD, halfW, halfD, (s) => grid[s * (segX + 1) + segX], (s) => grid[s * (segX + 1) + segX], segZ)
+    // Sur
+    updateWall(halfW, halfD, -halfW, halfD, (s) => grid[segZ * (segX + 1) + (segX - s)], (s) => grid[segZ * (segX + 1) + (segX - s)], segX)
+    // Oeste
+    updateWall(-halfW, halfD, -halfW, -halfD, (s) => grid[(segZ - s) * (segX + 1)], (s) => grid[(segZ - s) * (segX + 1)], segZ)
 
     wallPos.needsUpdate = true
     wallGeom.computeVertexNormals()
-  }, [exaggeration])
+  }, [exaggeration, aspect])
 
-  // Plano de corte
-  useEffect(() => {
-    if (!clipPlaneRef.current) return
-    if (slicingActive) {
-      clipPlaneRef.current.normal.set(-1, 0, 0)
-      clipPlaneRef.current.constant = slicePosition
-    } else {
-      clipPlaneRef.current.constant = 100
-    }
-  }, [slicingActive, slicePosition])
+  // Actualización de ángulo solar y sombras
+  const updateSunAngle = useCallback((deg, height = 18, intensity = 2.8, color = 0xfffaed) => {
+    setSunAngle(deg)
+    if (!sunLightRef.current) return
+    const rad = (deg * Math.PI) / 180
+    const dist = 16
+    const x = Math.cos(rad) * dist
+    const z = Math.sin(rad) * dist
+    sunLightRef.current.position.set(x, height, z)
+    sunLightRef.current.intensity = intensity
+    sunLightRef.current.color.setHex(color)
+  }, [])
 
   const changeSunPreset = useCallback((preset) => {
     setSunPreset(preset)
-    if (!sunLightRef.current) return
     if (preset === "morning") {
-      sunLightRef.current.position.set(-16, 8, 12)
-      sunLightRef.current.color.setHex(0xffedd5)
-      sunLightRef.current.intensity = 2.0
+      updateSunAngle(120, 8, 2.4, 0xffedd5)
     } else if (preset === "noon") {
-      sunLightRef.current.position.set(4, 22, 6)
-      sunLightRef.current.color.setHex(0xfffaed)
-      sunLightRef.current.intensity = 2.6
+      updateSunAngle(45, 22, 3.0, 0xfffaed)
     } else if (preset === "sunset") {
-      sunLightRef.current.position.set(18, 5, -12)
-      sunLightRef.current.color.setHex(0xfdba74)
-      sunLightRef.current.intensity = 2.2
+      updateSunAngle(310, 5, 2.5, 0xfdba74)
     }
-  }, [])
+  }, [updateSunAngle])
 
   useEffect(() => {
     if (topMeshRef.current) topMeshRef.current.material.wireframe = wireframe
@@ -593,9 +544,9 @@ export default function BlockModel3D({
     const dataUrl = rendererRef.current.domElement.toDataURL("image/png")
     const a = document.createElement("a")
     a.href = dataUrl
-    a.download = `bloque_geologico_3d_${expedientCode || "modelo"}.png`
+    a.download = "bloque_3d_terreno.png"
     a.click()
-  }, [expedientCode])
+  }, [])
 
   if (!isOpen) return null
 
@@ -604,27 +555,37 @@ export default function BlockModel3D({
       {/* Barra de cabecera Studio */}
       <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between rounded-2xl border border-zinc-800/80 bg-[#09090b]/85 px-4 py-2.5 shadow-2xl backdrop-blur-2xl">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-emerald-400">
-            <Layers className="h-4 w-4" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+            <Square className="h-4 w-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[13px] font-semibold text-zinc-100 tracking-tight">
-                Modelo Geológico 3D (Forge3D)
+                Bloque 3D del Terreno
               </span>
               <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                PBR Realista
+                Relieve Real
               </span>
             </div>
             <p className="text-[11px] text-zinc-400">
-              {expedientCode ? `Expediente: ${expedientCode} · ` : ""}
-              Estratigrafía procedural, relieve analítico y veta mineralizada
+              Área: {widthKm} km × {heightKm} km · Cota: {Math.round(elevationMinRef.current)} m a {Math.round(elevationMaxRef.current)} m
             </p>
           </div>
         </div>
 
         {/* Acciones de cabecera */}
         <div className="flex items-center gap-1.5">
+          {onRedrawRectangle && (
+            <button
+              type="button"
+              onClick={onRedrawRectangle}
+              title="Seleccionar o dibujar otro rectángulo en el mapa"
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-2.5 py-1.5 text-[11.5px] font-medium text-emerald-300 hover:border-emerald-500 hover:bg-emerald-900/40 transition-all active:scale-95"
+            >
+              <Square className="h-3.5 w-3.5" />
+              <span>Cambiar área</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={handleSnapshot}
@@ -654,7 +615,7 @@ export default function BlockModel3D({
           <button
             type="button"
             onClick={onClose}
-            title="Cerrar modelo de bloque 3D"
+            title="Cerrar bloque 3D del terreno"
             className="flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-rose-900/60 hover:bg-rose-950/40 hover:text-rose-300 transition-all active:scale-95"
           >
             <X className="h-4 w-4" />
@@ -664,44 +625,6 @@ export default function BlockModel3D({
 
       {/* Contenedor Three.js Canvas */}
       <div ref={containerRef} className="relative h-full w-full cursor-grab active:cursor-grabbing" />
-
-      {/* Leyenda Estratigráfica Lateral Colapsable */}
-      <div className="absolute top-20 left-3 z-20 max-w-[240px]">
-        <div className="rounded-2xl border border-zinc-800/80 bg-[#09090b]/85 p-3 shadow-2xl backdrop-blur-2xl transition-all">
-          <button
-            type="button"
-            onClick={() => setShowStrataLegend((v) => !v)}
-            className="flex w-full items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200"
-          >
-            <span>Columna Estratigráfica</span>
-            {showStrataLegend ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </button>
-
-          {showStrataLegend && (
-            <div className="mt-2.5 space-y-1.5 border-t border-zinc-800/60 pt-2 text-[11px]">
-              {STRATA_DEFS.map((s) => (
-                <div
-                  key={s.id}
-                  className={`flex items-center gap-2 rounded-lg p-1.5 transition-colors ${
-                    s.isOre ? "bg-amber-500/10 border border-amber-500/30" : "hover:bg-zinc-800/40"
-                  }`}
-                >
-                  <span
-                    className="h-3.5 w-3.5 shrink-0 rounded border shadow-sm"
-                    style={{ backgroundColor: s.color, borderColor: s.border }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className={`truncate font-medium ${s.isOre ? "text-amber-300 font-semibold" : "text-zinc-200"}`}>
-                      {s.name}
-                    </div>
-                    <div className="text-[9.5px] text-zinc-400 font-mono">{s.depth}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Barra de Controles Studio Inferior */}
       <div className="absolute bottom-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800/80 bg-[#09090b]/90 px-4 py-2.5 shadow-2xl backdrop-blur-2xl">
@@ -722,36 +645,6 @@ export default function BlockModel3D({
           <span className="font-mono text-[11px] text-emerald-400 font-semibold w-8">
             {exaggeration.toFixed(1)}×
           </span>
-        </div>
-
-        {/* Control de Plano de Corte (Slicing) */}
-        <div className="flex items-center gap-2 border-l border-zinc-800 pl-3">
-          <button
-            type="button"
-            onClick={() => setSlicingActive((v) => !v)}
-            title="Activar plano de corte transversal para ver el interior del bloque"
-            className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-medium transition-all ${
-              slicingActive
-                ? "border-amber-500/60 bg-amber-950/40 text-amber-300 shadow-sm"
-                : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <Scissors className="h-3.5 w-3.5" />
-            <span>Corte interior</span>
-          </button>
-
-          {slicingActive && (
-            <input
-              type="range"
-              min="-4.0"
-              max="4.0"
-              step="0.2"
-              value={slicePosition}
-              onChange={(e) => setSlicePosition(parseFloat(e.target.value))}
-              className="h-1.5 w-20 accent-amber-500 cursor-pointer bg-zinc-800 rounded-lg"
-              title="Mover plano de corte transversal"
-            />
-          )}
         </div>
 
         {/* Presets de Iluminación Solar */}
@@ -775,6 +668,23 @@ export default function BlockModel3D({
               {preset.label}
             </button>
           ))}
+        </div>
+
+        {/* Control de Ángulo Solar Continuo */}
+        <div className="flex items-center gap-2 border-l border-zinc-800 pl-3">
+          <Compass className="h-3.5 w-3.5 text-zinc-400" />
+          <span className="text-[10.5px] text-zinc-400 font-medium">Luz:</span>
+          <input
+            type="range"
+            min="0"
+            max="360"
+            step="5"
+            value={sunAngle}
+            onChange={(e) => updateSunAngle(parseInt(e.target.value))}
+            className="h-1.5 w-20 accent-amber-500 cursor-pointer bg-zinc-800 rounded-lg"
+            title="Girar posición del sol para ver sombras dinámicas"
+          />
+          <span className="font-mono text-[10.5px] text-zinc-300 w-8">{sunAngle}°</span>
         </div>
 
         {/* Giro continuo y Malla */}

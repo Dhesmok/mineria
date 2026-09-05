@@ -50,15 +50,13 @@ describe("BlockModel3D", () => {
       <BlockModel3D
         isOpen={true}
         onClose={jest.fn()}
-        expedientCode="T-12345"
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
       />
     )
 
-    expect(screen.getByText("Modelo Geológico 3D (Forge3D)")).toBeInTheDocument()
-    expect(screen.getByText(/T-12345/)).toBeInTheDocument()
-    expect(screen.getByText("Columna Estratigráfica")).toBeInTheDocument()
+    expect(screen.getByText("Bloque 3D del Terreno")).toBeInTheDocument()
+    expect(screen.getByText("Relieve Real")).toBeInTheDocument()
     expect(screen.getByText("Exageración:")).toBeInTheDocument()
-    expect(screen.getByText("Corte interior")).toBeInTheDocument()
     expect(screen.getByText("Mediodía")).toBeInTheDocument()
   })
 
@@ -68,10 +66,11 @@ describe("BlockModel3D", () => {
       <BlockModel3D
         isOpen={true}
         onClose={onClose}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
       />
     )
 
-    const closeBtn = screen.getByTitle("Cerrar modelo de bloque 3D")
+    const closeBtn = screen.getByTitle("Cerrar bloque 3D del terreno")
     fireEvent.click(closeBtn)
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -81,6 +80,7 @@ describe("BlockModel3D", () => {
       <BlockModel3D
         isOpen={true}
         onClose={jest.fn()}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
       />
     )
 
@@ -89,16 +89,17 @@ describe("BlockModel3D", () => {
     expect(screen.getByText("3.5×")).toBeInTheDocument()
   })
 
-  it("permite activar el plano de corte transversal", () => {
+  it("permite cambiar el ángulo de iluminación solar", () => {
     render(
       <BlockModel3D
         isOpen={true}
         onClose={jest.fn()}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
       />
     )
 
-    const cutBtn = screen.getByText("Corte interior")
-    fireEvent.click(cutBtn)
-    expect(screen.getByTitle("Mover plano de corte transversal")).toBeInTheDocument()
+    const sunSlider = screen.getByTitle("Girar posición del sol para ver sombras dinámicas")
+    fireEvent.change(sunSlider, { target: { value: "180" } })
+    expect(screen.getByText("180°")).toBeInTheDocument()
   })
 })
