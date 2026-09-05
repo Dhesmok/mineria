@@ -20,6 +20,7 @@ import {
   Spline,
   Square,
   Trash2,
+  Linkedin,
 } from "lucide-react"
 import ExportComponent from "./ExportComponent"
 import { axisLabels, crsById, formatCoordinate, fromGeographic, SOURCE_CRS } from "./utils/crs"
@@ -386,20 +387,18 @@ export default function Component() {
             </button>
           </div>
 
-          {/* Botón inferior para fijar / liberar */}
+          {/* Enlace al perfil de LinkedIn en la base de la barra */}
           <div className="flex flex-col items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsPinned((p) => !p)}
-              title={isPinned ? "Desfijar panel lateral" : "Fijar panel lateral"}
-              className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-                isPinned
-                  ? "bg-zinc-800 text-white border border-zinc-700"
-                  : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
-              }`}
+            <a
+              href="https://www.linkedin.com/in/fabio-espinosa/"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Fabio A. Espinosa en LinkedIn"
+              aria-label="Perfil de LinkedIn de Fabio A. Espinosa"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 transition-colors"
             >
-              {isPinned ? <Pin className="h-4 w-4 fill-white" /> : <PinOff className="h-4 w-4" />}
-            </button>
+              <Linkedin className="h-4.5 w-4.5" />
+            </a>
           </div>
         </div>
 
@@ -694,6 +693,7 @@ export default function Component() {
                     </div>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                        layerName?.toLowerCase().includes("solicitud") ||
                         layerName?.toLowerCase().includes("trámite") ||
                         layerName?.toLowerCase().includes("tramite")
                           ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
@@ -872,19 +872,23 @@ export default function Component() {
 
       {showExportModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-md">
-          <div className="bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
-            <h2 className="text-xl font-bold mb-4 text-zinc-100">Tipo de archivo</h2>
+          <div className="relative bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold tracking-tight text-zinc-100">Tipo de archivo para exportar</h2>
+              <button
+                type="button"
+                onClick={handleCloseExportModal}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+                aria-label="Cerrar modal de descarga"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
             <ExportComponent
               geoJsonData={geoJsonData}
               selectedCoordinateSystem={selectedCoordinateSystem}
               expedientCode={expedientCode}
             />
-            <Button
-              onClick={handleCloseExportModal}
-              className="mt-4 w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 rounded-xl"
-            >
-              Cerrar
-            </Button>
           </div>
         </div>
       )}

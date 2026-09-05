@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Box, Orbit, Rotate3d, X } from "lucide-react"
+import { Box, Orbit, Pin, PinOff, Rotate3d, X } from "lucide-react"
 
 /**
  * Las piezas sueltas de la interfaz del mapa: un botón, una fila de ajuste, un
@@ -391,6 +391,32 @@ export const Hud3DPopover = ({
   onClose,
 }) => {
   const [modeView, setModeView] = useState("sliders")
+  const [isPinned, setIsPinned] = useState(false)
+  const leaveTimerRef = useRef(null)
+
+  const handleMouseEnter = () => {
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current)
+      leaveTimerRef.current = null
+    }
+  }
+
+  const handleMouseLeave = () => {
+    if (!isPinned && onClose) {
+      leaveTimerRef.current = setTimeout(() => {
+        onClose()
+      }, 700)
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (leaveTimerRef.current) {
+        clearTimeout(leaveTimerRef.current)
+      }
+    }
+  }, [])
+
   const normBearing = Math.round(((bearing % 360) + 360) % 360)
   const normPitch = Math.round(pitch)
 
@@ -409,6 +435,8 @@ export const Hud3DPopover = ({
     <div
       role="dialog"
       aria-label="Perspectiva 3D del Terreno"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className="pointer-events-auto w-[305px] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl transition-all"
     >
       {/* Cabecera */}
@@ -449,16 +477,22 @@ export const Hud3DPopover = ({
             <span>Vista</span>
           </button>
 
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Cerrar controles 3D"
-              className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
+          {/* Botón Fijar (Pin) */}
+          <button
+            type="button"
+            onClick={() => setIsPinned((p) => !p)}
+            title={isPinned ? "Desfijar panel 3D (se oculta automáticamente al salir)" : "Fijar panel 3D para mantenerlo visible"}
+            aria-pressed={isPinned}
+            aria-label={isPinned ? "Desfijar panel 3D" : "Fijar panel 3D"}
+            className={`flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10.5px] font-medium transition-all ${
+              isPinned
+                ? "bg-zinc-800 text-white border border-zinc-700 font-semibold shadow-sm"
+                : "border border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            }`}
+          >
+            {isPinned ? <Pin className="h-3 w-3 fill-white" /> : <PinOff className="h-3 w-3" />}
+            <span>{isPinned ? "Fijado" : "Fijar"}</span>
+          </button>
         </div>
       </div>
 

@@ -573,7 +573,10 @@ export default function MapComponentGL({
           alto y el ancho explícitos el contenedor llena a su padre gane quien
           gane. Leaflet no sufría esto porque su CSS no toca `position` en el
           contenedor. */}
-      <div ref={containerRef} className="absolute inset-0 h-full w-full z-0" />
+      <div
+        ref={containerRef}
+        className={`absolute inset-0 h-full w-full z-0 ${is3D ? "mode-3d" : "mode-2d"}`}
+      />
 
       {/* El lienzo de arriba, donde van las capas que se funden con el relieve.
           Son **dos divs y no uno**, y es por la misma regla del comentario de
@@ -978,12 +981,34 @@ export default function MapComponentGL({
         /* Mismas etiquetas que el visor Leaflet: texto blanco con contorno negro,
            que es lo único legible tanto sobre el mapa claro como sobre satélite. */
         .map-label {
-          background: none;
-          border: none;
-          box-shadow: none;
+          background: none !important;
+          border: none !important;
+          box-shadow: none !important;
           pointer-events: none;
         }
-        .map-label div {
+        /* En 2D: Rótulos limpios con halo cartográfico nítido sin cuadrado negro */
+        .mode-2d .map-label div {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          color: #ffffff;
+          background: transparent !important;
+          border: none !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          padding: 0 !important;
+          text-shadow:
+            -1px -1px 0 #000000,
+             1px -1px 0 #000000,
+            -1px  1px 0 #000000,
+             1px  1px 0 #000000,
+             0    2px 4px rgba(0, 0, 0, 0.95);
+          white-space: nowrap;
+        }
+        /* En 3D: Chip flotante con efecto cristal y borde sutil */
+        .mode-3d .map-label div {
           font-size: 11px;
           font-weight: 600;
           letter-spacing: 0.02em;
@@ -1002,30 +1027,65 @@ export default function MapComponentGL({
           color: #f4f4f5 !important;
           font-size: 12px !important;
           line-height: 1.4 !important;
-          border-radius: 14px !important;
+          border-radius: 16px !important;
           border: 1px solid rgba(39, 39, 42, 0.8) !important;
-          box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.8) !important;
+          box-shadow: 0 20px 45px -8px rgba(0, 0, 0, 0.85) !important;
           backdrop-filter: blur(16px) !important;
           -webkit-backdrop-filter: blur(16px) !important;
-          max-height: 400px;
+          max-height: 420px;
           overflow-y: auto;
-          padding: 12px 14px !important;
+          padding: 14px 16px !important;
+        }
+        .popup-header-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 6px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(63, 63, 70, 0.5);
+        }
+        .popup-type-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 2px 8px;
+          border-radius: 9999px;
+          font-size: 10px;
+          font-weight: 600;
+          background: rgba(16, 185, 129, 0.12);
+          color: #6ee7b7;
+          border: 1px solid rgba(16, 185, 129, 0.25);
+          letter-spacing: 0.02em;
+        }
+        .popup-code-title {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 11px;
+          font-weight: 700;
+          color: #e4e4e7;
         }
         .maplibregl-popup-content h3 {
-          font-size: 13px !important;
-          font-weight: 700 !important;
-          letter-spacing: 0.02em;
-          color: #ffffff !important;
-          margin-bottom: 8px !important;
-          border-bottom: 1px solid rgba(39, 39, 42, 0.8) !important;
-          padding-bottom: 6px !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: #a1a1aa !important;
+          margin-bottom: 6px !important;
+          margin-top: 2px !important;
         }
         /* Un filete tenue entre dato y dato con alto contraste y legibilidad */
         .maplibregl-popup-content p {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: 10px;
           margin: 0;
-          padding: 5px 0 !important;
-          border-bottom: 1px solid rgba(39, 39, 42, 0.5) !important;
-          color: #e4e4e7 !important;
+          padding: 4px 0 !important;
+          border-bottom: 1px solid rgba(39, 39, 42, 0.4) !important;
+          color: #f4f4f5 !important;
+          font-size: 11.5px !important;
+        }
+        .maplibregl-popup-content .popup-row-na {
+          opacity: 0.4;
         }
         .maplibregl-popup-content p:last-child {
           border-bottom: none !important;

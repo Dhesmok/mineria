@@ -39,28 +39,48 @@ export async function queryExpedientSuggestions(query, signal) {
   const layerNumbers = await findTenureLayerNumbers()
   if (signal?.aborted) return []
 
-  const urls = [
-    ...[TITLE_LAYER_NAME, REQUEST_LAYER_NAME]
-      .map((name) => layerNumbers[name])
-      .filter((layerNumber) => layerNumber !== undefined)
-      .map((layerNumber) => `${tenureLayerUrl(layerNumber)}/${consulta}`),
-    `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/${consulta}`,
-    `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/${consulta}`,
+  const sources = [
+    ...(layerNumbers[TITLE_LAYER_NAME] !== undefined
+      ? [{ layerName: "Título", url: `${tenureLayerUrl(layerNumbers[TITLE_LAYER_NAME])}/${consulta}` }]
+      : []),
+    ...(layerNumbers[REQUEST_LAYER_NAME] !== undefined
+      ? [{ layerName: "Solicitud", url: `${tenureLayerUrl(layerNumbers[REQUEST_LAYER_NAME])}/${consulta}` }]
+      : []),
+    {
+      layerName: "Título",
+      url: `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/${consulta}`,
+    },
+    {
+      layerName: "Solicitud",
+      url: `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/${consulta}`,
+    },
   ]
 
   const settled = await Promise.allSettled(
-    urls.map((url) => fetchArcgisJson(url, { signal })),
+    sources.map((s) => fetchArcgisJson(s.url, { signal })),
   )
   if (signal?.aborted) return []
 
-  const data = settled.filter((r) => r.status === "fulfilled").map((r) => r.value)
-  const encontrados = data.flatMap((d) =>
-    (d.features || [])
-      .map((f) => f.attributes?.CODIGO_EXPEDIENTE || f.attributes?.TENURE_ID)
-      .filter(Boolean),
-  )
-  if (data.length === 0) throw new Error("No fue posible consultar las capas de sugerencias.")
-  return [...new Set(encontrados)].slice(0, MAX_SUGGESTIONS)
+  const suggestions = []
+  const seenCodes = new Set()
+
+  settled.forEach((result, idx) => {
+    if (result.status !== "fulfilled" || !result.value?.features) return
+    const layerName = sources[idx].layerName
+    for (const f of result.value.features) {
+      const code = f.attributes?.CODIGO_EXPEDIENTE || f.attributes?.TENURE_ID
+      if (code && !seenCodes.has(code)) {
+        seenCodes.add(code)
+        suggestions.push({ code, layerName })
+      }
+    }
+  })
+
+  if (settled.every((r) => r.status === "rejected")) {
+    throw new Error("No fue posible consultar las capas de sugerencias.")
+  }
+
+  return suggestions.slice(0, MAX_SUGGESTIONS)
 }
 
 export const ExpedientSearch = ({
@@ -156,10 +176,11 @@ export const ExpedientSearch = ({
   }
 
   const elegir = (sugerencia) => {
+    const valor = typeof sugerencia === "string" ? sugerencia : sugerencia?.code
     skipNextFetchRef.current = true
-    setCode(sugerencia)
+    setCode(valor)
     setSuggestions([])
-    buscar(sugerencia)
+    buscar(valor)
   }
 
   const alTeclear = (event) => {
@@ -251,23 +272,38 @@ export const ExpedientSearch = ({
             aria-label="Expedientes sugeridos"
             className="mt-1.5 max-h-52 overflow-auto rounded-xl border border-zinc-800 bg-zinc-950/90"
           >
-            {suggestions.map((sugerencia, index) => (
-              <li
-                key={sugerencia}
-                role="option"
-                aria-selected={index === active}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                  elegir(sugerencia)
-                }}
-                onMouseEnter={() => setActive(index)}
-                className={`cursor-pointer px-3 py-2 text-[12.5px] ${
-                  index === active ? "bg-zinc-800 text-white font-medium" : "text-zinc-200 hover:bg-zinc-800/50"
-                }`}
-              >
-                {sugerencia}
-              </li>
-            ))}
+            {suggestions.map((item, index) => {
+              const codeVal = typeof item === "string" ? item : item.code
+              const layerName = typeof item === "object" ? item.layerName : null
+              return (
+                <li
+                  key={codeVal || index}
+                  role="option"
+                  aria-selected={index === active}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    elegir(item)
+                  }}
+                  onMouseEnter={() => setActive(index)}
+                  className={`flex items-center justify-between cursor-pointer px-3 py-2 text-[12.5px] transition-colors ${
+                    index === active ? "bg-zinc-800 text-white font-medium" : "text-zinc-200 hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <span className="font-mono">{codeVal}</span>
+                  {layerName && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                        layerName.toLowerCase().includes("solicitud") || layerName.toLowerCase().includes("trámite")
+                          ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                      }`}
+                    >
+                      {layerName}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
 

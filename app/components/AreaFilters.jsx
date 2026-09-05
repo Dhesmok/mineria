@@ -72,7 +72,7 @@ export const AreaFilters = ({
     })
   }
 
-  const camposConOpciones = FILTER_FIELDS.filter((campo) => (values[campo.key] ?? []).length > 1)
+  const camposConOpciones = FILTER_FIELDS.filter((campo) => (values[campo.key] ?? []).length >= 1)
 
   // El ancho de aquí abajo tiene que ser el mismo que el de la clase: colocar la
   // ventana contando con un ancho que no es el que el navegador va a usar es
