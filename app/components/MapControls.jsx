@@ -67,6 +67,7 @@ export const MapHUD = ({
   onZoomIn,
   onZoomOut,
   onToggle3D,
+  onMouseEnter3D,
 }) => (
   <div
     role="toolbar"
@@ -122,7 +123,14 @@ export const MapHUD = ({
     <button
       type="button"
       onClick={onToggle3D}
-      title={is3D ? "Volver a vista plana (2D)" : "Activar perspectiva 3D"}
+      onMouseEnter={onMouseEnter3D}
+      title={
+        !is3D
+          ? "Activar perspectiva 3D"
+          : hud3DOpen
+            ? "Volver a vista plana (2D)"
+            : "Abrir controles 3D"
+      }
       aria-label={is3D ? "Volver a 2D" : "Perspectiva 3D"}
       aria-pressed={is3D}
       className={`flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold transition-all ${
@@ -382,6 +390,8 @@ export const Hud3DPopover = ({
   exaggeration = 1.5,
   bearing = 0,
   isSpinning = false,
+  isPinned: controlledPinned,
+  onTogglePin,
   onToggleSpin,
   onChangePitch,
   onChangeExaggeration,
@@ -389,20 +399,27 @@ export const Hud3DPopover = ({
   onRotateBy,
   onResetNorth,
   onClose,
+  onMouseEnter,
+  onMouseLeave,
 }) => {
+  const [localPinned, setLocalPinned] = useState(false)
+  const isPinned = controlledPinned !== undefined ? controlledPinned : localPinned
+  const handleTogglePin = onTogglePin || (() => setLocalPinned((p) => !p))
+
   const [modeView, setModeView] = useState("sliders")
-  const [isPinned, setIsPinned] = useState(false)
   const leaveTimerRef = useRef(null)
 
-  const handleMouseEnter = () => {
+  const handleMouseEnter = (e) => {
     if (leaveTimerRef.current) {
       clearTimeout(leaveTimerRef.current)
       leaveTimerRef.current = null
     }
+    onMouseEnter?.(e)
   }
 
-  const handleMouseLeave = () => {
-    if (!isPinned && onClose) {
+  const handleMouseLeave = (e) => {
+    onMouseLeave?.(e)
+    if (controlledPinned === undefined && !isPinned && onClose) {
       leaveTimerRef.current = setTimeout(() => {
         onClose()
       }, 700)
@@ -437,7 +454,7 @@ export const Hud3DPopover = ({
       aria-label="Perspectiva 3D del Terreno"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="pointer-events-auto w-[305px] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl transition-all"
+      className="pointer-events-auto w-[305px] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl transition-all select-none"
     >
       {/* Cabecera */}
       <div className="mb-3 flex items-center justify-between border-b border-zinc-800/80 pb-2">
@@ -477,22 +494,34 @@ export const Hud3DPopover = ({
             <span>Vista</span>
           </button>
 
-          {/* Botón Fijar (Pin) */}
+          {/* Botón Fijar (Pin) - Solo ícono */}
           <button
             type="button"
-            onClick={() => setIsPinned((p) => !p)}
-            title={isPinned ? "Desfijar panel 3D (se oculta automáticamente al salir)" : "Fijar panel 3D para mantenerlo visible"}
+            onClick={handleTogglePin}
+            title={isPinned ? "Panel fijado (no se oculta automáticamente)" : "Fijar panel 3D"}
             aria-pressed={isPinned}
             aria-label={isPinned ? "Desfijar panel 3D" : "Fijar panel 3D"}
-            className={`flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10.5px] font-medium transition-all ${
+            className={`flex h-6 w-6 items-center justify-center rounded-lg border transition-all ${
               isPinned
-                ? "bg-zinc-800 text-white border border-zinc-700 font-semibold shadow-sm"
-                : "border border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                ? "border-zinc-700 bg-zinc-800 text-white shadow-sm"
+                : "border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:bg-zinc-800 hover:text-white"
             }`}
           >
-            {isPinned ? <Pin className="h-3 w-3 fill-white" /> : <PinOff className="h-3 w-3" />}
-            <span>{isPinned ? "Fijado" : "Fijar"}</span>
+            {isPinned ? <Pin className="h-3.5 w-3.5 fill-white" /> : <PinOff className="h-3.5 w-3.5" />}
           </button>
+
+          {/* Botón Cerrar / Ocultar panel */}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              title="Ocultar panel 3D"
+              aria-label="Ocultar panel 3D"
+              className="flex h-6 w-6 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-400 transition-all hover:bg-zinc-800 hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

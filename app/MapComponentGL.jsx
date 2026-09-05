@@ -110,6 +110,42 @@ export default function MapComponentGL({
   const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
   const [basemapOpen, setBasemapOpen] = useState(false)
   const basemapBtnRef = useRef(null)
+  const basemapContainerRef = useRef(null)
+  const basemapLeaveTimerRef = useRef(null)
+
+  const handleBasemapMouseEnter = useCallback(() => {
+    if (basemapLeaveTimerRef.current) {
+      clearTimeout(basemapLeaveTimerRef.current)
+      basemapLeaveTimerRef.current = null
+    }
+  }, [])
+
+  const handleBasemapMouseLeave = useCallback(() => {
+    if (!basemapOpen) return
+    if (basemapLeaveTimerRef.current) {
+      clearTimeout(basemapLeaveTimerRef.current)
+    }
+    basemapLeaveTimerRef.current = setTimeout(() => {
+      setBasemapOpen(false)
+    }, 800)
+  }, [basemapOpen])
+
+  useEffect(() => {
+    if (!basemapOpen) return
+    const handleClickOutside = (e) => {
+      if (basemapContainerRef.current && !basemapContainerRef.current.contains(e.target)) {
+        setBasemapOpen(false)
+      }
+    }
+    window.addEventListener("pointerdown", handleClickOutside)
+    return () => {
+      window.removeEventListener("pointerdown", handleClickOutside)
+      if (basemapLeaveTimerRef.current) {
+        clearTimeout(basemapLeaveTimerRef.current)
+      }
+    }
+  }, [basemapOpen])
+
   const [dibujoAbierto, setDibujoAbierto] = useState(false)
   const [dibujoCompacto, setDibujoCompacto] = useState(false)
   const [exportandoImagen, setExportandoImagen] = useState(false)
@@ -156,6 +192,37 @@ export default function MapComponentGL({
   } = useTerrainGL(mapRef, mapInstance)
 
   const [hud3DOpen, setHud3DOpen] = useState(false)
+  const [is3DPinned, setIs3DPinned] = useState(false)
+  const hud3DContainerRef = useRef(null)
+  const hud3DLeaveTimerRef = useRef(null)
+
+  const handleHud3DMouseEnter = useCallback(() => {
+    if (hud3DLeaveTimerRef.current) {
+      clearTimeout(hud3DLeaveTimerRef.current)
+      hud3DLeaveTimerRef.current = null
+    }
+    if (is3D) {
+      setHud3DOpen(true)
+    }
+  }, [is3D])
+
+  const handleHud3DMouseLeave = useCallback(() => {
+    if (!is3D || is3DPinned) return
+    if (hud3DLeaveTimerRef.current) {
+      clearTimeout(hud3DLeaveTimerRef.current)
+    }
+    hud3DLeaveTimerRef.current = setTimeout(() => {
+      setHud3DOpen(false)
+    }, 700)
+  }, [is3D, is3DPinned])
+
+  useEffect(() => {
+    return () => {
+      if (hud3DLeaveTimerRef.current) {
+        clearTimeout(hud3DLeaveTimerRef.current)
+      }
+    }
+  }, [])
 
   // Si hay algo que enseñar en el lienzo de arriba. Mientras no lo haya, ese
   // lienzo se apaga: son un contexto WebGL y un juego de teselas de más, y en un
@@ -786,11 +853,22 @@ export default function MapComponentGL({
         {/* Controles de navegación y HUD unificados del mapa */}
         <div className="flex flex-col items-end gap-2">
           {/* Botón Mapa Base */}
-          <div className="relative">
+          <div
+            ref={basemapContainerRef}
+            onMouseEnter={handleBasemapMouseEnter}
+            onMouseLeave={handleBasemapMouseLeave}
+            className="relative"
+          >
             <button
               ref={basemapBtnRef}
               type="button"
-              onClick={() => setBasemapOpen((v) => !v)}
+              onClick={() => {
+                if (basemapLeaveTimerRef.current) {
+                  clearTimeout(basemapLeaveTimerRef.current)
+                  basemapLeaveTimerRef.current = null
+                }
+                setBasemapOpen((v) => !v)
+              }}
               title="Cambiar mapa base (6 estilos disponibles)"
               aria-label="Mapa base"
               aria-expanded={basemapOpen}
@@ -802,19 +880,22 @@ export default function MapComponentGL({
             >
               <MapIcon className="h-4.5 w-4.5" />
             </button>
-            {basemapOpen && (
-              <div className="absolute right-full mr-3 bottom-0 z-30 animate-in fade-in zoom-in-95">
-                <BasemapPicker
-                  current={basemap}
-                  showLabels={showLabels}
-                  onChoose={(id) => {
-                    chooseBasemap(id)
-                  }}
-                  onClose={() => setBasemapOpen(false)}
-                  anchorEl={basemapBtnRef.current}
-                />
-              </div>
-            )}
+            <div
+              className={`absolute right-full mr-3 bottom-0 z-30 origin-bottom-right transition-all duration-200 ease-out ${
+                basemapOpen
+                  ? "scale-100 opacity-100 translate-x-0 pointer-events-auto"
+                  : "scale-75 opacity-0 translate-x-4 pointer-events-none"
+              }`}
+            >
+              <BasemapPicker
+                current={basemap}
+                showLabels={showLabels}
+                onChoose={(id) => {
+                  chooseBasemap(id)
+                }}
+                onClose={() => setBasemapOpen(false)}
+              />
+            </div>
           </div>
 
           {/* Botón GPS */}
@@ -833,14 +914,27 @@ export default function MapComponentGL({
           </button>
 
           {/* MapHUD: Norte, Zoom +, Zoom -, 3D y Popover de opciones 3D */}
-          <div className="relative flex items-center">
-            {is3D && hud3DOpen && (
-              <div className="absolute right-full mr-3 bottom-0 z-30 max-h-[calc(100vh-5rem)] overflow-y-auto animate-in fade-in zoom-in-95">
+          <div
+            ref={hud3DContainerRef}
+            onMouseEnter={handleHud3DMouseEnter}
+            onMouseLeave={handleHud3DMouseLeave}
+            className="relative flex items-center"
+          >
+            {is3D && (
+              <div
+                className={`absolute right-full mr-3 bottom-0 z-30 max-h-[calc(100vh-5rem)] overflow-y-auto origin-bottom-right transition-all duration-200 ease-out ${
+                  hud3DOpen
+                    ? "scale-100 opacity-100 translate-x-0 pointer-events-auto"
+                    : "scale-75 opacity-0 translate-x-4 pointer-events-none"
+                }`}
+              >
                 <Hud3DPopover
                   pitch={pitch}
                   exaggeration={exaggeration}
                   bearing={bearing}
                   isSpinning={isSpinning}
+                  isPinned={is3DPinned}
+                  onTogglePin={() => setIs3DPinned((p) => !p)}
                   onToggleSpin={spin}
                   onChangePitch={changePitch}
                   onChangeExaggeration={changeExaggeration}
@@ -856,6 +950,8 @@ export default function MapComponentGL({
                   }}
                   onResetNorth={resetNorth}
                   onClose={() => setHud3DOpen(false)}
+                  onMouseEnter={handleHud3DMouseEnter}
+                  onMouseLeave={handleHud3DMouseLeave}
                 />
               </div>
             )}
@@ -866,13 +962,18 @@ export default function MapComponentGL({
               onResetNorth={resetNorth}
               onZoomIn={() => mapRef.current?.zoomIn?.({ duration: 300 })}
               onZoomOut={() => mapRef.current?.zoomOut?.({ duration: 300 })}
+              onMouseEnter3D={handleHud3DMouseEnter}
               onToggle3D={() => {
                 if (!is3D) {
                   toggle3D()
                   setHud3DOpen(true)
                 } else {
-                  toggle3D()
-                  setHud3DOpen(false)
+                  if (!hud3DOpen) {
+                    setHud3DOpen(true)
+                  } else {
+                    toggle3D()
+                    setHud3DOpen(false)
+                  }
                 }
               }}
             />
