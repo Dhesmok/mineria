@@ -17,75 +17,49 @@ import {
   Compass,
   MapPin,
   Palette,
+  Trash2,
+  Check,
 } from "lucide-react"
 
 import { loadMosaic } from "../utils/demTileLoader"
-import { tileRangeFor, tilesOf, cellInMosaic, DEM_MAX_ZOOM } from "../utils/demTiles"
+import { tileRangeFor, tilesOf, cellInMosaic, demZoomFor } from "../utils/demTiles"
 import { TERRAIN_TILE_TEMPLATE } from "../utils/mapStyles"
 
 /**
- * Textura procedural de corte geológico / corteza terrestre natural
- * para las paredes laterales del bloque 3D (estilo maqueta de diorama físico).
+ * Textura de tierra homogénea natural para las paredes laterales
+ * (tierra compacta, elegante y uniforme sin franjas artificiales).
  */
-function createEarthCrossSectionTexture() {
+function createHomogeneousEarthTexture() {
   if (typeof document === "undefined") return null
   const canvas = document.createElement("canvas")
-  canvas.width = 1024
-  canvas.height = 1024
+  canvas.width = 512
+  canvas.height = 512
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
 
-  // 1. Fondo base de roca madre profunda
-  ctx.fillStyle = "#382e25"
-  ctx.fillRect(0, 0, 1024, 1024)
+  // 1. Tono base de tierra fértil y mineral homogénea
+  const grad = ctx.createLinearGradient(0, 0, 0, 512)
+  grad.addColorStop(0, "#2d231c")   // Tono tierra oscuro superior
+  grad.addColorStop(0.2, "#342a22") // Tierra compacta
+  grad.addColorStop(0.8, "#322820") // Subsuelo
+  grad.addColorStop(1, "#261e18")   // Base ligeramente más oscura
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, 512, 512)
 
-  // 2. Estratos geológicos sedimentarios con ondulación orgánica
-  // y = 0 es la base del bloque (cota inferior), y = 1024 es el borde superior (superficie del terreno)
-  const strata = [
-    { y0: 0, y1: 170, c1: "#30271f", c2: "#3f3329", freq: 0.016, amp: 8 },    // Basamento rocoso
-    { y0: 170, y1: 310, c1: "#4a3c30", c2: "#5c4c3e", freq: 0.022, amp: 10 },  // Arenisca basal
-    { y0: 310, y1: 430, c1: "#756350", c2: "#887561", freq: 0.028, amp: 12 },  // Estrato calizo claro
-    { y0: 430, y1: 560, c1: "#4c4135", c2: "#5c5043", freq: 0.019, amp: 9 },   // Pizarra y arcilla
-    { y0: 560, y1: 690, c1: "#6d5a47", c2: "#7e6a55", freq: 0.024, amp: 11 },  // Arenisca ferruginosa
-    { y0: 690, y1: 800, c1: "#584a3c", c2: "#6a5a4b", freq: 0.032, amp: 8 },   // Aluvión / grava consolidada
-    { y0: 800, y1: 910, c1: "#473b2e", c2: "#564839", freq: 0.027, amp: 7 },   // Subsuelo mineral
-    { y0: 910, y1: 975, c1: "#35281d", c2: "#413224", freq: 0.038, amp: 5 },   // Horizonte B arcilloso
-    { y0: 975, y1: 1024, c1: "#22170f", c2: "#2d1f14", freq: 0.045, amp: 4 },  // Capa vegetal orgánica / humus bajo césped
-  ]
-
-  for (const s of strata) {
-    const yTop = 1024 - s.y1
-    const yBot = 1024 - s.y0
-    const grad = ctx.createLinearGradient(0, yTop, 0, yBot)
-    grad.addColorStop(0, s.c1)
-    grad.addColorStop(1, s.c2)
-    ctx.fillStyle = grad
-
-    ctx.beginPath()
-    ctx.moveTo(0, yBot)
-    for (let x = 0; x <= 1024; x += 16) {
-      const wave = Math.sin(x * s.freq) * s.amp + Math.cos(x * s.freq * 2.2) * (s.amp * 0.45)
-      ctx.lineTo(x, yTop + wave)
-    }
-    ctx.lineTo(1024, yBot)
-    ctx.closePath?.()
-    ctx.fill?.()
-  }
-
-  // 3. Finas micro-estratificaciones sedimentarias horizontales
-  for (let y = 0; y < 1024; y += 4) {
-    const alpha = (Math.sin(y * 0.18) * 0.5 + 0.5) * 0.14
-    ctx.fillStyle = y % 8 === 0 ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha * 1.6})`
-    ctx.fillRect(0, y, 1024, 2)
-  }
-
-  // 4. Moteado de grano mineral y roca triturada
-  for (let i = 0; i < 2200; i++) {
-    const px = Math.random() * 1024
-    const py = Math.random() * 1024
-    const sz = 1 + Math.random() * 2.5
-    ctx.fillStyle = Math.random() > 0.5 ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.09)"
+  // 2. Grano mineral fino y sutil de suelo natural
+  for (let i = 0; i < 3000; i++) {
+    const px = Math.random() * 512
+    const py = Math.random() * 512
+    const sz = 0.8 + Math.random() * 1.5
+    const dark = Math.random() > 0.45
+    ctx.fillStyle = dark ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.06)"
     ctx.fillRect(px, py, sz, sz)
+  }
+
+  // 3. Sutiles micro-fisuras verticales/horizontales muy tenues
+  for (let y = 0; y < 512; y += 8) {
+    ctx.fillStyle = "rgba(0,0,0,0.04)"
+    ctx.fillRect(0, y, 512, 1)
   }
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -105,7 +79,6 @@ function createFallbackTerrainTexture() {
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
 
-  // Gradiente natural de relieve
   const grad = ctx.createLinearGradient(0, 1024, 0, 0)
   grad.addColorStop(0, "#2d3728")
   grad.addColorStop(0.35, "#4a5d3e")
@@ -114,13 +87,6 @@ function createFallbackTerrainTexture() {
   grad.addColorStop(1, "#b5b0a8")
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, 1024, 1024)
-
-  for (let i = 0; i < 600; i++) {
-    const px = (i * 47) % 1024
-    const py = (i * 31) % 1024
-    ctx.fillStyle = i % 2 === 0 ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.08)"
-    ctx.fillRect(px, py, 2 + (i % 4), 2 + (i % 4))
-  }
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.wrapS = THREE.ClampToEdgeWrapping
@@ -158,38 +124,73 @@ function sampleElevation(lng, lat, elevationAt, map) {
 }
 
 /**
- * Crea un sprite o marcador 3D (Pin blanco con texto, como en la imagen de referencia)
+ * Crea la etiqueta 2D del Pin (Tag blanco / estético con tipografía nítida)
  */
-function createPinMarker(text = "Área de Interés") {
+function createPinSprite(text, color = "#ffffff", textColor = "#0f172a") {
   if (typeof document === "undefined") return null
   const canvas = document.createElement("canvas")
   canvas.width = 256
-  canvas.height = 80
+  canvas.height = 76
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
 
-  // Fondo blanco redondeado con sombra sutil
-  ctx.fillStyle = "#ffffff"
+  // Fondo cápsula redondeada
+  ctx.fillStyle = color
   ctx.beginPath()
-  if (ctx.roundRect) ctx.roundRect(8, 8, 240, 64, 12); else ctx.rect?.(8, 8, 240, 64)
+  if (ctx.roundRect) ctx.roundRect(6, 6, 244, 64, 14); else ctx.rect?.(6, 6, 244, 64)
   ctx.fill?.()
 
+  // Borde sutil
   ctx.lineWidth = 3
-  ctx.strokeStyle = "#e2e8f0"
+  ctx.strokeStyle = "rgba(0,0,0,0.12)"
   ctx.stroke?.()
 
-  // Texto nítido
-  ctx.fillStyle = "#0f172a"
-  ctx.font = "bold 24px sans-serif"
+  // Texto
+  ctx.fillStyle = textColor
+  ctx.font = "bold 23px sans-serif"
   ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  ctx.fillText(text.slice(0, 16), 128, 40)
+  ctx.fillText(text.slice(0, 15), 128, 38)
 
   const texture = new THREE.CanvasTexture(canvas)
   const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false })
   const sprite = new THREE.Sprite(spriteMat)
-  sprite.scale.set(2.4, 0.75, 1)
+  sprite.scale.set(1.8, 0.54, 1)
   return sprite
+}
+
+/**
+ * Crea el objeto 3D de un Pin estilizado (aguja metálica + bolita en tierra + etiqueta)
+ */
+function buildPinMesh(pin) {
+  const group = new THREE.Group()
+  group.name = "pin_" + pin.id
+  group.userData = { pinId: pin.id }
+
+  // 1. Bolita de contacto en el suelo
+  const dotGeom = new THREE.SphereGeometry(0.045, 12, 12)
+  const dotMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.8, roughness: 0.2 })
+  const dot = new THREE.Mesh(dotGeom, dotMat)
+  dot.position.y = 0.02
+  group.add(dot)
+
+  // 2. Mástil / aguja metálica fina
+  const needleHeight = 0.95
+  const needleGeom = new THREE.CylinderGeometry(0.012, 0.012, needleHeight, 8)
+  const needleMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.9, roughness: 0.15 })
+  const needle = new THREE.Mesh(needleGeom, needleMat)
+  needle.position.y = needleHeight / 2
+  group.add(needle)
+
+  // 3. Etiqueta / Sprite
+  const sprite = createPinSprite(pin.text, pin.color || "#ffffff", pin.textColor || "#0f172a")
+  if (sprite) {
+    sprite.position.y = needleHeight + 0.3
+    group.add(sprite)
+  }
+
+  group.position.set(pin.x, pin.y, pin.z)
+  return group
 }
 
 /**
@@ -204,7 +205,6 @@ export default function BlockModel3D({
   onRedrawRectangle,
   isMaximized,
   onToggleMaximize,
-  expedientCode,
 }) {
   const containerRef = useRef(null)
   const rendererRef = useRef(null)
@@ -214,20 +214,21 @@ export default function BlockModel3D({
   const blockGroupRef = useRef(null)
   const topMeshRef = useRef(null)
   const wallsMeshRef = useRef(null)
+  const floorMeshRef = useRef(null)
   const sunLightRef = useRef(null)
   const hemiLightRef = useRef(null)
   const animFrameRef = useRef(null)
-  const pinGroupRef = useRef(null)
+  const pinsGroupRef = useRef(null)
 
-  // Datos normalizados de elevación en memoria para deformación rápida
+  // Datos de elevación en memoria
   const elevationGridRef = useRef([])
   const elevationMinRef = useRef(0)
   const elevationMaxRef = useRef(100)
 
   // Estados interactivos
-  const [exaggeration, setExaggeration] = useState(2.0)
+  const [exaggeration, setExaggeration] = useState(1.0)
   const [sunPreset, setSunPreset] = useState("noon")
-  const [sunAngle, setSunAngle] = useState(45) // Grados azimut
+  const [sunAngle, setSunAngle] = useState(45)
   const [autoRotate, setAutoRotate] = useState(false)
   const autoRotateRef = useRef(autoRotate)
   useEffect(() => {
@@ -235,16 +236,39 @@ export default function BlockModel3D({
   }, [autoRotate])
 
   const [wireframe, setWireframe] = useState(false)
-  const [studioTheme, setStudioTheme] = useState("light") // "light" (como la foto de referencia) o "dark"
-  const [showPin, setShowPin] = useState(true)
+  const [studioTheme, setStudioTheme] = useState("dark") // Por defecto oscuro
   const [demLoaded, setDemLoaded] = useState(false)
 
-  // Medidas del rectángulo para visualización
+  // Sistema interactivo de Pines personalizados
+  const [pins, setPins] = useState([])
+  const [isAddingPin, setIsAddingPin] = useState(false)
+  const [selectedPinId, setSelectedPinId] = useState(null)
+  const [editingPinText, setEditingPinText] = useState("")
+
+  // Medidas del rectángulo para escala métrica rigurosa
   const bbox = rectangle?.bbox || [-75.6, 6.2, -75.5, 6.3]
   const [minLng, minLat, maxLng, maxLat] = bbox
-  const aspect = Math.max(0.4, Math.min(2.5, (maxLat - minLat) / (maxLng - minLng || 0.0001)))
-  const widthKm = ((maxLng - minLng) * 111.32 * Math.cos(((minLat + maxLat) / 2 * Math.PI) / 180)).toFixed(2)
-  const heightKm = ((maxLat - minLat) * 110.57).toFixed(2)
+  const centerLat = (minLat + maxLat) / 2
+  const latRad = (centerLat * Math.PI) / 180
+  const widthMeters = Math.max(10, (maxLng - minLng) * 111320 * Math.cos(latRad))
+  const heightMeters = Math.max(10, (maxLat - minLat) * 110574)
+  const aspect = Math.max(0.4, Math.min(2.5, heightMeters / (widthMeters || 1)))
+  const widthKm = (widthMeters / 1000).toFixed(2)
+  const heightKm = (heightMeters / 1000).toFixed(2)
+
+  // Escala métrica 1:1 rigurosa
+  // En Three.js el ancho horizontal es W = 9.0
+  const W = 9.0
+  const D = 9.0 * aspect
+  const metersPerThreeUnit = widthMeters / W
+  const baseDepth = 0.45 // Base corta y elegante, no profunda
+
+  // Función de cálculo de altura métrica para un valor de elevación
+  const computeHeight = useCallback((elev, minElev, exag) => {
+    // Escala métrica verdadera: (elev - minElev) / metersPerThreeUnit * exageracion
+    const rawUnits = (elev - minElev) / metersPerThreeUnit
+    return Math.max(0, rawUnits * exag)
+  }, [metersPerThreeUnit])
 
   // Inicialización de Three.js
   useEffect(() => {
@@ -254,18 +278,18 @@ export default function BlockModel3D({
     const width = container.clientWidth || 600
     const height = container.clientHeight || 600
 
-    // 1. Escena con fondo neutro de estudio (Sage claro idéntico a la imagen)
+    // 1. Escena
     const scene = new THREE.Scene()
     const bgColor = studioTheme === "light" ? 0xdfe6dc : 0x09090b
     scene.background = new THREE.Color(bgColor)
     sceneRef.current = scene
 
-    // 2. Cámara en perspectiva idéntica a maqueta isométrica
+    // 2. Cámara
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 100)
-    camera.position.set(13.5, 12, 14.5)
+    camera.position.set(13.5, 11, 14.5)
     cameraRef.current = camera
 
-    // 3. Renderer con Sombras Suaves PCF y Mapeo Fílmico ACES
+    // 3. Renderer
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: "high-performance",
@@ -280,18 +304,17 @@ export default function BlockModel3D({
     container.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
-    // 4. Controles orbitales con amortiguación suave
+    // 4. Controles orbitales
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.06
-    controls.maxPolarAngle = Math.PI / 2 + 0.03
-    controls.minDistance = 4
+    controls.maxPolarAngle = Math.PI / 2 + 0.02
+    controls.minDistance = 3
     controls.maxDistance = 50
     controls.target.set(0, 0, 0)
     controlsRef.current = controls
 
-    // 5. Iluminación realista estilo estudio fotográfico
-    // Sol direccional que arroja sombras suaves sobre laderas y valles
+    // 5. Iluminación realista
     const sunLight = new THREE.DirectionalLight(0xfffaed, studioTheme === "light" ? 2.5 : 2.8)
     sunLight.position.set(12, 18, 10)
     sunLight.castShadow = true
@@ -309,7 +332,6 @@ export default function BlockModel3D({
     scene.add(sunLight)
     sunLightRef.current = sunLight
 
-    // Luz hemisférica difusa (Cielo suave y rebote del plano)
     const hemiLight = new THREE.HemisphereLight(
       studioTheme === "light" ? 0xffffff : 0xbde0fe,
       studioTheme === "light" ? 0xc5cec2 : 0x1f1c19,
@@ -318,8 +340,7 @@ export default function BlockModel3D({
     scene.add(hemiLight)
     hemiLightRef.current = hemiLight
 
-    // Luz de relleno lateral sutil
-    const rimLight = new THREE.DirectionalLight(0xffffff, 0.45)
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.4)
     rimLight.position.set(-14, 10, -12)
     scene.add(rimLight)
 
@@ -328,14 +349,10 @@ export default function BlockModel3D({
     scene.add(blockGroup)
     blockGroupRef.current = blockGroup
 
-    // Dimensiones proporcionales del bloque
-    const W = 9.0
-    const D = 9.0 * aspect
     const segX = 72
     const segZ = 72
-    const baseDepth = 2.6
 
-    // Muestreo inicial de elevación (síncrono mientras carga el DEM de alta resolución)
+    // Muestreo inicial de elevación
     const grid = []
     let minElev = Infinity
     let maxElev = -Infinity
@@ -356,8 +373,6 @@ export default function BlockModel3D({
     elevationGridRef.current = grid
     elevationMinRef.current = minElev
     elevationMaxRef.current = maxElev
-    const elevRange = Math.max(maxElev - minElev, 40)
-    const heightScale = (2.8 / elevRange) * 2.0
 
     // --- A. Superficie Topográfica Superior ---
     const topGeom = new THREE.PlaneGeometry(W, D, segX, segZ)
@@ -366,19 +381,25 @@ export default function BlockModel3D({
 
     for (let k = 0; k < topPos.count; k++) {
       const e = grid[k] ?? minElev
-      const yVal = (e - minElev) * heightScale
+      const yVal = computeHeight(e, minElev, exaggeration)
       topPos.setY(k, yVal)
     }
     topPos.needsUpdate = true
     topGeom.computeVertexNormals()
 
-    // Textura de la superficie (Captura real del mapa satélite o temático)
+    // Textura de superficie
     let terrainTexture = null
     if (rectangle?.textureDataUrl) {
       const img = new Image()
       img.crossOrigin = "anonymous"
       img.src = rectangle.textureDataUrl
       terrainTexture = new THREE.Texture(img)
+      terrainTexture.generateMipmaps = true
+      terrainTexture.minFilter = THREE.LinearMipmapLinearFilter
+      terrainTexture.magFilter = THREE.LinearFilter
+      if (renderer?.capabilities) {
+        terrainTexture.anisotropy = renderer.capabilities.getMaxAnisotropy()
+      }
       img.onload = () => {
         terrainTexture.needsUpdate = true
       }
@@ -388,8 +409,8 @@ export default function BlockModel3D({
 
     const topMat = new THREE.MeshStandardMaterial({
       map: terrainTexture,
-      roughness: 0.72,
-      metalness: 0.05,
+      roughness: 0.75,
+      metalness: 0.04,
       flatShading: false,
     })
     const topMesh = new THREE.Mesh(topGeom, topMat)
@@ -398,8 +419,8 @@ export default function BlockModel3D({
     blockGroup.add(topMesh)
     topMeshRef.current = topMesh
 
-    // --- B. Paredes Verticales de Falda con Estratigrafía Terrestre Realista ---
-    const earthTexture = createEarthCrossSectionTexture()
+    // --- B. Paredes Verticales de Falda con Tierra Homogénea ---
+    const earthTexture = createHomogeneousEarthTexture()
     const wallPositions = []
     const wallUVs = []
 
@@ -412,8 +433,8 @@ export default function BlockModel3D({
         const xB = p0x + (p1x - p0x) * uB
         const zB = p0z + (p1z - p0z) * uB
 
-        const yTopA = (getElevA(s) - minElev) * heightScale
-        const yTopB = (getElevB(s + 1) - minElev) * heightScale
+        const yTopA = computeHeight(getElevA(s), minElev, exaggeration)
+        const yTopB = computeHeight(getElevB(s + 1), minElev, exaggeration)
         const yBot = -baseDepth
 
         wallPositions.push(xA, yTopA, zA, xA, yBot, zA, xB, yTopB, zB)
@@ -428,33 +449,13 @@ export default function BlockModel3D({
     const halfD = D / 2
 
     // Pared Norte (-Z)
-    addWall(
-      -halfW, -halfD, halfW, -halfD,
-      (s) => grid[s],
-      (s) => grid[s],
-      segX,
-    )
+    addWall(-halfW, -halfD, halfW, -halfD, (s) => grid[s], (s) => grid[s], segX)
     // Pared Este (+X)
-    addWall(
-      halfW, -halfD, halfW, halfD,
-      (s) => grid[s * (segX + 1) + segX],
-      (s) => grid[s * (segX + 1) + segX],
-      segZ,
-    )
+    addWall(halfW, -halfD, halfW, halfD, (s) => grid[s * (segX + 1) + segX], (s) => grid[s * (segX + 1) + segX], segZ)
     // Pared Sur (+Z)
-    addWall(
-      halfW, halfD, -halfW, halfD,
-      (s) => grid[segZ * (segX + 1) + (segX - s)],
-      (s) => grid[segZ * (segX + 1) + (segX - s)],
-      segX,
-    )
+    addWall(halfW, halfD, -halfW, halfD, (s) => grid[segZ * (segX + 1) + (segX - s)], (s) => grid[segZ * (segX + 1) + (segX - s)], segX)
     // Pared Oeste (-X)
-    addWall(
-      -halfW, halfD, -halfW, -halfD,
-      (s) => grid[(segZ - s) * (segX + 1)],
-      (s) => grid[(segZ - s) * (segX + 1)],
-      segZ,
-    )
+    addWall(-halfW, halfD, -halfW, -halfD, (s) => grid[(segZ - s) * (segX + 1)], (s) => grid[(segZ - s) * (segX + 1)], segZ)
 
     const wallGeom = new THREE.BufferGeometry()
     wallGeom.setAttribute("position", new THREE.Float32BufferAttribute(wallPositions, 3))
@@ -463,8 +464,8 @@ export default function BlockModel3D({
 
     const wallMat = new THREE.MeshStandardMaterial({
       map: earthTexture,
-      roughness: 0.82,
-      metalness: 0.04,
+      roughness: 0.88,
+      metalness: 0.03,
       side: THREE.DoubleSide,
     })
     const wallsMesh = new THREE.Mesh(wallGeom, wallMat)
@@ -478,7 +479,7 @@ export default function BlockModel3D({
     bottomGeom.rotateX(Math.PI / 2)
     bottomGeom.translate(0, -baseDepth, 0)
     const bottomMat = new THREE.MeshStandardMaterial({
-      color: 0x221a14,
+      color: 0x1e1712,
       roughness: 0.9,
     })
     const bottomMesh = new THREE.Mesh(bottomGeom, bottomMat)
@@ -495,36 +496,19 @@ export default function BlockModel3D({
     const floorMesh = new THREE.Mesh(floorGeom, floorMat)
     floorMesh.receiveShadow = true
     scene.add(floorMesh)
+    floorMeshRef.current = floorMesh
 
-    // --- E. Marcador / Pin 3D estilo infografía física ---
-    const pinGroup = new THREE.Group()
-    const pinPoleGeom = new THREE.CylinderGeometry(0.025, 0.025, 1.4, 8)
-    const pinPoleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.6, roughness: 0.2 })
-    const pinPole = new THREE.Mesh(pinPoleGeom, pinPoleMat)
-    pinPole.position.y = 0.7
-    pinGroup.add(pinPole)
-
-    const labelText = expedientCode || "Área Seleccionada"
-    const pinSprite = createPinMarker(labelText)
-    if (pinSprite) {
-      pinSprite.position.y = 1.45
-      pinGroup.add(pinSprite)
-    }
-
-    // Ubicar el pin en el centro superior del relieve
-    const centerIdx = Math.floor(segZ / 2) * (segX + 1) + Math.floor(segX / 2)
-    const centerElev = grid[centerIdx] ?? minElev
-    const centerY = (centerElev - minElev) * heightScale
-    pinGroup.position.set(0, centerY, 0)
-    blockGroup.add(pinGroup)
-    pinGroupRef.current = pinGroup
+    // --- E. Grupo de Pines Dinámicos ---
+    const pinsGroup = new THREE.Group()
+    blockGroup.add(pinsGroup)
+    pinsGroupRef.current = pinsGroup
 
     // 7. Bucle de animación continuo
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate)
       controls.update()
       if (autoRotateRef.current && blockGroupRef.current) {
-        blockGroupRef.current.rotation.y += 0.004
+        blockGroupRef.current.rotation.y += 0.0035
       }
       renderer.render(scene, camera)
     }
@@ -550,28 +534,44 @@ export default function BlockModel3D({
       renderer.dispose()
       controls.dispose()
     }
-  }, [isOpen, aspect, maxLat, minLat, maxLng, minLng, studioTheme, elevationAt, expedientCode, map, rectangle?.textureDataUrl])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, aspect, maxLat, minLat, maxLng, minLng, studioTheme, elevationAt, map, computeHeight, exaggeration, W, D])
 
-  // --- Carga Asíncrona del DEM Real (SRTM Oficial) ---
+  // Actualización dinámica de textura (ej. cuando se procesa la captura de alta resolución o cambia el mapa base)
+  useEffect(() => {
+    if (!rectangle?.textureDataUrl || !topMeshRef.current?.material) return
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.src = rectangle.textureDataUrl
+    img.onload = () => {
+      const tex = new THREE.Texture(img)
+      tex.generateMipmaps = true
+      tex.minFilter = THREE.LinearMipmapLinearFilter
+      tex.magFilter = THREE.LinearFilter
+      if (rendererRef.current?.capabilities) {
+        tex.anisotropy = rendererRef.current.capabilities.getMaxAnisotropy()
+      }
+      tex.needsUpdate = true
+      if (topMeshRef.current?.material) {
+        topMeshRef.current.material.map = tex
+        topMeshRef.current.material.needsUpdate = true
+      }
+    }
+  }, [rectangle?.textureDataUrl])
+
+  // --- Carga Asíncrona del DEM Real (Mismo DEM SRTM de alta resolución que usa el visor) ---
   useEffect(() => {
     if (!isOpen || !rectangle?.bbox) return
 
     let canceled = false
     const [minLng, minLat, maxLng, maxLat] = rectangle.bbox
-    const span = Math.max(maxLng - minLng, maxLat - minLat)
 
-    // Ajustar zoom según extensión territorial para descarga ultrarrápida
-    let zoom = DEM_MAX_ZOOM // 13 (~19 m de celda)
-    if (span > 0.4) zoom = 11
-    else if (span > 0.18) zoom = 12
+    // Obtener el mismo zoom que el visor
+    const currentMapZoom = map?.getZoom?.() ?? 13
+    const zoom = demZoomFor(currentMapZoom)
 
     const range = tileRangeFor({ west: minLng, east: maxLng, south: minLat, north: maxLat }, zoom)
     let tiles = tilesOf(range)
-    if (tiles.length > 28 && zoom > 10) {
-      zoom -= 1
-      const r2 = tileRangeFor({ west: minLng, east: maxLng, south: minLat, north: maxLat }, zoom)
-      tiles = tilesOf(r2)
-    }
 
     loadMosaic(TERRAIN_TILE_TEMPLATE, tiles, range)
       .then(({ heights, missing }) => {
@@ -611,28 +611,24 @@ export default function BlockModel3D({
         elevationMaxRef.current = rMax
         setDemLoaded(true)
 
-        // Deformar la geometría existente con el DEM de verdad
+        // Deformar la geometría con el DEM de verdad
         if (topMeshRef.current && wallsMeshRef.current) {
-          const elevRange = Math.max(rMax - rMin, 40)
-          const hScale = (2.8 / elevRange) * exaggeration
-
           const topPos = topMeshRef.current.geometry.attributes.position
           for (let k = 0; k < topPos.count; k++) {
             const e = realGrid[k] ?? rMin
-            topPos.setY(k, (e - rMin) * hScale)
+            topPos.setY(k, computeHeight(e, rMin, exaggeration))
           }
           topPos.needsUpdate = true
           topMeshRef.current.geometry.computeVertexNormals()
 
           // Actualizar paredes laterales
           const wallPos = wallsMeshRef.current.geometry.attributes.position
-          const baseDepth = 2.6
           let idx = 0
 
           function updateWallSeg(getElevA, getElevB, steps) {
             for (let s = 0; s < steps; s++) {
-              const yTopA = (getElevA(s) - rMin) * hScale
-              const yTopB = (getElevB(s + 1) - rMin) * hScale
+              const yTopA = computeHeight(getElevA(s), rMin, exaggeration)
+              const yTopB = computeHeight(getElevB(s + 1), rMin, exaggeration)
               wallPos.setY(idx + 0, yTopA)
               wallPos.setY(idx + 1, -baseDepth)
               wallPos.setY(idx + 2, yTopB)
@@ -650,23 +646,16 @@ export default function BlockModel3D({
 
           wallPos.needsUpdate = true
           wallsMeshRef.current.geometry.computeVertexNormals()
-
-          // Actualizar posición del marcador pin
-          if (pinGroupRef.current) {
-            const centerIdx = Math.floor(segZ / 2) * (segX + 1) + Math.floor(segX / 2)
-            const cElev = realGrid[centerIdx] ?? rMin
-            pinGroupRef.current.position.y = (cElev - rMin) * hScale
-          }
         }
       })
       .catch(() => {
-        // Fallback síncrono ya activo
+        // Fallback síncrono activo
       })
 
     return () => {
       canceled = true
     }
-  }, [isOpen, rectangle?.bbox, exaggeration, elevationAt, map])
+  }, [isOpen, rectangle?.bbox, exaggeration, elevationAt, map, computeHeight])
 
   // Actualización dinámica de textura superior al cambiar mapa base
   useEffect(() => {
@@ -691,30 +680,26 @@ export default function BlockModel3D({
     if (!grid || grid.length === 0) return
 
     const minElev = elevationMinRef.current
-    const maxElev = elevationMaxRef.current
-    const elevRange = Math.max(maxElev - minElev, 40)
-    const heightScale = (2.8 / elevRange) * exaggeration
+    const segX = 72
+    const segZ = 72
 
     // Top
     const topPos = topMeshRef.current.geometry.attributes.position
     for (let k = 0; k < topPos.count; k++) {
       const e = grid[k] ?? minElev
-      topPos.setY(k, (e - minElev) * heightScale)
+      topPos.setY(k, computeHeight(e, minElev, exaggeration))
     }
     topPos.needsUpdate = true
     topMeshRef.current.geometry.computeVertexNormals()
 
     // Paredes
     const wallPos = wallsMeshRef.current.geometry.attributes.position
-    const baseDepth = 2.6
-    const segX = 72
-    const segZ = 72
     let idx = 0
 
     function updateWallSeg(getElevA, getElevB, steps) {
       for (let s = 0; s < steps; s++) {
-        const yTopA = (getElevA(s) - minElev) * heightScale
-        const yTopB = (getElevB(s + 1) - minElev) * heightScale
+        const yTopA = computeHeight(getElevA(s), minElev, exaggeration)
+        const yTopB = computeHeight(getElevB(s + 1), minElev, exaggeration)
         wallPos.setY(idx + 0, yTopA)
         wallPos.setY(idx + 1, -baseDepth)
         wallPos.setY(idx + 2, yTopB)
@@ -733,12 +718,17 @@ export default function BlockModel3D({
     wallPos.needsUpdate = true
     wallsMeshRef.current.geometry.computeVertexNormals()
 
-    if (pinGroupRef.current) {
-      const centerIdx = Math.floor(segZ / 2) * (segX + 1) + Math.floor(segX / 2)
-      const cElev = grid[centerIdx] ?? minElev
-      pinGroupRef.current.position.y = (cElev - minElev) * heightScale
+    // Actualizar altura de los pines
+    if (pinsGroupRef.current) {
+      pinsGroupRef.current.children.forEach((pGroup) => {
+        const pId = pGroup.userData.pinId
+        const pinData = pins.find((p) => p.id === pId)
+        if (pinData) {
+          pGroup.position.y = computeHeight(pinData.elev, minElev, exaggeration)
+        }
+      })
     }
-  }, [exaggeration])
+  }, [exaggeration, computeHeight, pins])
 
   // Actualización de ángulo solar y sombras
   const updateSunAngle = useCallback((deg, height = 18, intensity = 2.5, color = 0xfffaed) => {
@@ -769,13 +759,80 @@ export default function BlockModel3D({
     if (wallsMeshRef.current) wallsMeshRef.current.material.wireframe = wireframe
   }, [wireframe])
 
+  // Sincronizar pines en el grupo Three.js
   useEffect(() => {
-    if (pinGroupRef.current) pinGroupRef.current.visible = showPin
-  }, [showPin])
+    if (!pinsGroupRef.current) return
+    const group = pinsGroupRef.current
+    // Limpiar pines existentes
+    while (group.children.length > 0) {
+      group.remove(group.children[0])
+    }
+    const minElev = elevationMinRef.current
+
+    pins.forEach((pin) => {
+      const pinObj = buildPinMesh({
+        ...pin,
+        y: computeHeight(pin.elev, minElev, exaggeration),
+      })
+      group.add(pinObj)
+    })
+  }, [pins, exaggeration, computeHeight])
+
+  // Manejo de clic para agregar pin interactivo sobre el terreno
+  const handleCanvasClick = useCallback(
+    (e) => {
+      if (!isAddingPin || !containerRef.current || !cameraRef.current || !topMeshRef.current) return
+
+      const rect = containerRef.current.getBoundingClientRect()
+      const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1
+
+      const raycaster = new THREE.Raycaster()
+      raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), cameraRef.current)
+      const intersects = raycaster.intersectObject(topMeshRef.current)
+
+      if (intersects.length > 0) {
+        const hit = intersects[0]
+        const p = hit.point
+
+        // Coordenadas relativas en la cuadrícula
+        const halfW = W / 2
+        const halfD = D / 2
+        const u = Math.max(0, Math.min(1, (p.x + halfW) / W))
+        const v = Math.max(0, Math.min(1, (p.z + halfD) / D))
+
+        const lng = minLng + u * (maxLng - minLng)
+        const lat = maxLat - v * (maxLat - minLat)
+
+        // Cota real en el punto
+        const minElev = elevationMinRef.current
+        const realElev = minElev + (p.y / Math.max(exaggeration, 0.1)) * metersPerThreeUnit
+
+        const newPin = {
+          id: Date.now(),
+          x: p.x,
+          y: p.y,
+          z: p.z,
+          lng,
+          lat,
+          elev: Math.round(realElev),
+          text: `Punto ${pins.length + 1}`,
+          color: "#ffffff",
+          textColor: "#0f172a",
+        }
+
+        setPins((prev) => [...prev, newPin])
+        setSelectedPinId(newPin.id)
+        setEditingPinText(newPin.text)
+        setIsAddingPin(false)
+      }
+    },
+    [isAddingPin, W, D, minLng, maxLng, minLat, maxLat, exaggeration, metersPerThreeUnit, pins.length],
+  )
 
   const handleResetCamera = useCallback(() => {
     if (!cameraRef.current || !controlsRef.current) return
-    cameraRef.current.position.set(13.5, 12, 14.5)
+    cameraRef.current.position.set(13.5, 11, 14.5)
     controlsRef.current.target.set(0, 0, 0)
     controlsRef.current.update()
     if (blockGroupRef.current) blockGroupRef.current.rotation.y = 0
@@ -793,6 +850,7 @@ export default function BlockModel3D({
   if (!isOpen) return null
 
   const isLight = studioTheme === "light"
+  const selectedPin = pins.find((p) => p.id === selectedPinId)
 
   return (
     <div
@@ -804,7 +862,7 @@ export default function BlockModel3D({
       <div
         className={`absolute top-3 left-3 right-3 z-20 flex items-center justify-between rounded-2xl border px-4 py-2.5 shadow-2xl backdrop-blur-2xl transition-all ${
           isLight
-            ? "border-zinc-300/80 bg-white/80 text-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.08)]"
+            ? "border-zinc-300/80 bg-white/85 text-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.08)]"
             : "border-zinc-800/80 bg-[#09090b]/85 text-zinc-100 shadow-[0_8px_30px_rgb(0,0,0,0.5)]"
         }`}
       >
@@ -847,7 +905,7 @@ export default function BlockModel3D({
             <button
               type="button"
               onClick={onRedrawRectangle}
-              title="Seleccionar o dibujar otro rectángulo en el mapa"
+              title="Cambiar área (dibujar otro rectángulo con zoom libre)"
               className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11.5px] font-medium transition-all active:scale-95 ${
                 isLight
                   ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
@@ -859,7 +917,24 @@ export default function BlockModel3D({
             </button>
           )}
 
-          {/* Toggle de tema de estudio (Diorama Claro vs Oscuro) */}
+          {/* Botón interactivo para añadir pin personalizado */}
+          <button
+            type="button"
+            onClick={() => setIsAddingPin((p) => !p)}
+            title={isAddingPin ? "Cancelar colocación de pin" : "Colocar un pin sobre el relieve 3D"}
+            className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11.5px] font-medium transition-all active:scale-95 ${
+              isAddingPin
+                ? "border-amber-500 bg-amber-500/20 text-amber-300 animate-pulse"
+                : isLight
+                ? "border-zinc-300 bg-white/90 text-zinc-700 hover:bg-zinc-100"
+                : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            }`}
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            <span>{isAddingPin ? "Haz clic en el mapa" : "Agregar Pin"}</span>
+          </button>
+
+          {/* Toggle de tema de estudio */}
           <button
             type="button"
             onClick={() => setStudioTheme((t) => (t === "light" ? "dark" : "light"))}
@@ -871,24 +946,6 @@ export default function BlockModel3D({
             }`}
           >
             <Palette className="h-3.5 w-3.5" />
-          </button>
-
-          {/* Toggle de pin / marcador 3D */}
-          <button
-            type="button"
-            onClick={() => setShowPin((p) => !p)}
-            title={showPin ? "Ocultar marcador 3D" : "Mostrar marcador 3D"}
-            className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-all active:scale-95 ${
-              showPin
-                ? isLight
-                  ? "border-emerald-400 bg-emerald-50 text-emerald-700"
-                  : "border-emerald-500/60 bg-emerald-950/40 text-emerald-300"
-                : isLight
-                ? "border-zinc-300 bg-white/90 text-zinc-400 hover:bg-zinc-100"
-                : "border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:bg-zinc-800 hover:text-white"
-            }`}
-          >
-            <MapPin className="h-3.5 w-3.5" />
           </button>
 
           <button
@@ -944,8 +1001,87 @@ export default function BlockModel3D({
         </div>
       </div>
 
+      {/* Editor flotante de Pin Seleccionado */}
+      {selectedPin && (
+        <div
+          className={`absolute top-16 right-4 z-30 flex items-center gap-2 rounded-2xl border p-2 shadow-2xl backdrop-blur-2xl animate-in fade-in slide-in-from-top-2 ${
+            isLight
+              ? "border-zinc-300 bg-white/95 text-zinc-800"
+              : "border-zinc-800 bg-[#09090b]/95 text-zinc-100"
+          }`}
+        >
+          <div className="flex items-center gap-1.5 pl-2">
+            <MapPin className="h-3.5 w-3.5 text-emerald-400" />
+            <span className="text-[11px] font-mono text-zinc-400">
+              {selectedPin.elev}m
+            </span>
+          </div>
+          <input
+            type="text"
+            value={editingPinText}
+            onChange={(e) => setEditingPinText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                setPins((prev) =>
+                  prev.map((p) =>
+                    p.id === selectedPin.id ? { ...p, text: editingPinText } : p
+                  )
+                )
+                setSelectedPinId(null)
+              }
+            }}
+            placeholder="Nombre del pin..."
+            className={`h-7 w-32 rounded-lg border px-2 text-xs focus:outline-none ${
+              isLight
+                ? "border-zinc-300 bg-zinc-50 text-zinc-800 focus:border-zinc-400"
+                : "border-zinc-800 bg-zinc-900 text-zinc-100 focus:border-zinc-700"
+            }`}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setPins((prev) =>
+                prev.map((p) =>
+                  p.id === selectedPin.id ? { ...p, text: editingPinText } : p
+                )
+              )
+              setSelectedPinId(null)
+            }}
+            title="Guardar texto del pin"
+            className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+          >
+            <Check className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPins((prev) => prev.filter((p) => p.id !== selectedPin.id))
+              setSelectedPinId(null)
+            }}
+            title="Eliminar este pin"
+            className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/50 text-rose-300 transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Banner de instrucción para colocar pin */}
+      {isAddingPin && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 rounded-full border border-amber-500/50 bg-[#09090b]/95 px-4 py-1.5 text-xs text-amber-300 shadow-xl backdrop-blur-xl animate-in fade-in">
+          <MapPin className="h-3.5 w-3.5 animate-bounce text-amber-400" />
+          <span>Haz clic sobre cualquier cumbre, valle o punto del relieve para insertar el pin</span>
+        </div>
+      )}
+
       {/* Contenedor Three.js Canvas */}
-      <div ref={containerRef} className="relative h-full w-full cursor-grab active:cursor-grabbing" />
+      <div
+        ref={containerRef}
+        onClick={handleCanvasClick}
+        className={`relative h-full w-full ${
+          isAddingPin ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
+        }`}
+      />
 
       {/* Barra de Controles Studio Inferior */}
       <div
@@ -955,16 +1091,17 @@ export default function BlockModel3D({
             : "border-zinc-800/80 bg-[#09090b]/90 text-zinc-100 shadow-[0_8px_30px_rgb(0,0,0,0.5)]"
         }`}
       >
-        {/* Control de Exageración Vertical */}
+        {/* Control de Exageración Vertical (Métrica Rigurosa 1:1) */}
         <div className="flex items-center gap-2.5">
           <span className={`text-[11px] font-medium uppercase tracking-wider ${isLight ? "text-zinc-600" : "text-zinc-400"}`}>
             Exageración:
           </span>
           <input
             type="range"
-            min="1.0"
-            max="5.0"
-            step="0.2"
+            aria-label="Exageración vertical"
+            min="0.5"
+            max="4.0"
+            step="0.1"
             value={exaggeration}
             onChange={(e) => setExaggeration(parseFloat(e.target.value))}
             className="h-1.5 w-24 accent-emerald-500 cursor-pointer bg-zinc-300 dark:bg-zinc-800 rounded-lg"
@@ -988,9 +1125,7 @@ export default function BlockModel3D({
               onClick={() => changeSunPreset(preset.id)}
               className={`rounded-lg px-2 py-0.5 text-[10.5px] font-medium transition-all ${
                 sunPreset === preset.id
-                  ? isLight
-                    ? "bg-zinc-800 text-white font-semibold shadow-sm"
-                    : "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700"
+                  ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700"
                   : isLight
                   ? "text-zinc-600 hover:bg-zinc-100"
                   : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"

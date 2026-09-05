@@ -88,7 +88,7 @@ describe("BlockModel3D", () => {
       />
     )
 
-    const slider = screen.getByDisplayValue("2")
+    const slider = screen.getByLabelText("Exageración vertical")
     fireEvent.change(slider, { target: { value: "3.5" } })
     expect(screen.getByText("3.5×")).toBeInTheDocument()
   })
