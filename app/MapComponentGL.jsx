@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Map as MapLibreMap, NavigationControl, ScaleControl, setWorkerUrl } from "maplibre-gl"
+import { Map as MapLibreMap, ScaleControl, setWorkerUrl } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 
 import { useMapInitializationGL } from "./hooks/map/useMapInitializationGL"
@@ -27,10 +27,8 @@ import { whenSized } from "./utils/whenSized"
 import { ANM_LAYERS } from "./utils/anmLayers"
 import { SGC_LAYERS } from "./utils/sgcLayers"
 import { ANH_LAYERS, anhLayerByKey } from "./utils/anhLayers"
-import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
 import { DrawToolbar } from "./components/DrawToolbar"
-import { MapMenuItem, MapMenuPanel, MapMenuSeparator } from "./components/MapMenu"
 import { ImageExport } from "./components/ImageExport"
 import { TerrainQuery } from "./components/TerrainQuery"
 import { TerrainRasterLegend } from "./components/TerrainRasterLegend"
@@ -38,23 +36,15 @@ import { SgcPanel, activeRasterKeys } from "./components/SgcPanel"
 import { PlanchaPanel } from "./components/PlanchaPanel"
 import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
-import { Hud3DPopover, MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
+import { Hud3DPopover, MapButton, MapHUD, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
-  Blend,
-  Box,
   ChevronLeft,
-  Compass,
   Crosshair,
   Download,
   Loader2,
-  ImageDown,
-  MountainSnow,
-  PencilRuler,
-  Spline,
-  Triangle,
-  Layers,
   Mountain,
-  User,
+  Layers,
+  PencilRuler,
 } from "lucide-react"
 
 /**
@@ -102,7 +92,7 @@ export default function MapComponentGL({
   onSgcState,
   panelOpen = false,
   blendMode = "multiply",
-  onBlendModeChange,
+  onBlendModeChange: _onBlendModeChange,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
@@ -115,13 +105,7 @@ export default function MapComponentGL({
   const [error, setError] = useState(null)
   const [showErrorBanner, setShowErrorBanner] = useState(false)
 
-  const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
-  // Qué ventana de la columna está abierta y de qué botón salió. Una sola, y no
-  // un estado por menú: abrir una tiene que cerrar la anterior, y con estados
-  // separados se quedaban dos abiertas, una encima de otra.
-  const [menuAbierto, setMenuAbierto] = useState(null)
-  // El dibujo no es una ventana anclada como las demás: es un panel que se
-  // arrastra y se queda puesto mientras se trabaja, así que su estado es aparte.
+  const { basemap, showLabels: _showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
   const [dibujoAbierto, setDibujoAbierto] = useState(false)
   const [dibujoCompacto, setDibujoCompacto] = useState(false)
   const [exportandoImagen, setExportandoImagen] = useState(false)
@@ -149,8 +133,8 @@ export default function MapComponentGL({
   const {
     is3D,
     toggle3D,
-    showHillshade,
-    toggleHillshade,
+    showHillshade: _showHillshade,
+    toggleHillshade: _toggleHillshade,
     exaggeration,
     changeExaggeration,
     bearing,
@@ -158,6 +142,8 @@ export default function MapComponentGL({
     resetNorth,
     pitch,
     changePitch,
+    isSpinning,
+    spin,
     elevationAt,
     terrainError,
     dismissTerrainError,
@@ -319,7 +305,6 @@ export default function MapComponentGL({
     compassSize,
     changeCompassSize,
     handleLocateUser,
-    handleToggleCompass360,
   } = useGeolocationGL(mapRef, setError, setShowErrorBanner)
 
   const { profileActive, toggleProfile, profile, profileHover, onProfileHover } =
@@ -330,11 +315,17 @@ export default function MapComponentGL({
   // para consultarlo era trabajo pagado dos veces.
   const {
     terrainMode,
-    chooseTerrainMode,
+    chooseTerrainMode: _chooseTerrainMode,
     terrainRasterUnavailable,
     terrainRasterProgress,
     terrainRasterCellSize,
   } = useTerrainRasterGL(mapRef, mapInstance)
+
+  useEffect(() => {
+    if (mode && mode !== "simple_select") {
+      setDibujoAbierto(true)
+    }
+  }, [mode])
 
   /**
    * La consulta puntual al terreno: un modo, no un botón de una sola vez.
@@ -364,48 +355,6 @@ export default function MapComponentGL({
     setQueryingTerrain(siguiente)
     setTerrainResult(null)
   }, [])
-
-  /**
-   * Abrir la ventana de un botón, o cerrarla si ya estaba abierta por él.
-   *
-   * Lo segundo importa: sin ello, volver a pulsar el botón la cerraba —por el
-   * clic de fuera— y la abría otra vez en el mismo gesto, así que parecía que no
-   * respondiera.
-   */
-  const abrirMenu = useCallback((id, event) => {
-    const el = event.currentTarget
-    setMenuAbierto((actual) =>
-      actual?.id === id ? null : { id, el, rect: el.getBoundingClientRect() },
-    )
-  }, [])
-
-  const cerrarMenu = useCallback(() => setMenuAbierto(null), [])
-
-  /**
-   * Qué anuncia cada botón de grupo en su distintivo.
-   *
-   * Agrupar botones tiene un precio: lo que está encendido deja de verse. El
-   * distintivo lo devuelve —«Pendiente», «2 figuras»— para que no haya que abrir
-   * la ventana solo para averiguar en qué estado se quedó el mapa.
-   */
-  const terrenoActivo =
-    terrainMode === "slope"
-      ? "Pendiente"
-      : terrainMode === "aspect"
-        ? "Orientación"
-        : queryingTerrain
-          ? "Consulta"
-          : profileActive
-            ? "Perfil"
-            : showHillshade
-              ? "Relieve"
-              : null
-
-  const figurasDibujadas =
-    (drawSummary?.polygons ?? 0) + (drawSummary?.lines ?? 0) + (drawSummary?.points ?? 0)
-  const resumenDibujo = figurasDibujadas
-    ? `${figurasDibujadas} ${figurasDibujadas === 1 ? "figura" : "figuras"}`
-    : null
 
   useEffect(() => {
     if (!mapInstance || !queryingTerrain) return
@@ -555,10 +504,6 @@ export default function MapComponentGL({
         attributionControl: { compact: true },
       })
 
-      // visualizePitch inclina la brújula junto con el mapa. Todavía no sirve de
-      // nada porque el mapa está plano, pero es la pieza que en la Fase 4 le
-      // indica al usuario que está mirando el terreno en 3D.
-      map.addControl(new NavigationControl({ visualizePitch: true }), "top-right")
       map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
 
       mapRef.current = map
@@ -685,6 +630,8 @@ export default function MapComponentGL({
               pitch={pitch}
               exaggeration={exaggeration}
               bearing={bearing}
+              isSpinning={isSpinning}
+              onToggleSpin={spin}
               is3D={is3D}
               onChangePitch={(val) => {
                 if (val > 0 && !is3D) {
@@ -852,127 +799,41 @@ export default function MapComponentGL({
           </MapButton>
         )}
 
-        {/* Las herramientas de dibujo. Estaban sueltas sobre el mapa, en una
-            esquina distinta según el tamaño de la pantalla; ahora salen de aquí,
-            que es donde el usuario ya busca lo demás. */}
-        <MapButton
-          onClick={() => setDibujoAbierto((abierto) => !abierto)}
-          active={dibujoAbierto || mode.startsWith("draw_")}
-          icon={PencilRuler}
-          badge={resumenDibujo}
-          title="Dibujar y medir polígonos, líneas y puntos"
-        >
-          Dibujo
-        </MapButton>
-
-        {/* Relieve, pendiente, orientación y la consulta de cota eran cuatro
-            botones seguidos que hacen lo mismo: mirar el terreno. Juntos ocupaban
-            casi media columna en un teléfono. El 3D se queda fuera a propósito:
-            es un interruptor que se usa a cada rato y esconderlo tras dos toques
-            sería peor que el problema que se está resolviendo. */}
-        <MapButton
-          onClick={(event) => abrirMenu("terreno", event)}
-          active={menuAbierto?.id === "terreno" || Boolean(terrenoActivo)}
-          icon={Mountain}
-          badge={terrenoActivo}
-          title="Relieve, pendiente, orientación y consulta de cota"
-        >
-          Terreno
-        </MapButton>
-
-        <MapButton
-          onClick={() => {
-            if (!is3D) {
-              toggle3D()
-              setHud3DOpen(true)
-            } else {
-              setHud3DOpen((open) => !open)
-            }
-          }}
-          active={is3D || hud3DOpen}
-          aria-pressed={is3D}
-          icon={Box}
-          badge={is3D ? `${Math.round(pitch)}°` : null}
-          title="Levantar el terreno e inclinar la cámara (HUD 3D)"
-        >
-          {is3D ? "Opciones 3D" : "Ver en 3D"}
-        </MapButton>
-
-        <MapButton
-          onClick={() => onBlendModeChange?.(blendMode === "multiply" ? "normal" : "multiply")}
-          active={blendMode === "multiply"}
-          aria-pressed={blendMode === "multiply"}
-          icon={Blend}
-          badge={blendMode === "multiply" ? "MULT" : "NORM"}
-          title={
-            blendMode === "multiply"
-              ? "Modo de fusión: Multiplicar (funde capas temáticas con el relieve). Clic para cambiar a Normal"
-              : "Modo de fusión: Normal (transparencia simple). Clic para cambiar a Multiplicar"
-          }
-        >
-          {blendMode === "multiply" ? "Multiplicar" : "Fusión normal"}
-        </MapButton>
-
-        <MapButton
-          onClick={handleLocateUser}
-          active={hasLocated}
-          icon={Crosshair}
-          title="Mostrar tu ubicación con el GPS"
-          className={isLocating ? "animate-pulse [&_svg]:animate-spin" : ""}
-        >
-          {isLocating ? "Ubicando…" : hasLocated ? "Ubicación activa" : "Activar GPS"}
-        </MapButton>
-
-        {/* La brújula 360° se dibuja encima del marcador del GPS: sin ubicación
-            no hay dónde ponerla. Estaba siempre visible y pulsarla sin el GPS
-            encendido no hacía nada, que es la peor respuesta posible. */}
-        {hasLocated && (
-          <MapButton
-            onClick={handleToggleCompass360}
-            active={isCompassActive}
-            aria-pressed={isCompassActive}
-            icon={Compass}
-            title="Girar una rosa de los vientos con la orientación del celular"
+        {/* Controles de navegación y HUD unificados del mapa */}
+        <div className="flex flex-col items-end gap-2">
+          {/* Botón GPS */}
+          <button
+            type="button"
+            onClick={handleLocateUser}
+            title={isLocating ? "Ubicando…" : hasLocated ? "Ubicación GPS activa" : "Activar GPS"}
+            aria-label="Ubicación GPS"
+            className={`flex h-9 w-9 items-center justify-center rounded-2xl border border-zinc-800/90 bg-[#09090b]/90 shadow-2xl backdrop-blur-2xl transition-all ${
+              hasLocated
+                ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300"
+                : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            }`}
           >
-            {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
-          </MapButton>
-        )}
+            <Crosshair className={`h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
+          </button>
 
-        <MapButton
-          onClick={() => setExportandoImagen(true)}
-          icon={ImageDown}
-          title="Guardar el mapa como imagen, sin los controles"
-        >
-          Exportar imagen
-        </MapButton>
-
-        {/* Se llamaba «Satélite» y alternaba entre dos fondos. Con cinco, un
-            botón que va rotando obliga a pasar por todos para llegar al que se
-            quiere, así que ahora abre una lista.
-
-            Va abajo del todo, pegado a la firma: el fondo se elige una vez al
-            empezar y no se vuelve a tocar, mientras que relieve, 3D y GPS se
-            encienden y apagan a cada rato. Lo que más se usa queda más cerca
-            del pulgar. */}
-        <MapButton
-          onClick={(event) => abrirMenu("fondo", event)}
-          active={menuAbierto?.id === "fondo"}
-          icon={Layers}
-          badge={basemapById(basemap).short}
-          title="Elegir el mapa de fondo"
-        >
-          Mapa base
-        </MapButton>
-
-        <MapButton
-          onClick={() =>
-            window.open("https://www.linkedin.com/in/fabio-espinosa/", "_blank", "noopener,noreferrer")
-          }
-          icon={User}
-          title="Perfil del autor en LinkedIn"
-        >
-          Fabio A. Espinosa
-        </MapButton>
+          {/* MapHUD: Norte, Zoom +, Zoom -, 3D */}
+          <MapHUD
+            bearing={bearing}
+            is3D={is3D}
+            hud3DOpen={hud3DOpen}
+            onResetNorth={resetNorth}
+            onZoomIn={() => mapRef.current?.zoomIn?.({ duration: 300 })}
+            onZoomOut={() => mapRef.current?.zoomOut?.({ duration: 300 })}
+            onToggle3D={() => {
+              if (!is3D) {
+                toggle3D()
+                setHud3DOpen(true)
+              } else {
+                setHud3DOpen((open) => !open)
+              }
+            }}
+          />
+        </div>
         </div>
       </div>
 
@@ -1015,74 +876,7 @@ export default function MapComponentGL({
         />
       )}
 
-      {menuAbierto?.id === "fondo" && (
-        <BasemapPicker
-          current={basemap}
-          showLabels={showLabels}
-          anchorRect={menuAbierto.rect}
-          anchorEl={menuAbierto.el}
-          onChoose={chooseBasemap}
-          onClose={cerrarMenu}
-        />
-      )}
 
-      {/* Las cuatro formas de mirar el terreno, juntas.
-          Pendiente y orientación se excluyen entre sí —las pinta la misma capa—,
-          así que `chooseTerrainMode` con el modo que ya está puesto lo apaga. */}
-      {menuAbierto?.id === "terreno" && (
-        <MapMenuPanel
-          label="Terreno"
-          anchorRect={menuAbierto.rect}
-          anchorEl={menuAbierto.el}
-          onClose={cerrarMenu}
-        >
-          <MapMenuItem
-            icon={Mountain}
-            name="Relieve"
-            hint="Sombrear los cerros sobre el mapa plano"
-            active={showHillshade}
-            onClick={toggleHillshade}
-          />
-          <MapMenuItem
-            icon={Triangle}
-            name="Pendiente"
-            hint="Pintar la inclinación del terreno por colores"
-            active={terrainMode === "slope"}
-            onClick={() => chooseTerrainMode("slope")}
-          />
-          <MapMenuItem
-            icon={Compass}
-            name="Orientación"
-            hint="Pintar hacia dónde mira cada ladera"
-            active={terrainMode === "aspect"}
-            onClick={() => chooseTerrainMode("aspect")}
-          />
-          <MapMenuSeparator />
-          <MapMenuItem
-            icon={MountainSnow}
-            name="Consultar un punto"
-            hint="Pulsa en el mapa y lee cota, pendiente y orientación"
-            active={queryingTerrain}
-            onClick={toggleTerrainQuery}
-          />
-          {/* Esta cierra la ventana al elegirla, a diferencia de las demás. No
-              es un capricho: deja el mapa en modo dibujo, y la ventana se queda
-              encima de donde hay que trazar la línea. Además se cerraría con
-              Escape, que en modo dibujo **también cancela el trazo** — así que
-              el usuario que la cerrara de esa forma se quedaría con el perfil
-              encendido y sin poder dibujar, sin entender por qué. */}
-          <MapMenuItem
-            icon={Spline}
-            name="Perfil longitudinal"
-            hint="Dibuja una línea y mira el corte del terreno"
-            active={profileActive}
-            onClick={() => {
-              toggleProfile()
-              cerrarMenu()
-            }}
-          />
-        </MapMenuPanel>
-      )}
 
       {/* El perfil ocupa el ancho de la pantalla, no la columna de la derecha:
           es una gráfica de distancia, y en una columna de 256 px un recorrido de

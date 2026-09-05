@@ -35,18 +35,18 @@ export const MapButton = ({ active, icon: Icon, badge, className = "", children,
     title={typeof children === "string" ? children : undefined}
     aria-label={typeof children === "string" ? children : undefined}
     {...props}
-    className={`flex h-11 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium shadow-sm transition-colors md:h-9 ${
+    className={`flex h-10 items-center gap-2 rounded-xl border px-3 text-[12.5px] font-medium shadow-sm transition-all md:h-9 ${
       active
-        ? "border-slate-300 bg-slate-900 text-white hover:bg-slate-700"
-        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        ? "border-zinc-700 bg-zinc-800 text-white shadow"
+        : "border-zinc-800/80 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
     } ${className}`}
   >
     {Icon && <Icon className="h-4 w-4 shrink-0" />}
     <span className="hidden whitespace-nowrap md:inline">{children}</span>
     {badge && (
       <span
-        className={`ml-0.5 hidden rounded px-1 py-px text-[9px] font-semibold md:inline ${
-          active ? "bg-white/20" : "bg-slate-100 text-slate-500"
+        className={`ml-0.5 hidden rounded px-1.5 py-0.5 text-[9px] font-semibold md:inline ${
+          active ? "bg-white/20 text-white" : "bg-zinc-800 text-zinc-400"
         }`}
       >
         {badge}
@@ -56,22 +56,95 @@ export const MapButton = ({ active, icon: Icon, badge, className = "", children,
 )
 
 /**
+ * HUD unificado compacto para el mapa (Norte, Zoom +, Zoom -, 3D).
+ * Cero duplicidades en el lienzo.
+ */
+export const MapHUD = ({
+  bearing = 0,
+  is3D = false,
+  hud3DOpen = false,
+  onResetNorth,
+  onZoomIn,
+  onZoomOut,
+  onToggle3D,
+}) => (
+  <div
+    role="toolbar"
+    aria-label="Controles de navegación del mapa"
+    className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-800/90 bg-[#09090b]/90 p-1 shadow-2xl backdrop-blur-2xl"
+  >
+    {/* Brújula interactiva */}
+    <button
+      type="button"
+      onClick={onResetNorth}
+      title="Orientar al Norte (0°)"
+      aria-label="Orientar al Norte"
+      className="flex h-8 w-8 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+    >
+      <div
+        style={{ transform: `rotate(${-bearing}deg)` }}
+        className="transition-transform duration-150"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <polygon points="12,2 16,12 12,9 8,12" fill="#ef4444" />
+          <polygon points="12,22 16,12 12,9 8,12" fill="#71717a" />
+        </svg>
+      </div>
+    </button>
+
+    <div className="h-px w-5 bg-zinc-800" />
+
+    {/* Zoom In */}
+    <button
+      type="button"
+      onClick={onZoomIn}
+      title="Acercar mapa (+)"
+      aria-label="Acercar mapa"
+      className="flex h-8 w-8 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-base font-semibold"
+    >
+      +
+    </button>
+
+    {/* Zoom Out */}
+    <button
+      type="button"
+      onClick={onZoomOut}
+      title="Alejar mapa (−)"
+      aria-label="Alejar mapa"
+      className="flex h-8 w-8 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-base font-semibold"
+    >
+      −
+    </button>
+
+    <div className="h-px w-5 bg-zinc-800" />
+
+    {/* 3D */}
+    <button
+      type="button"
+      onClick={onToggle3D}
+      title={is3D ? "Opciones de vista 3D" : "Activar perspectiva 3D"}
+      aria-label="Perspectiva 3D"
+      aria-pressed={is3D || hud3DOpen}
+      className={`flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold transition-all ${
+        is3D || hud3DOpen
+          ? "bg-white text-black shadow-sm"
+          : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+      }`}
+    >
+      3D
+    </button>
+  </div>
+)
+
+/**
  * Una fila de ajuste: nombre, barra y valor, todo en un renglón.
- *
- * Va en horizontal y no con la etiqueta encima porque estos ajustes viven en un
- * panel flotante sobre el mapa, y en vertical ocupaban tanto que la columna de
- * botones acababa montándose sobre el panel lateral. Se vio en una captura: las
- * comprobaciones sobre el estado del mapa daban todas por buenas.
  */
 export const SliderRow = ({ id, label, title, value, display, min, max, step, onChange }) => (
   <div className="flex items-center gap-2">
-    {/* El aviso de que la exageración no cambia ningún dato vivía en un párrafo
-        bajo la barra y era el renglón más alto del panel. Se lee una vez y
-        estorba siempre, así que ahora va en el título de la etiqueta. */}
     <label
       htmlFor={id}
       title={title}
-      className="w-20 shrink-0 text-[11px] leading-tight text-gray-700"
+      className="w-20 shrink-0 text-[11px] leading-tight text-zinc-400"
     >
       {label}
     </label>
@@ -83,9 +156,9 @@ export const SliderRow = ({ id, label, title, value, display, min, max, step, on
       step={step}
       value={value}
       onChange={(event) => onChange(parseFloat(event.target.value))}
-      className="min-w-0 flex-1"
+      className="min-w-0 flex-1 h-1.5 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-white"
     />
-    <span className="w-11 shrink-0 text-right text-[11px] tabular-nums text-gray-600">
+    <span className="w-11 shrink-0 text-right text-[11px] tabular-nums text-zinc-300">
       {display}
     </span>
   </div>
@@ -93,23 +166,17 @@ export const SliderRow = ({ id, label, title, value, display, min, max, step, on
 
 /**
  * Un aviso sobre el mapa.
- *
- * Los tres que hay —zoom insuficiente, respuesta recortada y modelo de
- * elevación caído— eran píldoras redondas con tres estilos distintos entre sí y
- * ninguno igual al resto de la interfaz. Ahora comparten forma, tamaño y
- * tipografía; lo único que cambia es el color, que es lo que de verdad
- * distingue un dato de una advertencia.
  */
 export const MapNotice = ({ tone = "info", icon: Icon, children, onClose }) => {
   const tonos = {
-    info: "border-slate-200 bg-white text-slate-700",
-    warning: "border-amber-200 bg-amber-50 text-amber-900",
+    info: "border-zinc-800 bg-[#09090b]/95 text-zinc-200",
+    warning: "border-amber-900/60 bg-[#1c1408]/95 text-amber-200",
   }
 
   return (
     <div
       role="status"
-      className={`flex items-center gap-2.5 rounded-lg border py-2 pl-3 pr-2 text-[13px] shadow-lg ${tonos[tone]}`}
+      className={`flex items-center gap-2.5 rounded-xl border py-2 pl-3 pr-2 text-[12.5px] shadow-2xl backdrop-blur-xl ${tonos[tone]}`}
     >
       {Icon && <Icon className="h-4 w-4 shrink-0 opacity-70" />}
       <span className="leading-snug">{children}</span>
@@ -118,7 +185,7 @@ export const MapNotice = ({ tone = "info", icon: Icon, children, onClose }) => {
           type="button"
           onClick={onClose}
           aria-label="Cerrar el aviso"
-          className="rounded p-1 opacity-60 transition-opacity hover:bg-black/5 hover:opacity-100"
+          className="rounded p-1 opacity-60 transition-opacity hover:bg-white/10 hover:opacity-100"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -129,16 +196,6 @@ export const MapNotice = ({ tone = "info", icon: Icon, children, onClose }) => {
 
 /**
  * Aviso de cómo se gira el mapa con el ratón.
- *
- * En el celular el 3D se maneja solo: dos dedos y ya. En el navegador hay que
- * saber que se arrastra con Ctrl, y eso no está escrito en ninguna parte, así
- * que la primera vez que alguien entra en 3D se queda con un mapa inclinado que
- * no sabe girar. El aviso sale una vez por visita y se va solo.
- *
- * Era una píldora negra de 14 px, la única pieza oscura y redonda de toda la
- * pantalla: se leía como un error del sistema y no como una ayuda. Ahora usa el
- * mismo lenguaje que los botones del mapa —blanco, borde slate, 13 px, esquinas
- * de 8— y solo la tecla va resaltada, que es el único dato que hay que retener.
  */
 export const RotateHint = ({ onClose }) => {
   useEffect(() => {
@@ -147,11 +204,11 @@ export const RotateHint = ({ onClose }) => {
   }, [onClose])
 
   return (
-    <div className="pointer-events-auto absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-2 text-[13px] text-slate-700 shadow-lg">
-      <Rotate3d className="h-4 w-4 shrink-0 text-slate-400" />
+    <div className="pointer-events-auto absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-xl border border-zinc-800/90 bg-[#09090b]/95 py-2 pl-3 pr-2 text-[12.5px] text-zinc-200 shadow-2xl backdrop-blur-2xl">
+      <Rotate3d className="h-4 w-4 shrink-0 text-zinc-400" />
       <span>
         Mantén{" "}
-        <kbd className="rounded border border-slate-300 bg-slate-100 px-1.5 py-px font-sans text-[11px] font-semibold text-slate-700">
+        <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-zinc-100">
           Ctrl
         </kbd>{" "}
         y arrastra para girar e inclinar la escena
@@ -160,7 +217,7 @@ export const RotateHint = ({ onClose }) => {
         type="button"
         onClick={onClose}
         aria-label="Cerrar el aviso"
-        className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+        className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
       >
         <X className="h-3.5 w-3.5" />
       </button>
@@ -169,14 +226,16 @@ export const RotateHint = ({ onClose }) => {
 }
 
 /**
- * HUD 3D de alta precisión con botones segmentados (CERO SLIDERS).
- * Permite cambiar la inclinación (tilt), la exageración de relieve vertical (hasta 5×)
- * y la rotación orbital horizontal de forma instantánea y elegante.
+ * HUD 3D de alta precisión con controles continuos y giro automático ("Girar solo").
+ * Permite cambiar la inclinación (tilt), la exageración de relieve vertical (hasta 5×),
+ * la orientación y activar la rotación continua fluida.
  */
 export const Hud3DPopover = ({
   pitch = 0,
   exaggeration = 1.5,
   bearing = 0,
+  isSpinning = false,
+  onToggleSpin,
   onChangePitch,
   onChangeExaggeration,
   onChangeBearing,
@@ -201,110 +260,119 @@ export const Hud3DPopover = ({
     <div
       role="dialog"
       aria-label="Perspectiva 3D del Terreno"
-      className="pointer-events-auto w-[295px] rounded-xl border border-slate-750/80 bg-[#0b1329]/95 p-3.5 text-slate-100 shadow-2xl backdrop-blur-2xl transition-all"
+      className="pointer-events-auto w-[295px] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl transition-all"
     >
       {/* Cabecera */}
-      <div className="mb-3 flex items-center justify-between border-b border-slate-800/80 pb-2">
-        <div className="flex items-center gap-2 text-xs font-semibold text-sky-400">
-          <Box className="h-4 w-4 text-sky-400" />
-          <span className="tracking-wide">Perspectiva 3D del Terreno</span>
+      <div className="mb-3 flex items-center justify-between border-b border-zinc-800/80 pb-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
+          <Box className="h-4 w-4 text-white" />
+          <span className="tracking-wide">Perspectiva 3D</span>
         </div>
-        {onClose && (
+        <div className="flex items-center gap-1">
+          {/* Botón Girar Solo */}
           <button
             type="button"
-            onClick={onClose}
-            aria-label="Cerrar controles 3D"
-            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+            onClick={onToggleSpin}
+            title={isSpinning ? "Detener giro automático" : "Girar solo continuamente"}
+            aria-pressed={isSpinning}
+            className={`flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[10.5px] font-medium transition-all ${
+              isSpinning
+                ? "bg-white text-black font-semibold shadow-sm"
+                : "border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            }`}
           >
-            <X className="h-3.5 w-3.5" />
+            <Rotate3d className={`h-3 w-3 ${isSpinning ? "animate-spin" : ""}`} />
+            <span>{isSpinning ? "Girando" : "Girar solo"}</span>
           </button>
-        )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar controles 3D"
+              className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* 1. Inclinación (Tilt) - Cero sliders */}
+      {/* 1. Inclinación de Cámara (Tilt) continua */}
       <div className="mb-3">
-        <div className="mb-1.5 flex items-center justify-between text-[11px]">
-          <span className="font-medium text-slate-300">Inclinación de Cámara</span>
-          <span className="rounded bg-sky-950/80 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-sky-300 border border-sky-800/50">
-            {normPitch === 0 ? "0° 2D" : `${normPitch}°`}
+        <div className="mb-1 flex items-center justify-between text-[11px]">
+          <span className="font-medium text-zinc-300">Inclinación de cámara</span>
+          <span className="font-mono text-[10px] font-semibold text-white">
+            {normPitch === 0 ? "0° (2D)" : `${normPitch}°`}
           </span>
         </div>
-        <div className="grid grid-cols-4 gap-1 rounded-lg bg-slate-950/70 p-1 border border-slate-800/70">
-          {[
-            { label: "0° 2D", val: 0 },
-            { label: "30°", val: 30 },
-            { label: "45°", val: 45 },
-            { label: "60°", val: 60 },
-          ].map((item) => {
-            const active = normPitch === item.val
-            return (
-              <button
-                key={item.val}
-                type="button"
-                onClick={() => onChangePitch?.(item.val)}
-                aria-pressed={active}
-                className={`rounded-md py-1 text-center text-[11px] font-medium transition-all ${
-                  active
-                    ? "bg-blue-600 text-white shadow-sm font-semibold"
-                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-                }`}
-              >
-                {item.label}
-              </button>
-            )
-          })}
+        <input
+          type="range"
+          min="0"
+          max="65"
+          step="1"
+          value={normPitch}
+          onChange={(e) => onChangePitch?.(parseFloat(e.target.value))}
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-white"
+          aria-label="Ajustar inclinación de cámara"
+        />
+        <div className="mt-1 flex justify-between text-[9px] font-mono text-zinc-500">
+          <span>0°</span>
+          <span>30°</span>
+          <span>45°</span>
+          <span>65°</span>
         </div>
       </div>
 
-      {/* 2. Exageración Vertical - Hasta 5x (Cero sliders) */}
+      {/* 2. Exageración Vertical continua (hasta 5x) */}
       <div className="mb-3">
-        <div className="mb-1.5 flex items-center justify-between text-[11px]">
-          <span className="font-medium text-slate-300">Exageración Vertical</span>
-          <span className="rounded bg-emerald-950/80 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-300 border border-emerald-800/50">
+        <div className="mb-1 flex items-center justify-between text-[11px]">
+          <span className="font-medium text-zinc-300">Exageración vertical</span>
+          <span className="font-mono text-[10px] font-semibold text-white">
             {Number(exaggeration).toFixed(1)}×
           </span>
         </div>
-        <div className="grid grid-cols-4 gap-1 rounded-lg bg-slate-950/70 p-1 border border-slate-800/70">
-          {[
-            { label: "1×", val: 1 },
-            { label: "2×", val: 2 },
-            { label: "3×", val: 3 },
-            { label: "5× Máx", val: 5 },
-          ].map((item) => {
-            const active = Math.round(exaggeration) === item.val
-            return (
-              <button
-                key={item.val}
-                type="button"
-                onClick={() => onChangeExaggeration?.(item.val)}
-                aria-pressed={active}
-                className={`rounded-md py-1 text-center text-[11px] font-medium transition-all ${
-                  active
-                    ? "bg-emerald-600 text-white shadow-sm font-semibold"
-                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-                }`}
-              >
-                {item.label}
-              </button>
-            )
-          })}
+        <input
+          type="range"
+          min="0.5"
+          max="5"
+          step="0.25"
+          value={exaggeration}
+          onChange={(e) => onChangeExaggeration?.(parseFloat(e.target.value))}
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-white"
+          aria-label="Ajustar exageración vertical de relieve"
+        />
+        <div className="mt-1 flex justify-between text-[9px] font-mono text-zinc-500">
+          <span>0.5×</span>
+          <span>1.5×</span>
+          <span>3×</span>
+          <span>5× Máx</span>
         </div>
       </div>
 
-      {/* 3. Rotación Orbital Rápida */}
+      {/* 3. Rotación Orbital continua */}
       <div>
-        <div className="mb-1.5 flex items-center justify-between text-[11px]">
-          <span className="font-medium text-slate-300">Rotación Horizontal</span>
-          <span className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] text-slate-300 border border-slate-800">
+        <div className="mb-1 flex items-center justify-between text-[11px]">
+          <span className="font-medium text-zinc-300">Orientación</span>
+          <span className="font-mono text-[10px] text-zinc-300">
             {normBearing}° {compassHeading(normBearing)}
           </span>
         </div>
-        <div className="grid grid-cols-4 gap-1">
+        <input
+          type="range"
+          min="0"
+          max="360"
+          step="1"
+          value={normBearing}
+          onChange={(e) => onChangeBearing?.(parseFloat(e.target.value))}
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-white"
+          aria-label="Ajustar orientación horizontal"
+        />
+        <div className="mt-2 grid grid-cols-3 gap-1">
           <button
             type="button"
             onClick={() => onChangeBearing?.((normBearing - 45 + 360) % 360)}
             title="Girar 45° a la izquierda"
-            className="rounded-lg border border-slate-800 bg-slate-950/60 py-1.5 text-center text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+            className="rounded-lg border border-zinc-800 bg-zinc-900/60 py-1 text-center text-[10.5px] font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
           >
             ↺ -45°
           </button>
@@ -312,7 +380,7 @@ export const Hud3DPopover = ({
             type="button"
             onClick={onResetNorth}
             title="Orientar al Norte (0°)"
-            className="rounded-lg border border-blue-900/60 bg-blue-950/40 py-1.5 text-center text-[11px] font-medium text-blue-300 transition-colors hover:bg-blue-900/60 hover:text-white"
+            className="rounded-lg border border-zinc-700 bg-zinc-800/80 py-1 text-center text-[10.5px] font-medium text-white transition-colors hover:bg-zinc-700"
           >
             Norte 0°
           </button>
@@ -320,17 +388,9 @@ export const Hud3DPopover = ({
             type="button"
             onClick={() => onChangeBearing?.((normBearing + 45) % 360)}
             title="Girar 45° a la derecha"
-            className="rounded-lg border border-slate-800 bg-slate-950/60 py-1.5 text-center text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+            className="rounded-lg border border-zinc-800 bg-zinc-900/60 py-1 text-center text-[10.5px] font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
           >
             ↻ +45°
-          </button>
-          <button
-            type="button"
-            onClick={() => onChangeBearing?.(180)}
-            title="Mirar hacia el Sur (180°)"
-            className="rounded-lg border border-slate-800 bg-slate-950/60 py-1.5 text-center text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-          >
-            180° Sur
           </button>
         </div>
       </div>

@@ -340,7 +340,7 @@ export default function Component() {
   const isDrawerOpen = isPinned || isHovered
 
   return (
-    <div className="relative flex w-full h-screen bg-[#070b14] overflow-hidden">
+    <div className="relative flex w-full h-screen bg-[#000000] overflow-hidden">
       {/* Dock lateral pegado al borde izquierdo con rail colapsable y drawer fluido */}
       <aside
         aria-label="Panel lateral"
@@ -349,14 +349,14 @@ export default function Component() {
         className="fixed left-0 top-0 bottom-0 z-30 flex select-none pointer-events-auto"
       >
         {/* Rail de iconos (barra de tareas tipo dock, 56px) */}
-        <div className="flex w-14 flex-col items-center justify-between border-r border-slate-800/80 bg-[#070b14]/95 py-3.5 backdrop-blur-2xl text-slate-200 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.4)]">
+        <div className="flex w-14 flex-col items-center justify-between border-r border-zinc-800/80 bg-[#000000]/95 py-3.5 backdrop-blur-2xl text-zinc-200 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.6)]">
           {/* Logo / Marca */}
           <div className="flex flex-col items-center gap-4">
             <button
               type="button"
               onClick={() => setIsPinned((p) => !p)}
               title="Litto Labs — Clic para alternar fijado"
-              className="group relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/20 to-blue-600/20 border border-sky-500/30 text-sky-400 transition-all hover:scale-105 hover:border-sky-400/50 hover:shadow-[0_0_15px_rgba(56,189,248,0.25)]"
+              className="group relative flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-700/80 text-white transition-all hover:scale-105 hover:border-zinc-500 hover:shadow-[0_0_15px_rgba(255,255,255,0.15)]"
             >
               <div className="font-bold font-mono text-sm tracking-tighter">L</div>
             </button>
@@ -373,13 +373,13 @@ export default function Component() {
                 aria-label="Pestaña Capas"
                 className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
                   drawerTab === "capas" && isDrawerOpen
-                    ? "bg-sky-500/20 text-sky-400 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]"
-                    : "text-slate-400 hover:bg-slate-800/70 hover:text-slate-200"
+                    ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
+                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
                 }`}
               >
                 <Layers className="h-5 w-5" />
                 {activeCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-sky-500 px-1 text-[9px] font-bold text-slate-950 shadow">
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-1 text-[9px] font-bold text-black shadow">
                     {activeCount}
                   </span>
                 )}
@@ -395,8 +395,8 @@ export default function Component() {
                 aria-label="Pestaña Herramientas"
                 className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
                   drawerTab === "herramientas" && isDrawerOpen
-                    ? "bg-sky-500/20 text-sky-400 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]"
-                    : "text-slate-400 hover:bg-slate-800/70 hover:text-slate-200"
+                    ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
+                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
                 }`}
               >
                 <Wrench className="h-5 w-5" />
@@ -412,40 +412,40 @@ export default function Component() {
               title={isPinned ? "Desfijar panel lateral" : "Fijar panel lateral"}
               className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
                 isPinned
-                  ? "bg-sky-500/20 text-sky-400 border border-sky-500/30"
-                  : "text-slate-500 hover:bg-slate-800/60 hover:text-slate-300"
+                  ? "bg-zinc-800 text-white border border-zinc-700"
+                  : "text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
               }`}
             >
-              {isPinned ? <Pin className="h-4 w-4 fill-sky-400/40" /> : <PinOff className="h-4 w-4" />}
+              {isPinned ? <Pin className="h-4 w-4 fill-white" /> : <PinOff className="h-4 w-4" />}
             </button>
           </div>
         </div>
 
-        {/* Drawer desplegable en midnight navy glass (~340px) */}
+        {/* Drawer desplegable en negro obsidiana glass (~340px) */}
         <div
           ref={panelRef}
-          className={`flex flex-col border-r border-slate-800/80 bg-[#0b1329]/95 text-slate-100 backdrop-blur-2xl transition-all duration-300 ease-out overflow-hidden ${
+          className={`flex flex-col border-r border-zinc-800/80 bg-[#09090b]/95 text-zinc-100 backdrop-blur-2xl transition-all duration-300 ease-out overflow-hidden ${
             isDrawerOpen
-              ? "w-[340px] opacity-100 shadow-[20px_0_40px_rgba(0,0,0,0.5)]"
+              ? "w-[340px] opacity-100 shadow-[20px_0_40px_rgba(0,0,0,0.6)]"
               : "w-0 opacity-0 pointer-events-none"
           }`}
         >
           {/* Cabecera del drawer con 2 pestañas: Capas y Herramientas */}
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800/80 px-3 bg-[#070b14]/70">
-            <div className="inline-flex rounded-lg border border-slate-750 bg-slate-900/90 p-0.5 text-xs">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800/80 px-3 bg-[#000000]/70">
+            <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950/90 p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => setDrawerTab("capas")}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-colors ${
                   drawerTab === "capas"
-                    ? "bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-sm"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "bg-zinc-800 text-white border border-zinc-700/80 shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 <Layers className="h-3.5 w-3.5" />
                 <span>Capas</span>
                 {activeCount > 0 && (
-                  <span className="ml-0.5 rounded-full bg-sky-500/30 px-1 text-[10px] font-bold text-sky-200">
+                  <span className="ml-0.5 rounded-full bg-zinc-700 px-1 text-[10px] font-bold text-zinc-200">
                     {activeCount}
                   </span>
                 )}
@@ -455,8 +455,8 @@ export default function Component() {
                 onClick={() => setDrawerTab("herramientas")}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-colors ${
                   drawerTab === "herramientas"
-                    ? "bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-sm"
-                    : "text-slate-400 hover:text-slate-200"
+                    ? "bg-zinc-800 text-white border border-zinc-700/80 shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 <Wrench className="h-3.5 w-3.5" />
@@ -712,7 +712,7 @@ export default function Component() {
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-auto">
         {/* Acciones de expediente activo si existe */}
         {showToggle && (
-          <div className="mb-2 flex items-center gap-2 rounded-full border border-slate-750/90 bg-[#070b14]/90 px-3.5 py-1 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2">
+          <div className="mb-2 flex items-center gap-2 rounded-full border border-zinc-800 bg-[#09090b]/95 px-3.5 py-1 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2">
             <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               {expedientCode || "Expediente activo"}
@@ -721,7 +721,7 @@ export default function Component() {
               <button
                 type="button"
                 onClick={handleShowCoordinates}
-                className="rounded-full bg-slate-800/80 px-2.5 py-0.5 text-[11px] font-medium text-slate-200 hover:bg-slate-700 transition-colors"
+                className="rounded-full bg-zinc-800/90 px-2.5 py-0.5 text-[11px] font-medium text-zinc-200 hover:bg-zinc-700 transition-colors"
               >
                 Coordenadas
               </button>
@@ -729,7 +729,7 @@ export default function Component() {
             <button
               type="button"
               onClick={handleExportSHP}
-              className="rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-medium hover:bg-emerald-500/30 transition-colors"
+              className="rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-2.5 py-0.5 text-[11px] font-medium transition-colors"
             >
               Exportar
             </button>
@@ -740,7 +740,7 @@ export default function Component() {
                 setIslandSearchText("")
                 setIslandResultsOpen(false)
               }}
-              className="rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+              className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
               title="Cerrar ficha"
               aria-label="Cerrar ficha"
             >
@@ -754,7 +754,7 @@ export default function Component() {
           <div
             role="listbox"
             aria-label="Sugerencias de expediente"
-            className="absolute bottom-full mb-2.5 w-[92vw] sm:w-[380px] max-h-60 overflow-y-auto rounded-2xl border border-slate-750/90 bg-[#0b1329]/95 p-1.5 shadow-2xl backdrop-blur-2xl"
+            className="absolute bottom-full mb-2.5 w-[92vw] sm:w-[420px] max-h-60 overflow-y-auto rounded-2xl border border-zinc-800 bg-[#09090b]/95 p-1.5 shadow-2xl backdrop-blur-2xl"
           >
             {islandSuggestions.map((item, index) => {
               const isSelected = index === islandSelectedIndex
@@ -765,19 +765,19 @@ export default function Component() {
                   aria-selected={isSelected}
                   onClick={() => handleSelectIslandExpedient(item.code)}
                   className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs transition-colors ${
-                    isSelected ? "bg-sky-500/20 text-sky-200" : "text-slate-200 hover:bg-slate-800/70"
+                    isSelected ? "bg-zinc-800 text-white font-medium" : "text-zinc-300 hover:bg-zinc-800/60"
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <Search className="h-3.5 w-3.5 text-sky-400" />
+                    <Search className="h-3.5 w-3.5 text-zinc-400" />
                     <span className="font-mono font-medium">{item.code}</span>
                   </div>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
                       item.layerName?.toLowerCase().includes("trámite") ||
                       item.layerName?.toLowerCase().includes("tramite")
-                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                        ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                        : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
                     }`}
                   >
                     {item.layerName || "Expediente"}
@@ -789,8 +789,8 @@ export default function Component() {
         )}
 
         {/* Barra de búsqueda estilo cápsula flotante */}
-        <div className="relative flex items-center w-[92vw] sm:w-[380px] h-11 rounded-full border border-slate-750/90 bg-[#0b1329]/95 px-3.5 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.6)] backdrop-blur-2xl transition-all focus-within:border-sky-500/60 focus-within:shadow-[0_0_20px_rgba(56,189,248,0.25)]">
-          <Search className="h-4 w-4 shrink-0 text-sky-400 mr-2.5" />
+        <div className="relative flex items-center w-[92vw] sm:w-[420px] h-11 rounded-full border border-zinc-800 bg-[#09090b]/95 px-3.5 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-all focus-within:border-zinc-700 focus-within:ring-1 focus-within:ring-zinc-600">
+          <Search className="h-4 w-4 shrink-0 text-zinc-400 mr-2.5" />
           <input
             type="text"
             value={islandSearchText}
@@ -814,9 +814,9 @@ export default function Component() {
               }
             }}
             placeholder="Buscar expediente..."
-            className="h-full w-full bg-transparent text-[13px] text-slate-100 placeholder:text-slate-500 focus:outline-none"
+            className="h-full w-full bg-transparent text-[13px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
           />
-          {islandLoading && <Loader2 className="h-4 w-4 shrink-0 text-sky-400 animate-spin ml-2" />}
+          {islandLoading && <Loader2 className="h-4 w-4 shrink-0 text-zinc-400 animate-spin ml-2" />}
           {islandSearchText && !islandLoading && (
             <button
               type="button"
@@ -825,37 +825,50 @@ export default function Component() {
                 setIslandSuggestions([])
                 setIslandResultsOpen(false)
               }}
-              className="rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors ml-1"
+              className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors ml-1"
               title="Limpiar búsqueda"
               aria-label="Limpiar búsqueda"
             >
               <X className="h-3.5 w-3.5" />
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              if (islandSelectedIndex >= 0 && islandSuggestions[islandSelectedIndex]) {
+                handleSelectIslandExpedient(islandSuggestions[islandSelectedIndex].code)
+              } else if (islandSearchText.trim()) {
+                handleSelectIslandExpedient(islandSearchText.trim())
+              }
+            }}
+            className="ml-2 shrink-0 rounded-full bg-zinc-800 hover:bg-zinc-700 px-3 py-1 text-[11px] font-semibold text-zinc-100 transition-colors shadow-sm"
+          >
+            Buscar
+          </button>
         </div>
       </div>
 
       {showTable && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-md">
-          <div className="bg-[#0b1329] border border-slate-700/80 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-slate-100">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-md">
+          <div className="bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
             <div className="mb-4 flex items-baseline gap-2">
-              <h2 className="text-xl font-semibold text-slate-100">Coordenadas</h2>
-              <span className="text-[13px] text-slate-400">
+              <h2 className="text-xl font-semibold text-zinc-100">Coordenadas</h2>
+              <span className="text-[13px] text-zinc-400">
                 {crsById(selectedCoordinateSystem).label}
               </span>
-              <span className="font-mono text-[10px] text-sky-400 bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-800/40">
+              <span className="font-mono text-[10px] text-zinc-300 bg-zinc-800/80 px-1.5 py-0.5 rounded border border-zinc-700">
                 EPSG:{selectedCoordinateSystem}
               </span>
             </div>
-            <div className="overflow-auto max-h-[60vh] rounded-lg border border-slate-800">
+            <div className="overflow-auto max-h-[60vh] rounded-xl border border-zinc-800">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-slate-800 bg-slate-900/80 hover:bg-slate-900/80">
-                    <TableHead className="text-slate-300">Punto</TableHead>
-                    <TableHead className="text-slate-300">
+                  <TableRow className="border-zinc-800 bg-zinc-900/80 hover:bg-zinc-900/80">
+                    <TableHead className="text-zinc-300">Punto</TableHead>
+                    <TableHead className="text-zinc-300">
                       {axisLabels(selectedCoordinateSystem).first}
                     </TableHead>
-                    <TableHead className="text-slate-300">
+                    <TableHead className="text-zinc-300">
                       {axisLabels(selectedCoordinateSystem).second}
                     </TableHead>
                   </TableRow>
@@ -864,21 +877,21 @@ export default function Component() {
                   {transformedCoordinates.map((coord, index) => (
                     <Fragment key={index}>
                       {coordinateRings.length > 1 && ringStartLabels.has(index) && (
-                        <TableRow className="border-slate-800 bg-slate-900/50">
+                        <TableRow className="border-zinc-800 bg-zinc-900/50">
                           <TableCell
                             colSpan={3}
-                            className="text-xs font-semibold text-sky-400 text-center"
+                            className="text-xs font-semibold text-zinc-300 text-center"
                           >
                             {ringStartLabels.get(index)}
                           </TableCell>
                         </TableRow>
                       )}
-                      <TableRow className="border-slate-800/50 hover:bg-slate-800/40">
-                        <TableCell className="text-center font-mono text-xs text-slate-400">{index + 1}</TableCell>
-                        <TableCell className="text-center font-mono text-xs text-slate-200">
+                      <TableRow className="border-zinc-800/50 hover:bg-zinc-800/40">
+                        <TableCell className="text-center font-mono text-xs text-zinc-400">{index + 1}</TableCell>
+                        <TableCell className="text-center font-mono text-xs text-zinc-200">
                           {formatCoordinate(coord[1], selectedCoordinateSystem)}
                         </TableCell>
-                        <TableCell className="text-center font-mono text-xs text-slate-200">
+                        <TableCell className="text-center font-mono text-xs text-zinc-200">
                           {formatCoordinate(coord[0], selectedCoordinateSystem)}
                         </TableCell>
                       </TableRow>
@@ -889,7 +902,7 @@ export default function Component() {
             </div>
             <Button
               onClick={handleCloseTable}
-              className="mt-4 w-full bg-rose-600 hover:bg-rose-500 text-white rounded-xl"
+              className="mt-4 w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 rounded-xl"
             >
               Cerrar
             </Button>
@@ -948,9 +961,9 @@ export default function Component() {
       )}
 
       {showExportModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-md">
-          <div className="bg-[#0b1329] border border-slate-700/80 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-slate-100">
-            <h2 className="text-xl font-bold mb-4 text-slate-100">Tipo de archivo</h2>
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-md">
+          <div className="bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
+            <h2 className="text-xl font-bold mb-4 text-zinc-100">Tipo de archivo</h2>
             <ExportComponent
               geoJsonData={geoJsonData}
               selectedCoordinateSystem={selectedCoordinateSystem}
@@ -958,7 +971,7 @@ export default function Component() {
             />
             <Button
               onClick={handleCloseExportModal}
-              className="mt-4 w-full bg-rose-600 hover:bg-rose-500 text-white rounded-xl"
+              className="mt-4 w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 rounded-xl"
             >
               Cerrar
             </Button>

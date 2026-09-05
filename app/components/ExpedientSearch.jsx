@@ -205,20 +205,18 @@ export const ExpedientSearch = ({
       role="dialog"
       aria-label="Buscar expediente"
       style={{ top, left }}
-      className="fixed z-50 w-[min(19rem,calc(100vw-1.5rem))] rounded-xl border border-slate-750/80 bg-[#0b1329]/95 text-slate-100 shadow-2xl backdrop-blur-2xl"
+      className="fixed z-50 w-[min(19rem,calc(100vw-1.5rem))] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl"
     >
-      {/* Misma cabecera que la ventana de filtros —punto del color del área,
-          título en negrita, X a la derecha—: las dos salen del mismo encabezado
-          y verlas distintas hacía pensar que eran cosas de sitios distintos. */}
-      <div className="flex items-center gap-2 border-b border-slate-800/80 px-3 py-2.5">
+      {/* Misma cabecera que la ventana de filtros */}
+      <div className="flex items-center gap-2 border-b border-zinc-800/80 px-3.5 py-2.5">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: areaColor }} />
-        <span className="text-[13px] font-semibold text-slate-100">Buscar expediente</span>
+        <span className="text-[12.5px] font-semibold text-zinc-100">Buscar expediente</span>
         <span className="flex-1" />
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar la búsqueda"
-          className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+          className="rounded-lg p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -226,7 +224,7 @@ export const ExpedientSearch = ({
 
       <div className="p-3">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
             ref={inputRef}
             value={code}
@@ -239,10 +237,10 @@ export const ExpedientSearch = ({
             aria-autocomplete="list"
             aria-expanded={suggestions.length > 0}
             aria-controls="sugerencias-expediente"
-            className="h-9 w-full rounded-md border border-slate-700/80 bg-slate-900/90 pl-8 pr-8 text-[13px] text-slate-100 outline-none focus:border-sky-500 placeholder:text-slate-500"
+            className="h-9 w-full rounded-xl border border-zinc-700/80 bg-zinc-900/90 pl-8 pr-8 text-[12.5px] text-zinc-100 outline-none focus:border-zinc-400 placeholder:text-zinc-500"
           />
           {loading && (
-            <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-sky-400" />
+            <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-white" />
           )}
         </div>
 
@@ -251,22 +249,20 @@ export const ExpedientSearch = ({
             id="sugerencias-expediente"
             role="listbox"
             aria-label="Expedientes sugeridos"
-            className="mt-1.5 max-h-52 overflow-auto rounded-lg border border-slate-800 bg-slate-950/80"
+            className="mt-1.5 max-h-52 overflow-auto rounded-xl border border-zinc-800 bg-zinc-950/90"
           >
             {suggestions.map((sugerencia, index) => (
               <li
                 key={sugerencia}
                 role="option"
                 aria-selected={index === active}
-                // onMouseDown, no onClick: el clic fuera cierra la lista antes de
-                // que llegue el onClick del elemento.
                 onMouseDown={(event) => {
                   event.preventDefault()
                   elegir(sugerencia)
                 }}
                 onMouseEnter={() => setActive(index)}
-                className={`cursor-pointer px-3 py-2 text-[13px] ${
-                  index === active ? "bg-blue-600/30 text-sky-300 font-medium" : "text-slate-200 hover:bg-slate-800/50"
+                className={`cursor-pointer px-3 py-2 text-[12.5px] ${
+                  index === active ? "bg-zinc-800 text-white font-medium" : "text-zinc-200 hover:bg-zinc-800/50"
                 }`}
               >
                 {sugerencia}
@@ -280,7 +276,7 @@ export const ExpedientSearch = ({
         <button
           type="button"
           onClick={() => buscar()}
-          className="mt-2.5 h-9 w-full rounded-md bg-blue-600 text-[13px] font-medium text-white transition-colors hover:bg-blue-500 shadow-sm"
+          className="mt-2.5 h-9 w-full rounded-xl bg-white text-[12.5px] font-semibold text-black transition-colors hover:bg-zinc-200 shadow-sm"
         >
           Buscar
         </button>
