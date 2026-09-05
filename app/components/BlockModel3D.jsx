@@ -4,28 +4,26 @@ import React, { useEffect, useRef, useState, useCallback } from "react"
 import * as THREE from "three"
 import { OrbitControls } from "three/addons/controls/OrbitControls.js"
 import {
-  X,
   Maximize2,
   Minimize2,
-  RotateCcw,
-  Camera,
+  X,
   Sun,
-  Grid3X3,
-  Play,
-  Pause,
-  Square,
-  Compass,
+  Camera,
+  RotateCw,
+  Box,
   MapPin,
-  Palette,
   Trash2,
-  Check,
+  Layers,
+  Activity,
+  Compass,
+  Mountain,
+  Grid,
 } from "lucide-react"
-
 import { TILE_SIZE } from "../utils/demTiles"
 
 /**
- * Textura de tierra homogénea natural estilo corte geológico / maqueta física
- * (tonos cálidos terrosos naturales, inspirados en tierra fértil compacta).
+ * Textura procedural de tierra homogénea cálida (Minecraft-style earth / arcilla natural)
+ * Suave, orgánica y agradable a la vista, evitando el negro puro o tonos lúgubres.
  */
 function createHomogeneousEarthTexture() {
   if (typeof document === "undefined") return null
@@ -33,114 +31,98 @@ function createHomogeneousEarthTexture() {
   canvas.width = 512
   canvas.height = 512
   const ctx = canvas.getContext("2d")
-  if (!ctx) return null
+  if (!ctx || typeof ctx.createImageData !== "function") return null
 
-  // 1. Degradado base de tierra natural cálida
-  const grad = ctx.createLinearGradient(0, 0, 0, 512)
-  grad.addColorStop(0, "#5a3a22")    // Capa superficial orgánica (humus)
-  grad.addColorStop(0.15, "#784f30") // Suelo fértil cálido
-  grad.addColorStop(0.48, "#8e623d") // Estrato de tierra franca arcillosa
-  grad.addColorStop(0.82, "#6f4829") // Subsuelo compacto
-  grad.addColorStop(1, "#52331b")    // Base profunda
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, 512, 512)
+  const imgData = ctx.createImageData(512, 512)
+  const data = imgData.data
 
-  // 2. Gránulos minerales y motas de suelo natural (efecto tierra compacta)
-  for (let i = 0; i < 5000; i++) {
-    const px = Math.random() * 512
-    const py = Math.random() * 512
-    const sz = 0.8 + Math.random() * 2.0
-    const rnd = Math.random()
-    if (rnd < 0.38) {
-      ctx.fillStyle = "rgba(35, 20, 10, 0.32)" // Humus oscuro
-    } else if (rnd < 0.72) {
-      ctx.fillStyle = "rgba(180, 130, 90, 0.28)" // Partícula arcillosa clara
-    } else {
-      ctx.fillStyle = "rgba(235, 205, 175, 0.20)" // Mota mineral / cuarzo
+  const baseR = 124
+  const baseG = 84
+  const baseB = 54
+
+  for (let y = 0; y < 512; y++) {
+    const v = y / 512
+    const depthDarken = 1.0 - v * 0.18
+    const band = Math.sin(y * 0.12) * 4 + Math.sin(y * 0.04) * 8
+
+    for (let x = 0; x < 512; x++) {
+      const idx = (y * 512 + x) * 4
+      const grain = (Math.random() - 0.5) * 14
+      const fineNoise = (Math.sin(x * 0.25) * Math.cos(y * 0.25)) * 6
+
+      data[idx] = Math.max(30, Math.min(240, Math.round((baseR + band + grain + fineNoise) * depthDarken)))
+      data[idx + 1] = Math.max(20, Math.min(220, Math.round((baseG + band * 0.7 + grain * 0.8 + fineNoise * 0.7) * depthDarken)))
+      data[idx + 2] = Math.max(10, Math.min(180, Math.round((baseB + band * 0.4 + grain * 0.5 + fineNoise * 0.4) * depthDarken)))
+      data[idx + 3] = 255
     }
-    ctx.fillRect(px, py, sz, sz)
   }
 
-  // 3. Finas micro-láminas horizontales orgánicas de sedimentación
-  for (let y = 0; y < 512; y += 10) {
-    const alpha = 0.03 + Math.random() * 0.04
-    ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`
-    ctx.fillRect(0, y, 512, 1.5)
-  }
-
+  ctx.putImageData(imgData, 0, 0)
   const texture = new THREE.CanvasTexture(canvas)
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.ClampToEdgeWrapping
+  texture.repeat.set(4, 1)
+  texture.generateMipmaps = true
   return texture
 }
 
 /**
- * Textura topográfica hipsométrica suave de alta definición si no hay satélite o basemap === "relief"
+ * Textura procedural de relieve hipsométrico suave para cuando el mapa base es Relieve
  */
 function createReliefBasemapTexture(grid, segX, segZ) {
   if (typeof document === "undefined" || !grid || grid.length === 0) return null
-  const width = segX + 1
-  const height = segZ + 1
   const canvas = document.createElement("canvas")
-  canvas.width = 1024
-  canvas.height = 1024
+  canvas.width = segX + 1
+  canvas.height = segZ + 1
   const ctx = canvas.getContext("2d")
   if (!ctx || typeof ctx.createImageData !== "function") return null
 
-  let minH = Infinity
-  let maxH = -Infinity
-  for (let i = 0; i < grid.length; i++) {
-    const h = grid[i]
-    if (h < minH) minH = h
-    if (h > maxH) maxH = h
-  }
-  const span = Math.max(1, maxH - minH)
-
-  const imgData = ctx.createImageData(1024, 1024)
+  const imgData = ctx.createImageData(canvas.width, canvas.height)
   const data = imgData.data
 
-  for (let py = 0; py < 1024; py++) {
-    const v = py / 1023
-    const gy = v * (height - 1)
-    const y0 = Math.floor(gy)
-    const y1 = Math.min(height - 1, y0 + 1)
-    const fy = gy - y0
+  let min = Infinity
+  let max = -Infinity
+  for (let i = 0; i < grid.length; i++) {
+    const v = grid[i]
+    if (Number.isFinite(v)) {
+      if (v < min) min = v
+      if (v > max) max = v
+    }
+  }
+  if (!Number.isFinite(min)) min = 0
+  if (!Number.isFinite(max) || max <= min) max = min + 100
 
-    for (let px = 0; px < 1024; px++) {
-      const u = px / 1023
-      const gx = u * (width - 1)
-      const x0 = Math.floor(gx)
-      const x1 = Math.min(width - 1, x0 + 1)
-      const fx = gx - x0
+  const range = Math.max(1, max - min)
 
-      const h00 = grid[y0 * width + x0] || minH
-      const h10 = grid[y0 * width + x1] || minH
-      const h01 = grid[y1 * width + x0] || minH
-      const h11 = grid[y1 * width + x1] || minH
+  for (let j = 0; j <= segZ; j++) {
+    for (let i = 0; i <= segX; i++) {
+      const idx = (j * (segX + 1) + i) * 4
+      const val = grid[j * (segX + 1) + i] ?? min
+      const t = Math.max(0, Math.min(1, (val - min) / range))
 
-      const h = (1 - fx) * (1 - fy) * h00 + fx * (1 - fy) * h10 + (1 - fx) * fy * h01 + fx * fy * h11
-      const normH = (h - minH) / span
-
-      // Gradiente hipsométrico sobrio y elegante (verde valle -> ocre -> pardo alta montaña)
-      let r = 70, g = 90, b = 60
-      if (normH < 0.25) {
-        const t = normH / 0.25
-        r = 55 + t * 40
-        g = 85 + t * 30
-        b = 55 + t * 15
-      } else if (normH < 0.6) {
-        const t = (normH - 0.25) / 0.35
-        r = 95 + t * 55
-        g = 115 + t * 25
-        b = 70 + t * 15
+      let r, g, b
+      if (t < 0.2) {
+        const u = t / 0.2
+        r = 46 + u * (86 - 46)
+        g = 125 + u * (168 - 125)
+        b = 50 + u * (90 - 50)
+      } else if (t < 0.5) {
+        const u = (t - 0.2) / 0.3
+        r = 86 + u * (180 - 86)
+        g = 168 + u * (195 - 168)
+        b = 90 + u * (110 - 90)
+      } else if (t < 0.8) {
+        const u = (t - 0.5) / 0.3
+        r = 180 + u * (188 - 180)
+        g = 195 + u * (143 - 195)
+        b = 110 + u * (90 - 110)
       } else {
-        const t = (normH - 0.6) / 0.4
-        r = 150 + t * 45
-        g = 140 + t * 45
-        b = 115 + t * 55
+        const u = (t - 0.8) / 0.2
+        r = 188 + u * (245 - 188)
+        g = 143 + u * (245 - 143)
+        b = 90 + u * (245 - 90)
       }
 
-      const idx = (py * 1024 + px) * 4
       data[idx] = Math.round(r)
       data[idx + 1] = Math.round(g)
       data[idx + 2] = Math.round(b)
@@ -212,7 +194,7 @@ function getOptimalDemTileRange(minLng, minLat, maxLng, maxLat, maxTiles = 64) {
 
 /**
  * Descarga y compone directamente las teselas de satélite a resolución 4K nativa (4096x4096)
- * sin restricciones para cualquier mapa base activo.
+ * usando fetch() con CORS seguro y createImageBitmap para evitar problemas de canvas tainted.
  */
 async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
   if (typeof document === "undefined" || !bbox) return null
@@ -222,7 +204,6 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
   const { zoom, minX, maxX, minY, maxY, tilesX, tilesY } = opt
   const nTiles = 2 ** zoom
 
-  // Plantilla de URL limpia según mapa base
   const getTileUrl = (x, y, z) => {
     if (basemap === "osm") {
       return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
@@ -236,7 +217,6 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
     if (basemap === "positron") {
       return `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`
     }
-    // Google Satellite por defecto con subdominio balanceado limpio
     const s = Math.abs((x + y) % 4)
     return `https://mt${s}.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${z}`
   }
@@ -249,7 +229,7 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
   fullCanvas.width = canvasW
   fullCanvas.height = canvasH
   const fullCtx = fullCanvas.getContext("2d")
-  if (!fullCtx) return null
+  if (!fullCtx || typeof fullCtx.drawImage !== "function") return null
 
   const tilePromises = []
   for (let ty = 0; ty < tilesY; ty++) {
@@ -258,27 +238,39 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
       const tileY = minY + ty
       const url = getTileUrl(tileX, tileY, zoom)
 
-      const p = new Promise((resolve) => {
-        const img = new Image()
-        img.crossOrigin = "anonymous"
-        img.onload = () => {
-          try {
-            fullCtx.drawImage(img, tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX)
-            resolve(true)
-          } catch {
-            resolve(false)
+      const p = (async () => {
+        try {
+          const res = await fetch(url, { mode: "cors" })
+          if (!res.ok) return
+          const blob = await res.blob()
+          if (typeof createImageBitmap === "function") {
+            const bitmap = await createImageBitmap(blob)
+            fullCtx.drawImage(bitmap, tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX)
+            bitmap.close?.()
+          } else {
+            const img = new Image()
+            img.crossOrigin = "anonymous"
+            await new Promise((resolve) => {
+              img.onload = () => {
+                try {
+                  fullCtx.drawImage(img, tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX)
+                } catch {}
+                resolve(true)
+              }
+              img.onerror = () => resolve(false)
+              img.src = URL.createObjectURL(blob)
+            })
           }
+        } catch {
+          // Fallback o fallo de tesela individual ignorado
         }
-        img.onerror = () => resolve(false)
-        img.src = url
-      })
+      })()
       tilePromises.push(p)
     }
   }
 
-  await Promise.allSettled(tilePromises)
+  await Promise.all(tilePromises)
 
-  // Recorte georreferenciado exacto del bbox dentro del mosaico descargado
   const tile2lng = (x) => (x / nTiles) * 360 - 180
   const tile2lat = (y) => {
     const n = Math.PI - (2 * Math.PI * y) / nTiles
@@ -308,12 +300,11 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
 
   if (cropW <= 0 || cropH <= 0) return null
 
-  // Lienzo 4K de máxima definición con suavizado de alta calidad
   const finalCanvas = document.createElement("canvas")
   finalCanvas.width = 4096
   finalCanvas.height = 4096
   const finalCtx = finalCanvas.getContext("2d")
-  if (!finalCtx) return null
+  if (!finalCtx || typeof finalCtx.drawImage !== "function") return null
 
   finalCtx.imageSmoothingEnabled = true
   finalCtx.imageSmoothingQuality = "high"
@@ -323,7 +314,8 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
 }
 
 /**
- * Descarga y decodifica directamente el mosaico DEM con elevación real continua libre de concurrencias rotas
+ * Descarga y decodifica el mosaico DEM con elevación real continua libre de errores CORS.
+ * Utiliza fetch({ mode: 'cors' }) y createImageBitmap para garantizar que el canvas no se contamine.
  */
 async function loadDemElevationGrid(bbox, segX, segZ) {
   if (typeof document === "undefined" || !bbox) return null
@@ -338,7 +330,7 @@ async function loadDemElevationGrid(bbox, segX, segZ) {
   mosaicCanvas.width = mosaicW
   mosaicCanvas.height = mosaicH
   const mosaicCtx = mosaicCanvas.getContext("2d", { willReadFrequently: true })
-  if (!mosaicCtx) return null
+  if (!mosaicCtx || typeof mosaicCtx.getImageData !== "function") return null
 
   const tilePromises = []
   for (let ty = 0; ty < tilesY; ty++) {
@@ -347,32 +339,45 @@ async function loadDemElevationGrid(bbox, segX, segZ) {
       const tileY = minY + ty
       const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zoom}/${tileX}/${tileY}.png`
 
-      const p = new Promise((resolve) => {
-        const img = new Image()
-        img.crossOrigin = "anonymous"
-        img.onload = () => {
-          try {
-            mosaicCtx.drawImage(img, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-            resolve(true)
-          } catch {
-            resolve(false)
+      const p = (async () => {
+        try {
+          const res = await fetch(url, { mode: "cors" })
+          if (!res.ok) return
+          const blob = await res.blob()
+          if (typeof createImageBitmap === "function") {
+            const bitmap = await createImageBitmap(blob)
+            mosaicCtx.drawImage(bitmap, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+            bitmap.close?.()
+          } else {
+            const img = new Image()
+            img.crossOrigin = "anonymous"
+            await new Promise((resolve) => {
+              img.onload = () => {
+                try {
+                  mosaicCtx.drawImage(img, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+                } catch {}
+                resolve(true)
+              }
+              img.onerror = () => resolve(false)
+              img.src = URL.createObjectURL(blob)
+            })
           }
+        } catch {
+          // Si una tesela falla, continúa
         }
-        img.onerror = () => resolve(false)
-        img.src = url
-      })
+      })()
       tilePromises.push(p)
     }
   }
 
-  await Promise.allSettled(tilePromises)
+  await Promise.all(tilePromises)
 
-  // Leemos en una sola pasada atómica todos los píxeles de elevación
   let data = null
   try {
     const imgData = mosaicCtx.getImageData(0, 0, mosaicW, mosaicH)
     data = imgData.data
-  } catch {
+  } catch (err) {
+    console.warn("DEM getImageData fallo:", err)
     return null
   }
 
@@ -421,7 +426,7 @@ async function loadDemElevationGrid(bbox, segX, segZ) {
       const x1 = x0 + 1
       const fx = exactX - x0
 
-      // Interpolación bilineal suave y continua de 4 píxeles contiguos
+      // Interpolación bilineal continua
       const h00 = getElevationAtPixel(x0, y0)
       const h10 = getElevationAtPixel(x1, y0)
       const h01 = getElevationAtPixel(x0, y1)
@@ -447,101 +452,92 @@ async function loadDemElevationGrid(bbox, segX, segZ) {
 }
 
 /**
- * Crea la etiqueta 2D del Pin (Micro-tag estilizado, discreto y nítido)
+ * Crea la etiqueta 2D del Pin
  */
-function createPinSprite(text, color = "#10b981") {
+function createPinSprite(labelText, isSelected = false) {
   if (typeof document === "undefined") return null
   const canvas = document.createElement("canvas")
-  canvas.width = 320
+  canvas.width = 384
   canvas.height = 96
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
 
-  // Sombra suave proyectada debajo de la cápsula
-  ctx.shadowColor = "rgba(0, 0, 0, 0.45)"
-  ctx.shadowBlur = 10
-  ctx.shadowOffsetY = 4
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-  // Fondo cápsula redondeada oscura moderna (estilo HUD técnico minimalista)
-  ctx.fillStyle = "rgba(15, 23, 42, 0.92)"
+  const radius = 22
+  const x = 16
+  const y = 14
+  const w = 352
+  const h = 68
+
+  ctx.fillStyle = isSelected ? "rgba(2, 132, 199, 0.92)" : "rgba(15, 23, 42, 0.88)"
+  ctx.strokeStyle = isSelected ? "#38bdf8" : "rgba(255, 255, 255, 0.35)"
+  ctx.lineWidth = 3
+
   ctx.beginPath()
-  if (ctx.roundRect) ctx.roundRect(10, 10, 300, 76, 20)
-  else ctx.rect(10, 10, 300, 76)
+  ctx.moveTo(x + radius, y)
+  ctx.lineTo(x + w - radius, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius)
+  ctx.lineTo(x + w, y + h - radius)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h)
+  ctx.lineTo(x + radius, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius)
+  ctx.lineTo(x, y + radius)
+  ctx.quadraticCurveTo(x, y, x + radius, y)
+  ctx.closePath()
   ctx.fill()
-
-  // Borde sutil
-  ctx.shadowColor = "transparent"
-  ctx.lineWidth = 2.5
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)"
   ctx.stroke()
 
-  // Punto indicador de color a la izquierda
-  ctx.fillStyle = color
-  ctx.beginPath()
-  ctx.arc(42, 48, 11, 0, Math.PI * 2)
-  ctx.fill()
-
-  // Texto nítido y esbelto
+  ctx.font = "bold 32px sans-serif"
   ctx.fillStyle = "#ffffff"
-  ctx.font = "600 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-  ctx.textAlign = "left"
+  ctx.textAlign = "center"
   ctx.textBaseline = "middle"
-  ctx.fillText(text.slice(0, 16), 68, 49)
+
+  const display = labelText.length > 18 ? labelText.substring(0, 16) + "…" : labelText
+  ctx.fillText(display, canvas.width / 2, y + h / 2)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.minFilter = THREE.LinearFilter
-  const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false })
+  texture.magFilter = THREE.LinearFilter
+  const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false })
   const sprite = new THREE.Sprite(spriteMat)
-  sprite.scale.set(0.32, 0.096, 1)
+  sprite.scale.set(1.6, 0.4, 1.0)
   return sprite
 }
 
 /**
- * Crea el objeto 3D de un Pin arquitectónico esbelto
+ * Crea la aguja vertical minimalista del pin
  */
-function buildPinMesh(pin) {
-  const group = new THREE.Group()
-  group.name = "pin_" + pin.id
-  group.userData = { pinId: pin.id }
+function createPinMesh(colorHex = 0x38bdf8, isSelected = false) {
+  const pinGroup = new THREE.Group()
 
-  // 1. Bolita de contacto precisa en el suelo
-  const dotGeom = new THREE.SphereGeometry(0.012, 12, 12)
-  const dotMat = new THREE.MeshStandardMaterial({
-    color: pin.color || 0x10b981,
-    metalness: 0.9,
-    roughness: 0.15,
-    emissive: pin.color || 0x10b981,
-    emissiveIntensity: 0.3,
-  })
-  const dot = new THREE.Mesh(dotGeom, dotMat)
-  dot.position.y = 0.008
-  group.add(dot)
-
-  // 2. Mástil / aguja metálica fina
-  const needleHeight = 0.24
-  const needleGeom = new THREE.CylinderGeometry(0.004, 0.004, needleHeight, 8)
+  const needleGeom = new THREE.CylinderGeometry(0.018, 0.005, 0.8, 12)
+  needleGeom.translate(0, 0.4, 0)
   const needleMat = new THREE.MeshStandardMaterial({
-    color: 0xf1f5f9,
-    metalness: 0.95,
-    roughness: 0.1,
+    color: isSelected ? 0x38bdf8 : 0xffffff,
+    metalness: 0.8,
+    roughness: 0.2,
   })
-  const needle = new THREE.Mesh(needleGeom, needleMat)
-  needle.position.y = needleHeight / 2
-  group.add(needle)
+  const needleMesh = new THREE.Mesh(needleGeom, needleMat)
+  pinGroup.add(needleMesh)
 
-  // 3. Etiqueta / Sprite proporcionada
-  const sprite = createPinSprite(pin.text, pin.color || "#10b981")
-  if (sprite) {
-    sprite.position.y = needleHeight + 0.06
-    group.add(sprite)
-  }
+  const headGeom = new THREE.SphereGeometry(0.09, 16, 16)
+  headGeom.translate(0, 0.82, 0)
+  const headMat = new THREE.MeshStandardMaterial({
+    color: colorHex,
+    metalness: 0.2,
+    roughness: 0.1,
+    emissive: isSelected ? colorHex : 0x000000,
+    emissiveIntensity: isSelected ? 0.6 : 0.0,
+  })
+  const headMesh = new THREE.Mesh(headGeom, headMat)
+  pinGroup.add(headMesh)
 
-  group.position.set(pin.x, pin.y, pin.z)
-  return group
+  return pinGroup
 }
 
 /**
- * Componente de Bloque 3D del Terreno (Máxima Definición 4K y Topografía Nítida sin Restricciones)
+ * Componente principal BlockModel3D
  */
 export default function BlockModel3D({
   isOpen,
@@ -562,7 +558,6 @@ export default function BlockModel3D({
   const blockGroupRef = useRef(null)
   const topMeshRef = useRef(null)
   const wallsMeshRef = useRef(null)
-  const floorMeshRef = useRef(null)
   const sunLightRef = useRef(null)
   const hemiLightRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -575,6 +570,11 @@ export default function BlockModel3D({
 
   // Estados interactivos
   const [exaggeration, setExaggeration] = useState(1.0)
+  const exaggerationRef = useRef(1.0)
+  useEffect(() => {
+    exaggerationRef.current = exaggeration
+  }, [exaggeration])
+
   const [sunPreset, setSunPreset] = useState("noon")
   const [sunAngle, setSunAngle] = useState(45)
   const [autoRotate, setAutoRotate] = useState(false)
@@ -584,10 +584,10 @@ export default function BlockModel3D({
   }, [autoRotate])
 
   const [wireframe, setWireframe] = useState(false)
-  const [studioTheme, setStudioTheme] = useState("dark") // Por defecto oscuro
-  const [_demLoaded, setDemLoaded] = useState(false)
+  const [studioTheme, setStudioTheme] = useState("dark")
+  const [demLoading, setDemLoading] = useState(true)
 
-  // Sistema interactivo de Pines personalizados
+  // Pines personalizados
   const [pins, setPins] = useState([])
   const [isAddingPin, setIsAddingPin] = useState(false)
   const [selectedPinId, setSelectedPinId] = useState(null)
@@ -595,6 +595,7 @@ export default function BlockModel3D({
 
   // Medidas del rectángulo para escala métrica rigurosa
   const bbox = rectangle?.bbox || [-75.6, 6.2, -75.5, 6.3]
+  const bboxKey = bbox.join(",")
   const [minLng, minLat, maxLng, maxLat] = bbox
 
   const midLat = (minLat + maxLat) / 2
@@ -610,10 +611,8 @@ export default function BlockModel3D({
   const widthKm = (lngMeters / 1000).toFixed(2)
   const heightKm = (latMeters / 1000).toFixed(2)
 
-  // Base slim y elegante
   const baseDepth = 0.45
 
-  // Cálculo de elevación métrica rigurosa 1:1
   const computeHeight = useCallback(
     (elev, minElev, exag) => {
       const reliefMeters = Math.max(0, elev - minElev)
@@ -623,11 +622,10 @@ export default function BlockModel3D({
     [metersPerThreeUnit],
   )
 
-  // Resolución de malla densa (256x256 = 65,536 vértices para modelado topográfico ultra-nítido)
   const segX = 256
   const segZ = 256
 
-  // 1. Inicialización de Escena Three.js
+  // 1. Inicialización de Escena Three.js (SÓLO corre al montar o cambiar bbox/tema, NUNCA al mover el slider de exageración)
   useEffect(() => {
     if (!isOpen || !containerRef.current) return
 
@@ -635,17 +633,14 @@ export default function BlockModel3D({
     const width = container.clientWidth || 600
     const height = container.clientHeight || 600
 
-    // 1. Scene
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(studioTheme === "light" ? 0xdfe6dc : 0x09090b)
     sceneRef.current = scene
 
-    // 2. Camera
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 1000)
     camera.position.set(13.5, 10.5, 14.5)
     cameraRef.current = camera
 
-    // 3. Renderer con alta precisión y antialiasing
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: "high-performance",
@@ -661,7 +656,6 @@ export default function BlockModel3D({
     container.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
-    // 4. Controls
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.05
@@ -671,7 +665,6 @@ export default function BlockModel3D({
     controls.target.set(0, 0, 0)
     controlsRef.current = controls
 
-    // 5. Iluminación de Estudio: Luz solar rasante para crear contraste y sombras de relieve
     const hemiLight = new THREE.HemisphereLight(
       studioTheme === "light" ? 0xffffff : 0x475569,
       studioTheme === "light" ? 0xd0d5cc : 0x18181b,
@@ -681,7 +674,6 @@ export default function BlockModel3D({
     scene.add(hemiLight)
     hemiLightRef.current = hemiLight
 
-    // Luz solar rasante (altura 13) para que valles y crestas proyecten relieve real
     const dirLight = new THREE.DirectionalLight(0xfffaed, 3.4)
     dirLight.position.set(13, 13, 13)
     dirLight.castShadow = true
@@ -702,12 +694,11 @@ export default function BlockModel3D({
     fillLight.position.set(-13, 9, -13)
     scene.add(fillLight)
 
-    // 6. Construcción del Bloque Geológico Fotorrealista
     const blockGroup = new THREE.Group()
     scene.add(blockGroup)
     blockGroupRef.current = blockGroup
 
-    // Muestreo inicial síncrono rápido
+    // Muestreo inicial síncrono
     const grid = []
     let minElev = Infinity
     let maxElev = -Infinity
@@ -737,22 +728,21 @@ export default function BlockModel3D({
     elevationMaxRef.current = maxElev
     elevationGridRef.current = grid
 
-    // --- A. Superficie Topográfica Superior ---
+    // --- A. Malla Topográfica Superior ---
     const topGeom = new THREE.PlaneGeometry(W, D, segX, segZ)
     topGeom.rotateX(-Math.PI / 2)
     const topPos = topGeom.attributes.position
 
+    const currentExag = exaggerationRef.current
     for (let k = 0; k < topPos.count; k++) {
       const e = grid[k] ?? minElev
-      const yVal = computeHeight(e, minElev, exaggeration)
+      const yVal = computeHeight(e, minElev, currentExag)
       topPos.setY(k, yVal)
     }
     topPos.needsUpdate = true
     topGeom.computeVertexNormals()
 
-    // Textura inicial mientras carga el mosaico de satélite en alta resolución
     const fallbackTex = createReliefBasemapTexture(grid, segX, segZ)
-
     const topMat = new THREE.MeshStandardMaterial({
       map: fallbackTex,
       roughness: 0.82,
@@ -765,7 +755,7 @@ export default function BlockModel3D({
     blockGroup.add(topMesh)
     topMeshRef.current = topMesh
 
-    // --- B. Paredes Verticales de Falda con Tierra Natural Cálida ---
+    // --- B. Paredes Verticales de Falda ---
     const earthTexture = createHomogeneousEarthTexture()
     const wallPositions = []
     const wallUVs = []
@@ -779,8 +769,8 @@ export default function BlockModel3D({
         const xB = p0x + (p1x - p0x) * uB
         const zB = p0z + (p1z - p0z) * uB
 
-        const yTopA = computeHeight(getElevA(s), minElev, exaggeration)
-        const yTopB = computeHeight(getElevB(s + 1), minElev, exaggeration)
+        const yTopA = computeHeight(getElevA(s), minElev, currentExag)
+        const yTopB = computeHeight(getElevB(s + 1), minElev, currentExag)
         const yBot = -baseDepth
 
         wallPositions.push(xA, yTopA, zA, xA, yBot, zA, xB, yTopB, zB)
@@ -794,13 +784,9 @@ export default function BlockModel3D({
     const halfW = W / 2
     const halfD = D / 2
 
-    // Pared Norte (-Z)
     addWall(-halfW, -halfD, halfW, -halfD, (s) => grid[s], (s) => grid[s], segX)
-    // Pared Este (+X)
     addWall(halfW, -halfD, halfW, halfD, (s) => grid[s * (segX + 1) + segX], (s) => grid[s * (segX + 1) + segX], segZ)
-    // Pared Sur (+Z)
     addWall(halfW, halfD, -halfW, halfD, (s) => grid[segZ * (segX + 1) + (segX - s)], (s) => grid[segZ * (segX + 1) + (segX - s)], segX)
-    // Pared Oeste (-X)
     addWall(-halfW, halfD, -halfW, -halfD, (s) => grid[(segZ - s) * (segX + 1)], (s) => grid[(segZ - s) * (segX + 1)], segZ)
 
     const wallGeom = new THREE.BufferGeometry()
@@ -820,7 +806,7 @@ export default function BlockModel3D({
     blockGroup.add(wallsMesh)
     wallsMeshRef.current = wallsMesh
 
-    // --- C. Base inferior plana del bloque ---
+    // --- C. Base inferior plana ---
     const bottomGeom = new THREE.PlaneGeometry(W, D)
     bottomGeom.rotateX(Math.PI / 2)
     bottomGeom.translate(0, -baseDepth, 0)
@@ -832,7 +818,7 @@ export default function BlockModel3D({
     bottomMesh.receiveShadow = true
     blockGroup.add(bottomMesh)
 
-    // --- D. Plano receptor de sombras de estudio (Shadow Catcher) ---
+    // --- D. Receptor de sombras ---
     const floorGeom = new THREE.PlaneGeometry(90, 90)
     floorGeom.rotateX(-Math.PI / 2)
     floorGeom.translate(0, -baseDepth - 0.02, 0)
@@ -842,14 +828,13 @@ export default function BlockModel3D({
     const floorMesh = new THREE.Mesh(floorGeom, floorMat)
     floorMesh.receiveShadow = true
     scene.add(floorMesh)
-    floorMeshRef.current = floorMesh
 
-    // --- E. Grupo de Pines Dinámicos ---
+    // --- E. Pines ---
     const pinsGroup = new THREE.Group()
     blockGroup.add(pinsGroup)
     pinsGroupRef.current = pinsGroup
 
-    // 7. Bucle de animación continuo
+    // Bucle de renderizado continuo
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate)
       controls.update()
@@ -860,7 +845,6 @@ export default function BlockModel3D({
     }
     animate()
 
-    // 8. Manejo de redimensionamiento
     const handleResize = () => {
       if (!containerRef.current || !renderer || !camera) return
       const w = containerRef.current.clientWidth || 600
@@ -878,20 +862,19 @@ export default function BlockModel3D({
         container.removeChild(renderer.domElement)
       }
       renderer.dispose()
-      controls.dispose()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, aspect, maxLat, minLat, maxLng, minLng, studioTheme, computeHeight, exaggeration, W, D])
+  }, [isOpen, bboxKey, studioTheme])
 
-  // --- Carga de Teselas de Satélite en Ultra Alta Resolución 4K Nativa (4096x4096) ---
+  // 2. Carga Asíncrona de Textura Satelital (SÓLO depende del bbox y basemap)
   useEffect(() => {
     if (!isOpen || !rectangle?.bbox) return
     let canceled = false
 
     if (basemap === "relief") {
-      // Si el mapa base es relieve, generar textura hipsométrica analítica directa
-      if (elevationGridRef.current && elevationGridRef.current.length > 0 && topMeshRef.current?.material) {
-        const reliefTex = createReliefBasemapTexture(elevationGridRef.current, segX, segZ)
+      const grid = elevationGridRef.current
+      if (grid && grid.length > 0 && topMeshRef.current?.material) {
+        const reliefTex = createReliefBasemapTexture(grid, segX, segZ)
         if (reliefTex) {
           topMeshRef.current.material.map = reliefTex
           topMeshRef.current.material.needsUpdate = true
@@ -921,13 +904,14 @@ export default function BlockModel3D({
     return () => {
       canceled = true
     }
-  }, [isOpen, rectangle?.bbox, basemap])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, bboxKey, basemap, segX, segZ])
 
-  // --- Carga Asíncrona del DEM Real de Alta Definición (Mosaico Directo Libre de Concurrencias Rotas) ---
+  // 3. Carga Asíncrona del DEM Real (SÓLO depende del bbox)
   useEffect(() => {
     if (!isOpen || !rectangle?.bbox) return
-
     let canceled = false
+    setDemLoading(true)
 
     loadDemElevationGrid(rectangle.bbox, segX, segZ)
       .then((demRes) => {
@@ -937,19 +921,19 @@ export default function BlockModel3D({
         elevationMinRef.current = rMin
         elevationMaxRef.current = rMax
         elevationGridRef.current = realGrid
-        setDemLoaded(true)
+        setDemLoading(false)
 
-        // Deformar la geometría con la topografía real de alta definición
+        const currentExag = exaggerationRef.current
+
         if (topMeshRef.current && wallsMeshRef.current) {
           const topPos = topMeshRef.current.geometry.attributes.position
           for (let k = 0; k < topPos.count; k++) {
             const e = realGrid[k] ?? rMin
-            topPos.setY(k, computeHeight(e, rMin, exaggeration))
+            topPos.setY(k, computeHeight(e, rMin, currentExag))
           }
           topPos.needsUpdate = true
           topMeshRef.current.geometry.computeVertexNormals()
 
-          // Si el mapa base es relieve, actualizar la textura de relieve con la elevación real
           if (basemap === "relief") {
             const reliefTex = createReliefBasemapTexture(realGrid, segX, segZ)
             if (reliefTex) {
@@ -958,14 +942,13 @@ export default function BlockModel3D({
             }
           }
 
-          // Actualizar paredes laterales de falda
           const wallPos = wallsMeshRef.current.geometry.attributes.position
           let idx = 0
 
           function updateWallSeg(getElevA, getElevB, steps) {
             for (let s = 0; s < steps; s++) {
-              const yTopA = computeHeight(getElevA(s), rMin, exaggeration)
-              const yTopB = computeHeight(getElevB(s + 1), rMin, exaggeration)
+              const yTopA = computeHeight(getElevA(s), rMin, currentExag)
+              const yTopB = computeHeight(getElevB(s + 1), rMin, currentExag)
               wallPos.setY(idx + 0, yTopA)
               wallPos.setY(idx + 1, -baseDepth)
               wallPos.setY(idx + 2, yTopB)
@@ -985,16 +968,18 @@ export default function BlockModel3D({
           wallsMeshRef.current.geometry.computeVertexNormals()
         }
       })
-      .catch(() => {
-        // fallback síncrono activo
+      .catch((err) => {
+        console.warn("Error cargando DEM:", err)
+        setDemLoading(false)
       })
 
     return () => {
       canceled = true
     }
-  }, [isOpen, rectangle?.bbox, exaggeration, computeHeight, metersPerThreeUnit, basemap])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, bboxKey, computeHeight, basemap, segX, segZ, baseDepth])
 
-  // Actualización reactiva de exageración vertical
+  // 4. Actualización Ultra-rápida y Fluida de Exageración Vertical (0.5 ms, NUNCA destruye el canvas ni texturas)
   useEffect(() => {
     if (!topMeshRef.current || !wallsMeshRef.current) return
     const grid = elevationGridRef.current
@@ -1037,7 +1022,7 @@ export default function BlockModel3D({
     wallPos.needsUpdate = true
     wallsMeshRef.current.geometry.computeVertexNormals()
 
-    // Actualizar altura de los pines
+    // Altura de los pines
     if (pinsGroupRef.current) {
       pinsGroupRef.current.children.forEach((pGroup) => {
         const pId = pGroup.userData.pinId
@@ -1047,418 +1032,424 @@ export default function BlockModel3D({
         }
       })
     }
-  }, [exaggeration, computeHeight, metersPerThreeUnit, pins])
+  }, [exaggeration, computeHeight, segX, segZ, baseDepth, pins])
 
-  // Actualización de ángulo solar y sombras
-  const updateSunAngle = useCallback((deg, height = 13, intensity = 3.4, color = 0xfffaed) => {
-    setSunAngle(deg)
-    if (!sunLightRef.current) return
-    const rad = (deg * Math.PI) / 180
-    const dist = 16
-    const x = Math.cos(rad) * dist
-    const z = Math.sin(rad) * dist
-    sunLightRef.current.position.set(x, height, z)
-    sunLightRef.current.intensity = intensity
-    sunLightRef.current.color.setHex(color)
-  }, [])
-
-  const changeSunPreset = useCallback((preset) => {
-    setSunPreset(preset)
-    if (preset === "morning") {
-      updateSunAngle(120, 7, 2.8, 0xffedd5)
-    } else if (preset === "noon") {
-      updateSunAngle(45, 13, 3.4, 0xfffaed)
-    } else if (preset === "sunset") {
-      updateSunAngle(310, 5, 3.0, 0xfdba74)
-    }
-  }, [updateSunAngle])
-
+  // Wireframe
   useEffect(() => {
-    if (topMeshRef.current) topMeshRef.current.material.wireframe = wireframe
-    if (wallsMeshRef.current) wallsMeshRef.current.material.wireframe = wireframe
+    if (topMeshRef.current) {
+      topMeshRef.current.material.wireframe = wireframe
+    }
   }, [wireframe])
 
-  // Sincronizar pines en el grupo Three.js
+  // Ángulo de Iluminación Solar
+  useEffect(() => {
+    if (!sunLightRef.current) return
+    const rad = (sunAngle * Math.PI) / 180
+    const dist = 18
+    let sunHeight = 12
+
+    if (sunPreset === "morning") sunHeight = 7
+    if (sunPreset === "noon") sunHeight = 16
+    if (sunPreset === "sunset") sunHeight = 4
+
+    const sx = Math.cos(rad) * dist
+    const sz = Math.sin(rad) * dist
+    sunLightRef.current.position.set(sx, sunHeight, sz)
+  }, [sunAngle, sunPreset])
+
+  // Renderizado dinámico de pines
   useEffect(() => {
     if (!pinsGroupRef.current) return
-    const group = pinsGroupRef.current
-    while (group.children.length > 0) {
-      group.remove(group.children[0])
+    const pGroup = pinsGroupRef.current
+    while (pGroup.children.length > 0) {
+      pGroup.remove(pGroup.children[0])
     }
+
     const minElev = elevationMinRef.current
 
     pins.forEach((pin) => {
-      const pinObj = buildPinMesh({
-        ...pin,
-        y: computeHeight(pin.elev, minElev, exaggeration),
-      })
-      group.add(pinObj)
-    })
-  }, [pins, exaggeration, computeHeight])
+      const pinObj = new THREE.Group()
+      pinObj.userData = { pinId: pin.id }
 
-  // Manejo de clic para agregar pin interactivo sobre el terreno
-  const handleCanvasClick = useCallback(
-    (e) => {
-      if (!isAddingPin || !containerRef.current || !cameraRef.current || !topMeshRef.current) return
+      const pinMesh = createPinMesh(pin.color, pin.id === selectedPinId)
+      pinObj.add(pinMesh)
 
-      const rect = containerRef.current.getBoundingClientRect()
-      const mouse = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      const sprite = createPinSprite(pin.label, pin.id === selectedPinId)
+      if (sprite) {
+        sprite.position.y = 1.15
+        pinObj.add(sprite)
+      }
+
+      pinObj.position.set(
+        pin.x,
+        computeHeight(pin.elev, minElev, exaggeration),
+        pin.z,
       )
 
-      const raycaster = new THREE.Raycaster()
-      raycaster.setFromCamera(mouse, cameraRef.current)
+      pGroup.add(pinObj)
+    })
+  }, [pins, selectedPinId, exaggeration, computeHeight])
 
+  // Interacción de clic para colocar o seleccionar pin
+  const handleCanvasClick = (e) => {
+    if (!containerRef.current || !cameraRef.current || !topMeshRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    const mouse = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    )
+
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(mouse, cameraRef.current)
+
+    if (isAddingPin) {
       const intersects = raycaster.intersectObject(topMeshRef.current)
       if (intersects.length > 0) {
         const hit = intersects[0]
         const p = hit.point
 
-        // Convertir coordenadas 3D a cota estimada
         const minElev = elevationMinRef.current
         const maxElev = elevationMaxRef.current
-        const reliefSpan = maxElev - minElev
-        const relY = Math.max(0, p.y)
         const totalHeight = computeHeight(maxElev, minElev, exaggeration)
-        const elev = Math.round(minElev + (totalHeight > 0 ? (relY / totalHeight) * reliefSpan : 0))
+        const relY = totalHeight > 0.001 ? Math.max(0, Math.min(1, hit.point.y / totalHeight)) : 0
+        const calculatedElev = Math.round(minElev + relY * (maxElev - minElev))
 
         const newPin = {
-          id: "pin_" + Date.now(),
+          id: "pin-" + Date.now(),
           x: p.x,
-          y: p.y,
           z: p.z,
-          elev,
-          text: `Punto ${pins.length + 1} (${elev}m)`,
-          color: "#10b981",
+          elev: calculatedElev,
+          label: `Punto ${pins.length + 1}`,
+          color: 0x38bdf8,
         }
 
         setPins((prev) => [...prev, newPin])
         setSelectedPinId(newPin.id)
-        setEditingPinText(newPin.text)
+        setEditingPinText(newPin.label)
         setIsAddingPin(false)
       }
-    },
-    [isAddingPin, pins.length, exaggeration, computeHeight],
-  )
-
-  const handleCaptureScreenshot = () => {
-    if (!rendererRef.current) return
-    const dataUrl = rendererRef.current.domElement.toDataURL("image/png")
-    const a = document.createElement("a")
-    a.href = dataUrl
-    a.download = `bloque-3d-${Date.now()}.png`
-    a.click()
-  }
-
-  const handleResetCamera = () => {
-    if (!cameraRef.current || !controlsRef.current) return
-    cameraRef.current.position.set(13.5, 10.5, 14.5)
-    controlsRef.current.target.set(0, 0, 0)
-    controlsRef.current.update()
-  }
-
-  const handleDeletePin = (id) => {
-    setPins((prev) => prev.filter((p) => p.id !== id))
-    if (selectedPinId === id) {
-      setSelectedPinId(null)
-      setEditingPinText("")
+      return
     }
+
+    if (pinsGroupRef.current) {
+      const pinHits = raycaster.intersectObjects(pinsGroupRef.current.children, true)
+      if (pinHits.length > 0) {
+        let cur = pinHits[0].object
+        while (cur && !cur.userData?.pinId) {
+          cur = cur.parent
+        }
+        if (cur?.userData?.pinId) {
+          setSelectedPinId(cur.userData.pinId)
+          const found = pins.find((p) => p.id === cur.userData.pinId)
+          if (found) setEditingPinText(found.label)
+          return
+        }
+      }
+    }
+
+    setSelectedPinId(null)
   }
 
-  const handleUpdatePinText = (id, text) => {
-    setPins((prev) => prev.map((p) => (p.id === id ? { ...p, text } : p)))
-  }
-
-  const handleUpdatePinColor = (id, color) => {
-    setPins((prev) => prev.map((p) => (p.id === id ? { ...p, color } : p)))
+  // Captura de pantalla en HD
+  const handleScreenshot = () => {
+    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return
+    rendererRef.current.render(sceneRef.current, cameraRef.current)
+    const dataURL = rendererRef.current.domElement.toDataURL("image/png")
+    const link = document.createElement("a")
+    link.download = `bloque-3d-${Date.now()}.png`
+    link.href = dataURL
+    link.click()
   }
 
   if (!isOpen) return null
 
   return (
-    <div className="relative h-full w-full select-none overflow-hidden bg-[#09090b] text-zinc-100 font-sans">
-      {/* 1. Barra de Herramientas Superior Flotante */}
-      <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between pointer-events-none">
-        {/* Lado Izquierdo: Título y Datos Topográficos Reales */}
-        <div className="pointer-events-auto flex items-center gap-2 rounded-xl bg-zinc-900/90 px-3 py-2 border border-zinc-800 shadow-2xl backdrop-blur-xl">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
-            <Compass className="h-4 w-4" />
+    <div className="relative w-full h-full flex flex-col bg-zinc-950 select-none overflow-hidden font-sans">
+      {/* Cabecera Obsidian Glass */}
+      <div className="h-12 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800/80 px-4 flex items-center justify-between z-20 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-400">
+            <Box size={16} />
           </div>
           <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
-                Bloque 3D del Terreno
-              </span>
-              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+            <span className="text-xs font-semibold tracking-wide text-zinc-100 flex items-center gap-2">
+              Bloque 3D del Terreno
+              <span className="text-[10px] font-medium text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
                 Relieve Real
               </span>
-            </div>
-            <span className="text-[11px] text-zinc-400">
-              {widthKm} km × {heightKm} km • Cota {Math.round(elevationMinRef.current)}m - {Math.round(elevationMaxRef.current)}m
+            </span>
+            <span className="text-[10px] text-zinc-400">
+              {widthKm} × {heightKm} km · Escala Métrica 1:1
             </span>
           </div>
         </div>
 
-        {/* Lado Derecho: Acciones y Cierre */}
-        <div className="pointer-events-auto flex items-center gap-1.5 rounded-xl bg-zinc-900/90 p-1.5 border border-zinc-800 shadow-2xl backdrop-blur-xl">
+        <div className="flex items-center gap-1.5">
           {onRedrawRectangle && (
             <button
-              type="button"
               onClick={onRedrawRectangle}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+              className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/60 rounded-md transition-all flex items-center gap-1.5"
               title="Seleccionar otra área en el mapa"
             >
-              <Square className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Cambiar área</span>
+              <Box size={13} />
+              <span>Cambiar Área</span>
             </button>
           )}
-
-          <button
-            type="button"
-            onClick={handleCaptureScreenshot}
-            className="flex items-center gap-1 rounded-lg p-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
-            title="Capturar imagen en alta resolución"
-          >
-            <Camera className="h-4 w-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={handleResetCamera}
-            className="flex items-center gap-1 rounded-lg p-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
-            title="Restablecer vista de cámara"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </button>
 
           {onToggleMaximize && (
             <button
-              type="button"
               onClick={onToggleMaximize}
-              className="flex items-center gap-1 rounded-lg p-1.5 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
-              title={isMaximized ? "Restaurar vista dividida" : "Pantalla completa"}
+              className="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 rounded-md border border-zinc-800 transition-colors"
+              title={isMaximized ? "Restaurar tamaño normal" : "Maximizar pantalla completa"}
             >
-              {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>
           )}
 
           <button
-            type="button"
             onClick={onClose}
-            className="flex items-center gap-1 rounded-lg p-1.5 text-zinc-400 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+            className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-md border border-zinc-800 transition-colors"
             title="Cerrar bloque 3D del terreno"
           >
-            <X className="h-4 w-4" />
+            <X size={15} />
           </button>
         </div>
       </div>
 
-      {/* 2. Lienzo WebGL Three.js con soporte para clics de pines */}
+      {/* Contenedor del Lienzo WebGL 3D */}
       <div
         ref={containerRef}
         onClick={handleCanvasClick}
-        className={`h-full w-full cursor-grab active:cursor-grabbing ${
-          isAddingPin ? "cursor-crosshair active:cursor-crosshair" : ""
-        }`}
+        className="relative flex-1 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden"
       />
 
-      {/* 3. Panel Flotante Inferior de Controles Fotorrealistas */}
-      <div className="absolute bottom-4 left-4 right-4 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        {/* Controles Topográficos y de Iluminación */}
-        <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-2xl bg-zinc-900/90 p-2 border border-zinc-800 shadow-2xl backdrop-blur-xl">
-          {/* Exageración Vertical Fotorrealista */}
-          <div className="flex items-center gap-2 rounded-xl bg-zinc-950/60 px-2.5 py-1.5 border border-zinc-800/80">
-            <span className="text-[11px] font-semibold text-zinc-400">Exageración:</span>
+      {/* Badge de estado de carga DEM */}
+      {demLoading && (
+        <div className="absolute top-14 left-4 z-20 flex items-center gap-2 bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-lg border border-sky-500/30 text-sky-400 text-xs shadow-lg animate-pulse">
+          <Mountain size={14} className="animate-spin" />
+          <span>Decodificando topografía DEM SRTM 30m...</span>
+        </div>
+      )}
+
+      {/* Brújula e Indicador Norte Flotante */}
+      <div className="absolute top-14 right-4 z-10 flex flex-col items-center bg-zinc-900/85 backdrop-blur-md p-2 rounded-xl border border-zinc-800/80 shadow-xl pointer-events-none">
+        <Compass size={18} className="text-rose-500" />
+        <span className="text-[9px] font-bold text-rose-400 tracking-wider mt-0.5">N</span>
+      </div>
+
+      {/* HUD de Controles Flotante Inferior */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl">
+        {/* Control de Exageración Vertical */}
+        <div className="flex items-center gap-2 pr-3 border-r border-zinc-800">
+          <Mountain size={14} className="text-zinc-400 shrink-0" />
+          <div className="flex flex-col">
+            <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
+              Exageración:
+            </span>
             <input
               type="range"
               min="0.5"
-              max="5"
+              max="5.0"
               step="0.1"
+              aria-label="Exageración vertical"
               value={exaggeration}
               onChange={(e) => setExaggeration(parseFloat(e.target.value))}
-              aria-label="Exageración vertical"
-              className="w-16 h-1.5 accent-emerald-500 bg-zinc-800 rounded cursor-pointer"
+              className="w-20 accent-sky-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
             />
-            <span className="text-xs font-bold text-emerald-400 min-w-[2.2rem]">
-              {exaggeration.toFixed(1)}×
-            </span>
           </div>
+          <span className="text-xs font-mono font-bold text-sky-400 w-8 text-right">
+            {exaggeration.toFixed(1)}×
+          </span>
+        </div>
 
-          {/* Iluminación Solar */}
-          <div className="flex items-center gap-1.5 rounded-xl bg-zinc-950/60 px-2.5 py-1.5 border border-zinc-800/80">
-            <Sun className="h-3.5 w-3.5 text-amber-400" />
-            <span className="text-[11px] font-semibold text-zinc-400">Sol:</span>
+        {/* Control del Sol e Iluminación */}
+        <div className="flex items-center gap-2 pr-3 border-r border-zinc-800">
+          <Sun size={14} className="text-amber-400 shrink-0" />
+          <div className="flex flex-col">
+            <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
+              Ángulo Sol
+            </span>
             <input
               type="range"
               min="0"
               max="360"
-              value={sunAngle}
-              onChange={(e) => updateSunAngle(parseInt(e.target.value))}
+              step="5"
               title="Girar posición del sol para ver sombras dinámicas"
-              aria-label="Posición solar"
-              className="w-14 h-1.5 accent-amber-400 bg-zinc-800 rounded cursor-pointer"
+              aria-label="Girar posición del sol para ver sombras dinámicas"
+              value={sunAngle}
+              onChange={(e) => setSunAngle(parseInt(e.target.value))}
+              className="w-20 accent-amber-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
             />
-            <span className="text-xs font-bold text-amber-400 min-w-[2rem]">
-              {sunAngle}°
-            </span>
-            {[
-              { id: "morning", label: "Mañana" },
-              { id: "noon", label: "Mediodía" },
-              { id: "sunset", label: "Tarde" },
-            ].map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => changeSunPreset(p.id)}
-                className={`rounded-md px-2 py-0.5 text-xs font-medium transition-all ${
-                  sunPreset === p.id
-                    ? "bg-amber-500 text-zinc-950 font-bold shadow-md shadow-amber-500/20"
-                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
           </div>
+          <span className="text-xs font-mono font-bold text-amber-300 w-9 text-right">
+            {sunAngle}°
+          </span>
+        </div>
 
-          {/* Giro Automático */}
+        {/* Presets Solares Rápidos */}
+        <div className="flex items-center gap-1 pr-3 border-r border-zinc-800">
           <button
-            type="button"
-            onClick={() => setAutoRotate((r) => !r)}
-            className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all border ${
-              autoRotate
-                ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-lg shadow-emerald-500/10"
-                : "bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            onClick={() => setSunPreset("morning")}
+            className={`px-2 py-1 text-[10px] font-medium rounded-md border transition-all ${
+              sunPreset === "morning"
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                : "text-zinc-400 hover:text-zinc-200 border-transparent"
             }`}
-            title="Rotar automáticamente el bloque"
           >
-            {autoRotate ? <Pause className="h-3.5 w-3.5 text-emerald-400" /> : <Play className="h-3.5 w-3.5" />}
-            <span>Girar</span>
+            Mañana
           </button>
-
-          {/* Malla Wireframe */}
           <button
-            type="button"
-            onClick={() => setWireframe((w) => !w)}
-            className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium transition-all border ${
-              wireframe
-                ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                : "bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            onClick={() => setSunPreset("noon")}
+            className={`px-2 py-1 text-[10px] font-medium rounded-md border transition-all ${
+              sunPreset === "noon"
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                : "text-zinc-400 hover:text-zinc-200 border-transparent"
             }`}
-            title="Alternar vista de malla de triángulos"
           >
-            <Grid3X3 className="h-3.5 w-3.5" />
-            <span>Malla</span>
+            Mediodía
           </button>
-
-          {/* Tema del Estudio (Oscuro por defecto / Claro) */}
           <button
-            type="button"
-            onClick={() => setStudioTheme((t) => (t === "dark" ? "light" : "dark"))}
-            className="flex items-center gap-1.5 rounded-xl bg-zinc-950/60 px-2.5 py-1.5 text-xs font-medium text-zinc-400 border border-zinc-800/80 hover:bg-zinc-800 hover:text-zinc-200 transition-all"
-            title="Alternar fondo de estudio"
+            onClick={() => setSunPreset("sunset")}
+            className={`px-2 py-1 text-[10px] font-medium rounded-md border transition-all ${
+              sunPreset === "sunset"
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                : "text-zinc-400 hover:text-zinc-200 border-transparent"
+            }`}
           >
-            <Palette className="h-3.5 w-3.5 text-zinc-400" />
-            <span>{studioTheme === "dark" ? "Fondo Claro" : "Fondo Oscuro"}</span>
+            Tarde
           </button>
         </div>
 
-        {/* Sistema de Pines Personalizados */}
-        <div className="pointer-events-auto flex items-center gap-2 rounded-2xl bg-zinc-900/90 p-2 border border-zinc-800 shadow-2xl backdrop-blur-xl">
+        {/* Herramienta de Pines Personalizados */}
+        <div className="flex items-center gap-1 pr-3 border-r border-zinc-800">
           <button
-            type="button"
-            onClick={() => setIsAddingPin((p) => !p)}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all border ${
+            onClick={() => setIsAddingPin(!isAddingPin)}
+            className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
               isAddingPin
-                ? "bg-emerald-500 text-zinc-950 border-emerald-400 shadow-lg shadow-emerald-500/25 animate-pulse"
-                : "bg-zinc-950/60 border-zinc-800/80 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                ? "bg-rose-500 text-white border-rose-400 shadow-md shadow-rose-500/30 animate-pulse"
+                : "text-zinc-300 hover:text-white bg-zinc-800/60 border-zinc-700/60 hover:bg-zinc-800"
             }`}
+            title={isAddingPin ? "Haz clic en el terreno para colocar el pin" : "Añadir pin sobre el terreno"}
           >
-            <MapPin className="h-3.5 w-3.5" />
-            <span>{isAddingPin ? "Haz clic en el terreno" : "+ Agregar Pin"}</span>
+            <MapPin size={13} />
+            <span>{isAddingPin ? "Colocar Pin..." : "+ Pin"}</span>
+          </button>
+        </div>
+
+        {/* Botones de Función: Rotación, Malla, Tema y Captura */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setAutoRotate(!autoRotate)}
+            className={`p-1.5 rounded-lg border transition-all ${
+              autoRotate
+                ? "bg-sky-500/20 text-sky-400 border-sky-500/40"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
+            }`}
+            title={autoRotate ? "Detener giro continuo" : "Iniciar giro automático"}
+          >
+            <RotateCw size={15} />
           </button>
 
-          {pins.length > 0 && (
-            <span className="text-[11px] font-medium text-zinc-400 px-1">
-              {pins.length} {pins.length === 1 ? "pin" : "pines"}
-            </span>
-          )}
+          <button
+            onClick={() => setWireframe(!wireframe)}
+            className={`p-1.5 rounded-lg border transition-all ${
+              wireframe
+                ? "bg-sky-500/20 text-sky-400 border-sky-500/40"
+                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
+            }`}
+            title="Alternar vista de malla de alambre"
+          >
+            <Grid size={15} />
+          </button>
+
+          <button
+            onClick={() => setStudioTheme(studioTheme === "dark" ? "light" : "dark")}
+            className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
+            title={`Cambiar a fondo ${studioTheme === "dark" ? "claro" : "oscuro"}`}
+          >
+            <Activity size={15} />
+          </button>
+
+          <button
+            onClick={handleScreenshot}
+            className="p-1.5 text-zinc-400 hover:text-sky-400 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
+            title="Exportar imagen PNG del bloque 3D"
+          >
+            <Camera size={15} />
+          </button>
         </div>
       </div>
 
-      {/* 4. Modal / Drawer para editar texto y color del pin seleccionado */}
+      {/* Editor flotante de Pin Seleccionado */}
       {selectedPinId && (
-        <div className="absolute top-16 right-4 z-40 w-72 rounded-2xl bg-zinc-900/95 p-3.5 border border-zinc-800 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-right-4">
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800">
-            <span className="text-xs font-bold text-zinc-200">Editar Marcador</span>
+        <div className="absolute top-14 left-4 z-30 bg-zinc-900/95 backdrop-blur-md p-3 rounded-xl border border-sky-500/40 shadow-2xl flex flex-col gap-2 w-64 animate-in fade-in zoom-in duration-150">
+          <div className="flex items-center justify-between text-xs font-semibold text-zinc-200">
+            <span className="flex items-center gap-1.5 text-sky-400">
+              <MapPin size={14} /> Editar Marcador
+            </span>
             <button
-              type="button"
               onClick={() => setSelectedPinId(null)}
-              className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              className="text-zinc-400 hover:text-zinc-100 p-0.5"
             >
-              <X className="h-3.5 w-3.5" />
+              <X size={13} />
             </button>
           </div>
 
-          <div className="flex flex-col gap-2.5">
-            <div>
-              <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-                Etiqueta
-              </label>
-              <input
-                type="text"
-                value={editingPinText}
-                onChange={(e) => {
-                  setEditingPinText(e.target.value)
-                  handleUpdatePinText(selectedPinId, e.target.value)
-                }}
-                className="w-full rounded-lg bg-zinc-950 px-2.5 py-1.5 text-xs text-white border border-zinc-700 focus:border-emerald-500 focus:outline-none"
-                placeholder="Nombre del punto..."
-              />
+          <input
+            type="text"
+            value={editingPinText}
+            onChange={(e) => {
+              setEditingPinText(e.target.value)
+              setPins((prev) =>
+                prev.map((p) => (p.id === selectedPinId ? { ...p, label: e.target.value } : p)),
+              )
+            }}
+            placeholder="Nombre o cota..."
+            className="bg-zinc-950 border border-zinc-700/80 rounded-lg px-2.5 py-1 text-xs text-zinc-100 focus:outline-none focus:border-sky-500"
+          />
+
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-1.5">
+              {[0x38bdf8, 0x10b981, 0xf59e0b, 0xef4444, 0xa855f7].map((colorHex) => (
+                <button
+                  key={colorHex}
+                  onClick={() => {
+                    setPins((prev) =>
+                      prev.map((p) => (p.id === selectedPinId ? { ...p, color: colorHex } : p)),
+                    )
+                  }}
+                  className="w-4 h-4 rounded-full border border-white/20 hover:scale-110 transition-transform"
+                  style={{ backgroundColor: `#${colorHex.toString(16).padStart(6, "0")}` }}
+                />
+              ))}
             </div>
 
-            <div>
-              <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-                Color
-              </label>
-              <div className="flex items-center gap-2">
-                {["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"].map((col) => (
-                  <button
-                    key={col}
-                    type="button"
-                    onClick={() => handleUpdatePinColor(selectedPinId, col)}
-                    className="h-5 w-5 rounded-full border border-white/20 transition-transform hover:scale-110 flex items-center justify-center"
-                    style={{ backgroundColor: col }}
-                  >
-                    {pins.find((p) => p.id === selectedPinId)?.color === col && (
-                      <Check className="h-3 w-3 text-white" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80">
-              <button
-                type="button"
-                onClick={() => handleDeletePin(selectedPinId)}
-                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>Eliminar</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedPinId(null)}
-                className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-semibold text-zinc-950 hover:bg-emerald-400 transition-colors"
-              >
-                Listo
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                setPins((prev) => prev.filter((p) => p.id !== selectedPinId))
+                setSelectedPinId(null)
+              }}
+              className="p-1 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition-colors"
+              title="Eliminar este pin"
+            >
+              <Trash2 size={14} />
+            </button>
           </div>
         </div>
       )}
+
+      {/* Leyenda Hipsométrica Flotante */}
+      <div className="absolute bottom-4 left-4 z-10 bg-zinc-900/85 backdrop-blur-md px-3 py-2 rounded-xl border border-zinc-800/80 shadow-xl flex flex-col gap-1 pointer-events-none">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-300">
+          <Layers size={12} className="text-sky-400" />
+          <span>Elevación Topográfica</span>
+        </div>
+        <div className="flex items-center justify-between text-[9px] font-mono text-zinc-400">
+          <span>{Math.round(elevationMinRef.current)} m</span>
+          <span>{Math.round(elevationMaxRef.current)} m</span>
+        </div>
+        <div className="w-28 h-1.5 rounded-full bg-gradient-to-r from-emerald-600 via-amber-400 to-rose-200" />
+      </div>
     </div>
   )
 }
