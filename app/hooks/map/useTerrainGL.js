@@ -455,12 +455,21 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       }, 300)
     }
 
+    const onPointerMove = (e) => {
+      if (e.buttons === 0 && isInteracting) {
+        isInteracting = false
+        previous = performance.now()
+      }
+    }
+
     if (canvas) {
       canvas.addEventListener("pointerdown", onInteractionStart, { passive: true })
       canvas.addEventListener("touchstart", onInteractionStart, { passive: true })
       canvas.addEventListener("wheel", onWheel, { passive: true })
+      canvas.addEventListener("pointermove", onPointerMove, { passive: true })
     }
     window.addEventListener("pointerup", onInteractionEnd, { passive: true })
+    window.addEventListener("mouseup", onInteractionEnd, { passive: true })
     window.addEventListener("pointercancel", onInteractionEnd, { passive: true })
     window.addEventListener("touchend", onInteractionEnd, { passive: true })
 
@@ -506,8 +515,10 @@ export const useTerrainGL = (mapRef, mapInstance) => {
         canvas.removeEventListener("pointerdown", onInteractionStart)
         canvas.removeEventListener("touchstart", onInteractionStart)
         canvas.removeEventListener("wheel", onWheel)
+        canvas.removeEventListener("pointermove", onPointerMove)
       }
       window.removeEventListener("pointerup", onInteractionEnd)
+      window.removeEventListener("mouseup", onInteractionEnd)
       window.removeEventListener("pointercancel", onInteractionEnd)
       window.removeEventListener("touchend", onInteractionEnd)
 
@@ -575,6 +586,41 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       mapInstance.off("rotateend", syncCamera)
       mapInstance.off("pitchend", syncCamera)
       mapInstance.off("moveend", syncCamera)
+    }
+  }, [mapInstance])
+
+  // Evitar que el clic derecho abra el menú contextual y deje trabado el giro 3D (dragRotate),
+  // y asegurar que si se mueve el ratón sin botones pulsados, MapLibre no quede "pegado".
+  useEffect(() => {
+    if (!mapInstance) return
+    const canvas = mapInstance.getCanvas?.()
+    if (!canvas) return
+
+    const onContextMenu = (e) => {
+      e.preventDefault()
+    }
+
+    const onGlobalPointerMove = (e) => {
+      if (e.buttons === 0) {
+        if (mapInstance.dragRotate?.isActive?.() || mapInstance.dragPan?.isActive?.()) {
+          canvas.dispatchEvent(
+            new MouseEvent("mouseup", {
+              bubbles: true,
+              cancelable: true,
+              clientX: e.clientX,
+              clientY: e.clientY,
+            }),
+          )
+        }
+      }
+    }
+
+    canvas?.addEventListener?.("contextmenu", onContextMenu)
+    window.addEventListener("pointermove", onGlobalPointerMove, { passive: true })
+
+    return () => {
+      canvas?.removeEventListener?.("contextmenu", onContextMenu)
+      window.removeEventListener("pointermove", onGlobalPointerMove)
     }
   }, [mapInstance])
 

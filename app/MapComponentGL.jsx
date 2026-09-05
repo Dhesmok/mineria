@@ -281,6 +281,42 @@ export default function MapComponentGL({
     }
   }, [basemapOpen])
 
+  // Recapturar automáticamente la textura del área seleccionada al cambiar mapa base
+  useEffect(() => {
+    if (!blockModelOpen || !selectedRectangle?.bbox || !mapRef.current) return
+    const map = mapRef.current
+
+    const updateTexture = () => {
+      try {
+        const [minLng, minLat, maxLng, maxLat] = selectedRectangle.bbox
+        const p1 = map.project([minLng, maxLat])
+        const p2 = map.project([maxLng, minLat])
+        const mapCanvas = map.getCanvas?.()
+        if (mapCanvas && p1 && p2) {
+          const x = Math.min(p1.x, p2.x)
+          const y = Math.min(p1.y, p2.y)
+          const w = Math.abs(p2.x - p1.x)
+          const h = Math.abs(p2.y - p1.y)
+          if (w > 10 && h > 10 && x >= 0 && y >= 0 && x + w <= mapCanvas.width && y + h <= mapCanvas.height) {
+            const offCanvas = document.createElement("canvas")
+            offCanvas.width = 1024
+            offCanvas.height = 1024
+            const ctx = offCanvas.getContext("2d")
+            if (ctx) {
+              ctx.drawImage(mapCanvas, x, y, w, h, 0, 0, 1024, 1024)
+              const newTex = offCanvas.toDataURL("image/jpeg", 0.9)
+              setSelectedRectangle((prev) => (prev ? { ...prev, textureDataUrl: newTex } : null))
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    map.once("idle", updateTexture)
+  }, [basemap, blockModelOpen, selectedRectangle?.bbox])
+
   const [terrainOpen, setTerrainOpen] = useState(false)
   const terrainBtnRef = useRef(null)
   const terrainContainerRef = useRef(null)
@@ -842,55 +878,7 @@ export default function MapComponentGL({
             )}
           </div>
         )}
-      </div>
-
-      {/* Divisor Arrastrable (Split Divider) */}
-      {blockModelOpen && (
-        <div
-          onPointerDown={handleSplitPointerDown}
-          onPointerMove={handleSplitPointerMove}
-          onPointerUp={handleSplitPointerUp}
-          className="relative w-2 bg-zinc-950 border-x border-zinc-800 hover:border-emerald-500 cursor-col-resize flex items-center justify-center transition-colors z-30 select-none touch-none group shrink-0"
-          title="Arrastrar para ajustar la división de pantalla"
-        >
-          <div className="absolute w-5 h-10 rounded-full bg-zinc-800 border border-zinc-700 group-hover:border-emerald-500 flex items-center justify-center shadow-lg transition-colors">
-            <GripVertical className="h-3.5 w-3.5 text-zinc-400 group-hover:text-emerald-300" />
-          </div>
-        </div>
-      )}
-
-      {/* Vista Bloque 3D del Terreno Derecha */}
-      {blockModelOpen && (
-        <div
-          className="relative h-full overflow-hidden shrink-0"
-          style={{ width: `${(1 - splitRatio) * 100}%` }}
-        >
-          <BlockModel3D
-            isOpen={blockModelOpen}
-            onClose={() => {
-              setBlockModelOpen(false)
-              requestAnimationFrame(() => {
-                mapRef.current?.resize()
-                overlayMapRef.current?.resize()
-              })
-            }}
-            rectangle={selectedRectangle}
-            elevationAt={elevationAt}
-            map={mapRef.current}
-            onRedrawRectangle={handleStartDrawBox}
-            isMaximized={splitRatio <= 0.05}
-            onToggleMaximize={() => {
-              setSplitRatio((r) => (r <= 0.05 ? 0.5 : 0.02))
-              requestAnimationFrame(() => {
-                mapRef.current?.resize()
-                overlayMapRef.current?.resize()
-              })
-            }}
-          />
-        </div>
-      )}
-
-      {/* CONTROLES Y PANELES FIJOS A LA VENTANA / VIEWPORT */}
+      \n\n        {/* CONTROLES DEL MAPA (FIJOS AL VISOR IZQUIERDO) */}\n
       <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
 
 
@@ -1405,9 +1393,54 @@ export default function MapComponentGL({
           </button>
         </div>
       )}
-      </div>
+      </div>\n      </div>\n\n      {/* Divisor Arrastrable (Split Divider) */}
+      {blockModelOpen && (
+        <div
+          onPointerDown={handleSplitPointerDown}
+          onPointerMove={handleSplitPointerMove}
+          onPointerUp={handleSplitPointerUp}
+          className="relative w-2 bg-zinc-950 border-x border-zinc-800 hover:border-emerald-500 cursor-col-resize flex items-center justify-center transition-colors z-30 select-none touch-none group shrink-0"
+          title="Arrastrar para ajustar la división de pantalla"
+        >
+          <div className="absolute w-5 h-10 rounded-full bg-zinc-800 border border-zinc-700 group-hover:border-emerald-500 flex items-center justify-center shadow-lg transition-colors">
+            <GripVertical className="h-3.5 w-3.5 text-zinc-400 group-hover:text-emerald-300" />
+          </div>
+        </div>
+      )}
 
-      <style jsx global>{`
+      {/* Vista Bloque 3D del Terreno Derecha */}
+      {blockModelOpen && (
+        <div
+          className="relative h-full overflow-hidden shrink-0"
+          style={{ width: `${(1 - splitRatio) * 100}%` }}
+        >
+          <BlockModel3D
+            isOpen={blockModelOpen}
+            onClose={() => {
+              setBlockModelOpen(false)
+              requestAnimationFrame(() => {
+                mapRef.current?.resize()
+                overlayMapRef.current?.resize()
+              })
+            }}
+            rectangle={selectedRectangle}
+            elevationAt={elevationAt}
+            map={mapRef.current}
+            onRedrawRectangle={handleStartDrawBox}
+            expedientCode={expedientCode}
+            isMaximized={splitRatio <= 0.05}
+            onToggleMaximize={() => {
+              setSplitRatio((r) => (r <= 0.05 ? 0.5 : 0.02))
+              requestAnimationFrame(() => {
+                mapRef.current?.resize()
+                overlayMapRef.current?.resize()
+              })
+            }}
+          />
+        </div>
+      )}
+
+\n      <style jsx global>{`
         /* Mismas etiquetas que el visor Leaflet: texto blanco con contorno negro,
            que es lo único legible tanto sobre el mapa claro como sobre satélite. */
         .map-label {

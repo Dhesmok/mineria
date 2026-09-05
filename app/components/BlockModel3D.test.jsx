@@ -27,6 +27,10 @@ HTMLCanvasElement.prototype.getContext = jest.fn(() => ({
   lineTo: jest.fn(),
   stroke: jest.fn(),
   fillText: jest.fn(),
+  fill: jest.fn(),
+  closePath: jest.fn(),
+  roundRect: jest.fn(),
+  rect: jest.fn(),
 }))
 
 jest.mock("three/addons/controls/OrbitControls.js", () => ({
