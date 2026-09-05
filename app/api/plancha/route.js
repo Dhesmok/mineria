@@ -1,105 +1,46 @@
 import { permite, sinCifrar } from "../../utils/planchaUrl"
 
 /**
- * El intermediario para el PDF de una plancha geológica.
- *
- * **Por qué existe.** El enlace sale de la propia ficha del SGC (`ECG_URL_PL`) y
- * apunta a su gestor documental. Para dibujar ese PDF sobre el mapa hay que
- * leerlo con `fetch` desde el navegador, y eso lo somete a CORS: si el servidor
- * no manda la cabecera que autoriza a otro dominio, el navegador lo descarta. Es
- * el mismo motivo por el que las capas del SGC pasan por `/api/sgc`, y aquí con
- * más razón todavía, porque el gestor documental es otro servidor distinto del de
- * los mapas.
- *
- * ## Por qué esta ruta sí acepta una dirección, y qué la sujeta
- *
- * `/api/sgc` acepta **claves** de un catálogo, no direcciones, y esa es su
- * defensa contra ser un proxy abierto. Aquí no se puede hacer lo mismo: las
- * direcciones de las planchas son casi mil, cambian cuando el SGC republica una
- * hoja, y **no se conocen de antemano** — se leen de la respuesta del servicio en
- * el momento del clic. Un catálogo escrito a mano sería la trampa nº 1 del
- * proyecto en su forma más pura.
- *
- * Lo que la sujeta es una lista de servidores permitidos: solo dominios del
- * Estado, solo si el camino acaba en `.pdf`, y solo si lo que vuelve no es una
- * página web. Con eso, lo peor que puede hacer alguien con esta ruta es
- * descargarse del SGC lo mismo que ya puede descargarse del SGC.
- */
-
-/**
  * Cuánto puede durar esta función antes de que la plataforma la corte.
- *
- * **Esto es lo que hacía fallar unas planchas sí y otras no.** Vercel le da a una
- * función unos pocos segundos por omisión —diez en el plan gratuito—, y una hoja
- * de diecisiete megas traída de un servidor lento no cabe ahí. La función moría a
- * mitad de la descarga, el navegador se encontraba la conexión cortada y el visor
- * decía «no se pudo traer la plancha del SGC», que era verdad pero no señalaba a
- * ningún sitio. Las que sí funcionaban eran simplemente las que llegaban a
- * tiempo.
- *
- * Sesenta segundos es el tope del plan gratuito. Si un día hiciera falta más
- * —hay hojas de más de treinta megas—, en un plan de pago se puede subir hasta
- * trescientos.
- *
- * No es un valor que se elija por gusto: **es un contrato con la plataforma**, y
- * por eso vive aquí y no en una constante nuestra.
+ * Contrato con la plataforma (Vercel maxDuration).
  */
 export const maxDuration = 60
 
 /**
- * Y cuánto esperamos nosotros al SGC.
- *
- * Diez segundos por debajo del tope de la plataforma, a propósito: así, cuando
- * el SGC no contesta, quien corta somos nosotros y el visor recibe «el SGC tardó
- * demasiado» en vez de una conexión rota sin explicación.
+ * Cuánto esperamos al SGC antes de cortar (10s por debajo del tope de la plataforma).
  */
-const TIMEOUT_MS = 50000
+const TIMEOUT_MS = 50_000
 
 /**
- * Cuánto se acepta descargar.
- *
- * La plancha 132 pesa 24 MB. Un tope holgado evita que un enlace equivocado
- * —o un archivo que el SGC republique mal— se traiga cientos de megas a través de
- * nuestro servidor. Solo se comprueba cuando el servicio declara el tamaño; si no
- * lo declara, el navegador se encuentra el archivo y decide él.
+ * Cuánto se acepta descargar: 120 MB máximo.
  */
 const MAXIMO_BYTES = 120 * 1024 * 1024
 
-/** Una semana: una plancha publicada no cambia de un día para otro. */
+/** Una semana de caché */
 const CACHE = 60 * 60 * 24 * 7
 
 const error = (mensaje, estado) =>
-  new Response(mensaje, { status: estado, headers: { "content-type": "text/plain; charset=utf-8" } })
+  new Response(mensaje, {
+    status: estado,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    },
+  })
 
 /**
- * Pide la plancha cifrada y, si no hay forma, sin cifrar.
- *
- * El gestor documental del SGC publica sus enlaces en `http` pelado. `permite`
- * los sube a `https` al validarlos, porque que la dirección venga en claro no es
- * motivo para pedirla en claro; pero **no está comprobado que el SGC atienda
- * cifrado** —desde la máquina de desarrollo su dominio está bloqueado— y si no
- * atiende, insistir dejaría la función sin servir ni una hoja.
- *
- * Se baja a `http` únicamente cuando el intento cifrado no llega a haber
- * respuesta —conexión rechazada, TLS que no negocia, nombre que no resuelve—. Un
- * 404 sí es una respuesta: ese documento no existe, y repetirlo en claro no lo
- * haría aparecer.
- *
- * El tiempo agotado no reintenta: es la señal de que el SGC va lento, y volver a
- * empezar solo gasta el resto del plazo.
+ * Pide la plancha cifrada y, si no hay forma o falla, sin cifrar.
+ * Propaga la señal de aborto para no reintentar en caso de timeout o cancelación.
  */
 const traer = async (url, signal) => {
   try {
     const cifrada = await fetch(url, { signal })
-    // Un 4xx o un 5xx también valen para reintentar sin cifrar: hay servidores
-    // que atienden en el 443 pero sirven otra cosa, y ahí la respuesta llega
-    // —o sea que no salta la excepción— y aun así no es el documento. Solo se
-    // reintenta lo que puede cambiar al bajar de esquema.
     if (cifrada.ok) return cifrada
     return await fetch(sinCifrar(url), { signal })
   } catch (fallo) {
     if (fallo?.name === "AbortError") throw fallo
-    return fetch(sinCifrar(url), { signal })
+    return await fetch(sinCifrar(url), { signal })
   }
 }
 
@@ -112,33 +53,51 @@ export const GET = async (request) => {
 
   const control = new AbortController()
   const reloj = setTimeout(() => control.abort(), TIMEOUT_MS)
+
+  const alDesconectar = () => control.abort()
+  if (request.signal) {
+    if (request.signal.aborted) control.abort()
+    else request.signal.addEventListener("abort", alDesconectar, { once: true })
+  }
+
   try {
     const respuesta = await traer(url, control.signal)
-    if (!respuesta.ok) return error(`El servicio del SGC respondió ${respuesta.status}.`, 502)
+    if (!respuesta.ok) {
+      return error(`El servicio del SGC respondió ${respuesta.status}.`, 502)
+    }
 
-    const tipo = respuesta.headers.get("content-type") ?? ""
-    // El gestor documental a veces manda `application/octet-stream`, así que no
-    // basta con exigir el tipo exacto; lo que no puede ser es una página de
-    // error en HTML, que es lo que devuelve cuando el documento no existe.
-    if (/html|json|xml/i.test(tipo)) return error("El servicio no devolvió un PDF.", 502)
+    const tipo = (respuesta.headers.get("content-type") ?? "").toLowerCase()
+    if (/html|json|xml/i.test(tipo)) {
+      return error("El servicio no devolvió un PDF.", 502)
+    }
 
     const largo = Number(respuesta.headers.get("content-length") ?? 0)
-    if (largo > MAXIMO_BYTES) return error("La plancha pesa demasiado.", 502)
+    if (largo > MAXIMO_BYTES) {
+      return error("La plancha pesa demasiado.", 502)
+    }
 
     return new Response(respuesta.body, {
       status: 200,
       headers: {
         "content-type": "application/pdf",
         "cache-control": `public, max-age=3600, s-maxage=${CACHE}, stale-while-revalidate=${CACHE}`,
+        "x-content-type-options": "nosniff",
       },
     })
   } catch (fallo) {
-    // Igual que en `/api/sgc`: un tiempo agotado no es lo mismo que no poder
-    // hablar con el servicio, y confundirlos confunde las dos soluciones.
-    if (fallo?.name === "AbortError") return error("El SGC tardó demasiado.", 504)
-    console.error("No se pudo traer la plancha:", fallo)
+    if (fallo?.name === "AbortError") {
+      return error("El SGC tardó demasiado.", 504)
+    }
+
+    if (!request.signal?.aborted) {
+      console.error("No se pudo traer la plancha:", fallo?.code ?? fallo?.name ?? fallo)
+    }
+
     return error("No se pudo traer la plancha.", 502)
   } finally {
     clearTimeout(reloj)
+    if (request.signal) {
+      request.signal.removeEventListener("abort", alDesconectar)
+    }
   }
 }
