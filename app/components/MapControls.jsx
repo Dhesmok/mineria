@@ -236,7 +236,6 @@ export const Hud3DPopover = ({
   bearing = 0,
   isSpinning = false,
   onToggleSpin,
-  onSwitch2D,
   onChangePitch,
   onChangeExaggeration,
   onChangeBearing,
@@ -270,16 +269,6 @@ export const Hud3DPopover = ({
           <span className="tracking-wide">Perspectiva 3D</span>
         </div>
         <div className="flex items-center gap-1.5">
-          {onSwitch2D && (
-            <button
-              type="button"
-              onClick={onSwitch2D}
-              title="Volver a vista 2D plana"
-              className="flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/90 px-2 py-0.5 text-[10.5px] font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition-all shadow-sm"
-            >
-              Volver a 2D
-            </button>
-          )}
           {/* Botón Girar Solo */}
           <button
             type="button"

@@ -598,13 +598,7 @@ export default function MapComponentGL({
         <div ref={overlayContainerRef} className="h-full w-full" />
       </div>
 
-      {/* Desenfoque atmosférico del horizonte lejano en perspectiva 3D */}
-      {is3D && pitch > 8 && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/85 via-black/35 to-transparent backdrop-blur-[3px] transition-opacity duration-700 z-[2]"
-        />
-      )}
+
 
       {/* Los controles del mapa van todos a la derecha y el panel de consulta se
           queda con la izquierda entera. Estaban los dos a la izquierda y se
@@ -802,17 +796,13 @@ export default function MapComponentGL({
           {/* MapHUD: Norte, Zoom +, Zoom -, 3D y Popover de opciones 3D */}
           <div className="relative flex items-center">
             {is3D && hud3DOpen && (
-              <div className="absolute right-full mr-3 top-0 z-30 animate-in fade-in zoom-in-95">
+              <div className="absolute right-full mr-3 bottom-0 z-30 max-h-[calc(100vh-5rem)] overflow-y-auto animate-in fade-in zoom-in-95">
                 <Hud3DPopover
                   pitch={pitch}
                   exaggeration={exaggeration}
                   bearing={bearing}
                   isSpinning={isSpinning}
                   onToggleSpin={spin}
-                  onSwitch2D={() => {
-                    toggle3D()
-                    setHud3DOpen(false)
-                  }}
                   onChangePitch={changePitch}
                   onChangeExaggeration={changeExaggeration}
                   onChangeBearing={changeBearing}

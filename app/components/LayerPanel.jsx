@@ -67,11 +67,12 @@ const ColorSwatch = ({ layer, state, disabled, onOpen }) => (
     className="-mx-1 flex h-6 w-6 shrink-0 items-center justify-center rounded transition-transform disabled:cursor-default enabled:hover:scale-125"
   >
     <span
-      className="block h-3.5 w-3.5 rounded-[3px] shadow-sm transition-opacity"
+      className="block h-3.5 w-3.5 rounded-[3px] shadow-sm transition-all"
       style={{
         backgroundColor: state.fillColor,
         border: `1.5px solid ${state.lineColor}`,
-        opacity: state.on ? Math.max(state.opacity, 0.4) : 0.45,
+        opacity: state.on ? Math.max(state.opacity, 0.4) : 0.25,
+        filter: state.on ? "none" : "grayscale(80%)",
       }}
     />
   </button>
@@ -90,7 +91,7 @@ const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
     <span
       className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
         estado === "nada"
-          ? "border-zinc-700 bg-zinc-900/60"
+          ? "border-zinc-700 bg-zinc-900/60 text-transparent"
           : "border-zinc-400 bg-zinc-200 text-zinc-950"
       }`}
     >
@@ -98,9 +99,9 @@ const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
       {estado === "parte" && <span className="h-[2px] w-[7px] rounded-full bg-zinc-950" />}
     </span>
     <span
-      className={`min-w-0 flex-1 truncate text-[11px] ${
-        estado === "nada" ? "text-zinc-200" : "text-white font-semibold"
-      } ${fuerte ? "font-bold text-white" : ""}`}
+      className={`min-w-0 flex-1 truncate text-[11px] transition-colors ${
+        estado === "nada" ? "text-zinc-500 hover:text-zinc-300" : "text-white font-semibold"
+      } ${fuerte ? (estado === "nada" ? "font-medium text-zinc-400" : "font-bold text-white") : ""}`}
     >
       {label}
     </span>
@@ -147,9 +148,9 @@ const Departamento = ({ grupo, marcadas, onToggle }) => {
             onClick={() => setAbierto((v) => !v)}
             aria-expanded={abierto}
             aria-label={`Capas de ${grupo?.label}`}
-            className="-ml-2 mr-2 shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+            className="-ml-2 mr-2 shrink-0 rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
           >
-            <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180 text-sky-400" : ""}`} />
+            <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180 text-white" : ""}`} />
           </button>
         )}
       </div>
@@ -266,12 +267,12 @@ const LayerRow = ({
   <div
     ref={(node) => registerRow(layer.key, node)}
     onClick={() => !layer.pending && onToggle(layer.key)}
-    className={`group flex h-[34px] cursor-pointer items-center gap-2 border-b border-zinc-800/40 px-3 transition-colors ${
+    className={`group flex h-[34px] cursor-pointer items-center gap-2 border-b border-zinc-800/40 px-3 transition-all ${
       dragging
         ? "bg-zinc-800/70 opacity-60"
         : state.on
-        ? "bg-zinc-900/50 hover:bg-zinc-900/80"
-        : "hover:bg-zinc-900/30"
+        ? "bg-zinc-800/50 hover:bg-zinc-800/70 text-white"
+        : "opacity-60 hover:opacity-100 hover:bg-zinc-900/30"
     }`}
     style={draggable ? { borderLeft: `3px solid ${area.color}`, paddingLeft: "10px" } : undefined}
   >
@@ -310,10 +311,10 @@ const LayerRow = ({
       title={[layer.label, layer.scale, layer.hint].filter(Boolean).join(" · ")}
       className={`min-w-0 flex-1 truncate text-left text-[12px] transition-colors ${
         state.on
-          ? "font-semibold text-white"
+          ? "font-semibold text-white tracking-tight"
           : layer.pending
           ? "cursor-not-allowed text-zinc-600"
-          : "text-zinc-100 group-hover:text-white"
+          : "text-zinc-400 group-hover:text-zinc-200"
       }`}
     >
       {layer.label}
@@ -340,13 +341,6 @@ const LayerRow = ({
 
 /**
  * Uno de los dos botones del encabezado de un área.
- *
- * Llevan el color del área para que se entiendan sin explicación: son "cosas de
- * Minería" o "cosas de Geología". Encendido cuando ese filtro está puesto, para
- * que se vea desde fuera que un área está filtrada aunque esté plegada.
- *
- * `stopPropagation` no es opcional: viven dentro del botón que pliega el área, y
- * sin él, filtrar o buscar cerraría el área de paso.
  */
 const HeaderButton = ({ icon: Icon, label, color, active, disabled, onClick }) => (
   <button
@@ -359,14 +353,14 @@ const HeaderButton = ({ icon: Icon, label, color, active, disabled, onClick }) =
       onClick(event.currentTarget)
     }}
     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors disabled:cursor-not-allowed disabled:opacity-20 ${
-      active ? "border-transparent text-white shadow-sm" : "border-slate-700/60 bg-slate-900/60 hover:bg-slate-800"
+      active
+        ? "border-transparent text-white shadow-sm"
+        : "border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:bg-zinc-800 hover:text-white"
     }`}
     style={
       active
-        ? { backgroundColor: color }
-        : disabled
-          ? { color: "#64748b" }
-          : { color }
+        ? { backgroundColor: color || "#3b82f6" }
+        : undefined
     }
   >
     <Icon className="h-3 w-3" />
@@ -541,14 +535,11 @@ export const LayerPanel = ({
                         abierta ? "rotate-90 text-white" : ""
                       }`}
                     />
-                    <AreaIcon area={area} className="h-3.5 w-3.5 shrink-0" />
-                    <span
-                      className="truncate text-[11px] font-bold uppercase tracking-[0.06em]"
-                      style={{ color: area.color }}
-                    >
+                    <AreaIcon area={area} className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                    <span className="truncate text-xs font-semibold tracking-wide text-zinc-100">
                       {area.name}
                     </span>
-                    <span className="shrink-0 text-[10px] text-zinc-500">{area.source}</span>
+                    <span className="shrink-0 text-[10px] font-mono text-zinc-500">{area.source}</span>
                   </button>
 
                   <span className="shrink-0 font-mono text-[10px] text-zinc-400">

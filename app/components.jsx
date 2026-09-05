@@ -421,7 +421,7 @@ export default function Component() {
                 <Wrench className="h-4 w-4 text-zinc-300" />
               )}
               <span className="text-sm font-semibold tracking-tight text-white">
-                {drawerTab === "capas" ? "Capas del Proyecto" : "Herramientas"}
+                {drawerTab === "capas" ? "Capas" : "Herramientas"}
               </span>
               {drawerTab === "capas" && activeCount > 0 && (
                 <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300 border border-zinc-700">
@@ -511,14 +511,14 @@ export default function Component() {
                 )}
               </>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3.5">
                 {/* 1. Sistema de Coordenadas (PRIMERO) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
                       Sistema de Coordenadas
                     </Label>
-                    <span className="font-mono text-[10px] text-sky-400 bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-800/40">
+                    <span className="font-mono text-[10px] text-zinc-300 bg-zinc-800/90 px-2 py-0.5 rounded-md border border-zinc-700/60">
                       EPSG:{selectedCoordinateSystem}
                     </span>
                   </div>
@@ -528,31 +528,33 @@ export default function Component() {
                       const el = event.currentTarget
                       setCrsPopover((actual) => (actual ? null : el))
                     }}
-                    className="flex h-9 w-full items-center justify-between rounded-lg border border-slate-750 bg-slate-900/80 px-3 text-left transition-colors hover:border-slate-600 hover:bg-slate-800/80"
+                    className="flex h-10 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Globe2 className="h-4 w-4 shrink-0 text-sky-400" />
-                      <span className="min-w-0 truncate text-[13px] font-medium text-slate-200">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Globe2 className="h-4 w-4 shrink-0 text-zinc-300" />
+                      <span className="min-w-0 truncate text-[12.5px] font-medium text-white">
                         {crsById(selectedCoordinateSystem).label}
                       </span>
                     </div>
-                    <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
                   </button>
                 </div>
 
                 {/* 2. Fusión de capas */}
-                <div className="flex items-center justify-between border-t border-slate-800/80 pt-3">
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Fusión de capas
-                  </span>
-                  <div className="inline-flex rounded-lg border border-slate-750 p-0.5 bg-slate-900 text-[11px]">
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-[0.08em]">
+                      Fusión de capas
+                    </span>
+                  </div>
+                  <div className="flex rounded-xl border border-zinc-800/90 p-1 bg-zinc-900/80 text-[11px] gap-1">
                     <button
                       type="button"
                       onClick={() => setBlendMode("multiply")}
-                      className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
                         blendMode === "multiply"
-                          ? "bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm"
-                          : "text-slate-400 hover:text-slate-200"
+                          ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
+                          : "text-zinc-400 hover:text-zinc-200"
                       }`}
                       title="Multiplicar: funde con relieve y mapa base"
                     >
@@ -561,10 +563,10 @@ export default function Component() {
                     <button
                       type="button"
                       onClick={() => setBlendMode("normal")}
-                      className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
                         blendMode === "normal"
-                          ? "bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm"
-                          : "text-slate-400 hover:text-slate-200"
+                          ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
+                          : "text-zinc-400 hover:text-zinc-200"
                       }`}
                       title="Normal: transparencia simple"
                     >
@@ -574,90 +576,92 @@ export default function Component() {
                 </div>
 
                 {/* 3. Medición y Captura */}
-                <div className="space-y-2 border-t border-slate-800/80 pt-3">
-                  <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block mb-2">
                     Medición y Captura
                   </Label>
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => mapRef.current?.startMode?.("measure-distance")}
-                      className="flex flex-col items-center justify-center gap-1 rounded-lg border border-slate-750 bg-slate-900/60 p-2 text-slate-300 hover:border-slate-600 hover:bg-slate-800 hover:text-slate-100 transition-colors"
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
                       title="Medir distancia lineal entre puntos"
                     >
-                      <Spline className="h-4 w-4 text-sky-400" />
-                      <span className="text-[10px] font-medium">Distancia</span>
+                      <Spline className="h-4 w-4 text-zinc-200" />
+                      <span className="text-[11px] font-medium">Distancia</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => mapRef.current?.startMode?.("measure-area")}
-                      className="flex flex-col items-center justify-center gap-1 rounded-lg border border-slate-750 bg-slate-900/60 p-2 text-slate-300 hover:border-slate-600 hover:bg-slate-800 hover:text-slate-100 transition-colors"
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
                       title="Medir área y perímetro de un polígono"
                     >
-                      <Square className="h-4 w-4 text-emerald-400" />
-                      <span className="text-[10px] font-medium">Área</span>
+                      <Square className="h-4 w-4 text-zinc-200" />
+                      <span className="text-[11px] font-medium">Área</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => mapRef.current?.clearDrawings?.()}
-                      className="flex flex-col items-center justify-center gap-1 rounded-lg border border-slate-750 bg-slate-900/60 p-2 text-slate-300 hover:border-rose-700/60 hover:bg-rose-950/30 hover:text-rose-300 transition-colors"
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-400 hover:border-rose-900/60 hover:bg-rose-950/30 hover:text-rose-300 transition-all active:scale-[0.98]"
                       title="Limpiar dibujos y mediciones"
                     >
-                      <Trash2 className="h-4 w-4 text-rose-400" />
-                      <span className="text-[10px] font-medium">Limpiar</span>
+                      <Trash2 className="h-4 w-4 text-zinc-400" />
+                      <span className="text-[11px] font-medium">Limpiar</span>
                     </button>
                   </div>
                 </div>
 
                 {/* 4. Mapas Base (cards 2x2) */}
-                <div className="space-y-2 border-t border-slate-800/80 pt-3">
-                  <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block mb-2">
                     Mapa Base
                   </Label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: "positron", label: "Claro", desc: "Cartográfico", bgClass: "from-slate-300 to-slate-400 text-slate-900" },
-                      { id: "topo", label: "Relieve", desc: "Topográfico", bgClass: "from-emerald-900 to-slate-900 text-emerald-200" },
-                      { id: "satellite", label: "Satélite", desc: "Google Satelital", bgClass: "from-sky-950 to-slate-900 text-sky-200" },
-                      { id: "osm", label: "Calles", desc: "OpenStreetMap", bgClass: "from-slate-800 to-slate-900 text-slate-200" },
+                      { id: "positron", label: "Claro", desc: "Cartográfico", bgClass: "from-zinc-700 to-zinc-900" },
+                      { id: "topo", label: "Relieve", desc: "Topográfico", bgClass: "from-emerald-950 to-zinc-900" },
+                      { id: "satellite", label: "Satélite", desc: "Satelital", bgClass: "from-blue-950 to-zinc-900" },
+                      { id: "osm", label: "Calles", desc: "OpenStreetMap", bgClass: "from-zinc-800 to-zinc-950" },
                     ].map((item) => (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => mapRef.current?.chooseBasemap?.(item.id)}
-                        className="group relative flex flex-col overflow-hidden rounded-lg border border-slate-750 bg-slate-900/80 p-2 text-left transition-all hover:border-sky-500/50 hover:shadow-lg"
+                        className="group relative flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60 p-2 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850 active:scale-[0.98]"
                       >
-                        <div className={`h-10 w-full rounded bg-gradient-to-br ${item.bgClass} mb-1.5 flex items-center justify-center font-mono text-[10px] font-semibold opacity-90 group-hover:opacity-100 transition-opacity`}>
+                        <div className={`h-9 w-full rounded-lg bg-gradient-to-br ${item.bgClass} mb-1.5 flex items-center justify-center font-mono text-[10px] font-semibold text-zinc-300 border border-zinc-800/80`}>
                           {item.label}
                         </div>
-                        <span className="text-[11px] font-medium text-slate-200">{item.label}</span>
-                        <span className="text-[9px] text-slate-500 truncate">{item.desc}</span>
+                        <span className="text-[11.5px] font-medium text-zinc-200 group-hover:text-white">{item.label}</span>
+                        <span className="text-[9.5px] text-zinc-500 truncate">{item.desc}</span>
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {/* 5. Datos y Exportación */}
-                <div className="space-y-2 border-t border-slate-800/80 pt-3">
-                  <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl space-y-2">
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block">
                     Datos y Exportación
                   </Label>
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <button
                       type="button"
                       onClick={() => setShowAttributeTable(true)}
-                      className="flex h-8 w-full items-center justify-between rounded-lg border border-slate-750 bg-slate-900/60 px-3 text-[12px] font-medium text-slate-300 hover:border-slate-600 hover:bg-slate-800 hover:text-slate-100 transition-colors"
+                      className="flex h-9 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-xs font-medium text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all"
                     >
                       <span>Tabla de atributos</span>
-                      <span className="font-mono text-[10px] text-slate-500">{registrosVisibles.length} en pantalla</span>
+                      <span className="font-mono text-[10px] text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-md border border-zinc-700/50">
+                        {registrosVisibles.length} en pantalla
+                      </span>
                     </button>
                     <button
                       type="button"
                       onClick={handleExportSHP}
-                      className="flex h-8 w-full items-center justify-between rounded-lg border border-emerald-800/50 bg-emerald-950/30 px-3 text-[12px] font-medium text-emerald-300 hover:bg-emerald-900/40 transition-colors"
+                      className="flex h-9 w-full items-center justify-between rounded-xl border border-zinc-700/80 bg-zinc-800/90 px-3 text-xs font-semibold text-white hover:bg-zinc-700 transition-all shadow-sm"
                     >
                       <span>Exportar Shapefile / GeoJSON</span>
-                      <Download className="h-3.5 w-3.5" />
+                      <Download className="h-3.5 w-3.5 text-zinc-300" />
                     </button>
                   </div>
                 </div>
@@ -686,88 +690,8 @@ export default function Component() {
         />
       </div>
 
-      {/* Buscador modo isla centrado en la parte inferior */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-auto">
-        {/* Acciones de expediente activo si existe */}
-        {showToggle && (
-          <div className="mb-2 flex items-center gap-2 rounded-full border border-zinc-800 bg-[#09090b]/95 px-3.5 py-1 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2">
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              {expedientCode || "Expediente activo"}
-            </span>
-            {coordinatesAvailable && (
-              <button
-                type="button"
-                onClick={handleShowCoordinates}
-                className="rounded-full bg-zinc-800/90 px-2.5 py-0.5 text-[11px] font-medium text-zinc-200 hover:bg-zinc-700 transition-colors"
-              >
-                Coordenadas
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleExportSHP}
-              className="rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-2.5 py-0.5 text-[11px] font-medium transition-colors"
-            >
-              Exportar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                handleReset()
-                setIslandSearchText("")
-                setIslandResultsOpen(false)
-              }}
-              className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
-              title="Cerrar ficha"
-              aria-label="Cerrar ficha"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        )}
-
-        {/* Desplegable de sugerencias que emerge hacia arriba */}
-        {islandResultsOpen && islandSuggestions.length > 0 && (
-          <div
-            role="listbox"
-            aria-label="Sugerencias de expediente"
-            className="absolute bottom-full mb-2.5 w-[92vw] sm:w-[420px] max-h-60 overflow-y-auto rounded-2xl border border-zinc-800 bg-[#09090b]/95 p-1.5 shadow-2xl backdrop-blur-2xl"
-          >
-            {islandSuggestions.map((item, index) => {
-              const code = typeof item === "string" ? item : (item?.code || "")
-              const layerName = typeof item === "object" ? item?.layerName : null
-              const isSelected = index === islandSelectedIndex
-              return (
-                <div
-                  key={code || index}
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={() => handleSelectIslandExpedient(code)}
-                  className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs transition-colors ${
-                    isSelected ? "bg-zinc-800 text-white font-medium" : "text-zinc-300 hover:bg-zinc-800/60"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Search className="h-3.5 w-3.5 text-zinc-400" />
-                    <span className="font-mono font-medium text-zinc-100">{code}</span>
-                  </div>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
-                      layerName?.toLowerCase().includes("trámite") ||
-                      layerName?.toLowerCase().includes("tramite")
-                        ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
-                        : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
-                    }`}
-                  >
-                    {layerName || "Expediente"}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
+      {/* Buscador modo isla centrado en la parte superior */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-auto">
         {/* Barra de búsqueda estilo cápsula flotante */}
         <div className="relative flex items-center w-[92vw] sm:w-[420px] h-11 rounded-full border border-zinc-800 bg-[#09090b]/95 px-3.5 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-all focus-within:border-zinc-700 focus-within:ring-1 focus-within:ring-zinc-600">
           <Search className="h-4 w-4 shrink-0 text-zinc-400 mr-2.5" />
@@ -829,7 +753,87 @@ export default function Component() {
           >
             Buscar
           </button>
+
+          {/* Desplegable de sugerencias que emerge hacia abajo */}
+          {islandResultsOpen && islandSuggestions.length > 0 && (
+            <div
+              role="listbox"
+              aria-label="Sugerencias de expediente"
+              className="absolute top-full left-0 right-0 mt-2 max-h-60 overflow-y-auto rounded-2xl border border-zinc-800 bg-[#09090b]/95 p-1.5 shadow-2xl backdrop-blur-2xl z-30"
+            >
+              {islandSuggestions.map((item, index) => {
+                const code = typeof item === "string" ? item : (item?.code || "")
+                const layerName = typeof item === "object" ? item?.layerName : null
+                const isSelected = index === islandSelectedIndex
+                return (
+                  <div
+                    key={code || index}
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => handleSelectIslandExpedient(code)}
+                    className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs transition-colors ${
+                      isSelected ? "bg-zinc-800 text-white font-medium" : "text-zinc-300 hover:bg-zinc-800/60"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Search className="h-3.5 w-3.5 text-zinc-400" />
+                      <span className="font-mono font-medium text-zinc-100">{code}</span>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                        layerName?.toLowerCase().includes("trámite") ||
+                        layerName?.toLowerCase().includes("tramite")
+                          ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                      }`}
+                    >
+                      {layerName || "Expediente"}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
+
+        {/* Acciones de expediente activo si existe */}
+        {showToggle && (
+          <div className="mt-2.5 flex items-center gap-2 rounded-full border border-zinc-800 bg-[#09090b]/95 px-3.5 py-1 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              {expedientCode || "Expediente activo"}
+            </span>
+            {coordinatesAvailable && (
+              <button
+                type="button"
+                onClick={handleShowCoordinates}
+                className="rounded-full bg-zinc-800/90 px-2.5 py-0.5 text-[11px] font-medium text-zinc-200 hover:bg-zinc-700 transition-colors"
+              >
+                Coordenadas
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleExportSHP}
+              className="rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-2.5 py-0.5 text-[11px] font-medium transition-colors"
+            >
+              Exportar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                handleReset()
+                setIslandSearchText("")
+                setIslandResultsOpen(false)
+              }}
+              className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+              title="Cerrar ficha"
+              aria-label="Cerrar ficha"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
 
       {showTable && (
