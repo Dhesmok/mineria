@@ -34,7 +34,7 @@ export const CrsPicker = ({ current, onChoose, onClose, anchorRect, anchorEl }) 
       role="dialog"
       aria-label="Elegir el sistema de coordenadas"
       style={{ top, left }}
-      className="fixed z-50 max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
+      className="fixed z-50 max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-slate-750/80 bg-[#0b1329]/95 text-slate-100 shadow-2xl backdrop-blur-2xl"
     >
       {/* Sin cabecera ni equis. El título repetía palabra por palabra el rótulo
           del botón que acaba de pulsarse, justo encima, y la equis hacía lo que
@@ -53,19 +53,19 @@ export const CrsPicker = ({ current, onChoose, onClose, anchorRect, anchorEl }) 
               }}
               aria-pressed={elegido}
               className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                elegido ? "bg-slate-100" : "hover:bg-slate-50"
+                elegido ? "bg-slate-800/80 border border-slate-700/60" : "hover:bg-slate-800/40"
               }`}
             >
               <span
                 className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
-                  elegido ? "bg-slate-900 text-white" : "border border-slate-300"
+                  elegido ? "bg-sky-500 text-white" : "border border-slate-600 bg-slate-900/50"
                 }`}
               >
                 {elegido && <Check className="h-3 w-3" />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium text-slate-900">{crs.label}</span>
-                <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">
+                <span className={`block text-[13px] font-medium ${elegido ? "text-sky-300" : "text-slate-200"}`}>{crs.label}</span>
+                <span className="mt-0.5 block text-[11px] leading-tight text-slate-400">
                   {crs.hint}
                 </span>
               </span>

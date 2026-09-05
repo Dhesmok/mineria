@@ -35,9 +35,9 @@ export const ColorPopover = ({ color, onChange, onClose, anchorRect, anchorEl })
       role="dialog"
       aria-label="Elegir el color de la capa"
       style={{ top, left }}
-      className="fixed z-50 w-56 rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
+      className="fixed z-50 w-56 rounded-xl border border-slate-700/80 bg-[#0b1329]/95 p-3 shadow-2xl backdrop-blur-2xl text-slate-100"
     >
-      <p className="mb-2 text-[11px] font-medium text-slate-500">Color de la capa</p>
+      <p className="mb-2 text-[11px] font-semibold text-slate-300">Color de la capa</p>
 
       <div className="grid grid-cols-6 gap-1.5">
         {LAYER_PALETTE.map((swatch) => {
@@ -59,12 +59,12 @@ export const ColorPopover = ({ color, onChange, onClose, anchorRect, anchorEl })
         })}
       </div>
 
-      <label className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-2.5 text-[11px] text-slate-500">
+      <label className="mt-3 flex items-center gap-2 border-t border-slate-800/80 pt-2.5 text-[11px] text-slate-400">
         <input
           type="color"
           value={color}
           onChange={(event) => onChange(event.target.value)}
-          className="h-7 w-9 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
+          className="h-7 w-9 cursor-pointer rounded border border-slate-700 bg-slate-900 p-0.5"
           aria-label="Elegir un color exacto"
         />
         Otro color

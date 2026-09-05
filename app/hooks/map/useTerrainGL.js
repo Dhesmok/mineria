@@ -39,7 +39,7 @@ import { sampleGrid, slopeAspectFrom } from "../../utils/terrainAnalysis"
 export const PITCH_3D = 45
 export const EXAGGERATION_DEFAULT = 1.5
 export const EXAGGERATION_MIN = 0.5
-export const EXAGGERATION_MAX = 3
+export const EXAGGERATION_MAX = 5
 
 /**
  * El cielo. Sin él, al inclinar la cámara el horizonte queda cortado en seco

@@ -5,12 +5,7 @@ import { Map as MapLibreMap, NavigationControl, ScaleControl, setWorkerUrl } fro
 import "maplibre-gl/dist/maplibre-gl.css"
 
 import { useMapInitializationGL } from "./hooks/map/useMapInitializationGL"
-import {
-  useTerrainGL,
-  EXAGGERATION_MAX,
-  EXAGGERATION_MIN,
-  PITCH_MAX,
-} from "./hooks/map/useTerrainGL"
+import { useTerrainGL, PITCH_MAX } from "./hooks/map/useTerrainGL"
 import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
 import { useSgcLayersGL } from "./hooks/map/useSgcLayersGL"
 import { useAnhLayersGL } from "./hooks/map/useAnhLayersGL"
@@ -43,7 +38,7 @@ import { SgcPanel, activeRasterKeys } from "./components/SgcPanel"
 import { PlanchaPanel } from "./components/PlanchaPanel"
 import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
-import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
+import { Hud3DPopover, MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import {
   Blend,
   Box,
@@ -59,8 +54,6 @@ import {
   Triangle,
   Layers,
   Mountain,
-  Play,
-  Square,
   User,
 } from "lucide-react"
 
@@ -163,8 +156,6 @@ export default function MapComponentGL({
     bearing,
     changeBearing,
     resetNorth,
-    isSpinning,
-    spin,
     pitch,
     changePitch,
     elevationAt,
@@ -173,6 +164,8 @@ export default function MapComponentGL({
     setTerrainForQuery,
     queryTerrain,
   } = useTerrainGL(mapRef, mapInstance)
+
+  const [hud3DOpen, setHud3DOpen] = useState(false)
 
   // Si hay algo que enseñar en el lienzo de arriba. Mientras no lo haya, ese
   // lienzo se apaga: son un contexto WebGL y un juego de teselas de más, y en un
@@ -484,7 +477,9 @@ export default function MapComponentGL({
     // misma vía que el ratón, así que sale con el mismo símbolo y se borra con
     // la misma papelera.
     mapInstance.addPointAt = addPointAt
-  }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult, addPointAt])
+    mapInstance.chooseBasemap = chooseBasemap
+    mapInstance.startMode = startMode
+  }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult, addPointAt, chooseBasemap, startMode])
 
   /**
    * El aviso de "mapa listo", por referencia.
@@ -685,71 +680,27 @@ export default function MapComponentGL({
         }`}
       >
         <div className="flex flex-col items-end gap-2">
-          {is3D && (
-            <FloatingPanel title="Opciones 3D" icon={Box}>
-              <div className="space-y-1.5">
-                <SliderRow
-                  id="exageracion"
-                  label="Exageración"
-                  title="Solo afecta a cómo se ve: no cambia alturas ni áreas"
-                  min={EXAGGERATION_MIN}
-                  max={EXAGGERATION_MAX}
-                  step="0.1"
-                  value={exaggeration}
-                  display={`${exaggeration.toFixed(1)}×`}
-                  onChange={changeExaggeration}
-                />
-                {/* Girar e inclinar sin pelearse con la brújula de 29 px que
-                    trae MapLibre, y sin tener que saber el atajo de Ctrl. */}
-                <SliderRow
-                  id="inclinacion"
-                  label="Inclinación"
-                  min={0}
-                  max={PITCH_MAX}
-                  step="1"
-                  value={Math.round(pitch)}
-                  display={`${Math.round(pitch)}°`}
-                  onChange={changePitch}
-                />
-                <SliderRow
-                  id="giro"
-                  label="Giro"
-                  min={0}
-                  max={360}
-                  step="1"
-                  value={Math.round((bearing + 360) % 360)}
-                  display={`${Math.round((bearing + 360) % 360)}°`}
-                  onChange={changeBearing}
-                />
-                <div className="flex items-center gap-2 pt-0.5">
-                  {/* Play y stop en el mismo sitio: es un único estado con dos
-                      caras, no dos acciones distintas. */}
-                  <button
-                    type="button"
-                    onClick={spin}
-                    aria-pressed={isSpinning}
-                    title={isSpinning ? "Detener el giro" : "Girar el mapa solo, en bucle"}
-                    className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
-                      isSpinning
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    {isSpinning ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                    {isSpinning ? "Detener" : "Girar solo"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetNorth}
-                    title="Volver a dejar el norte hacia arriba"
-                    className="flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-blue-600 hover:text-blue-800"
-                  >
-                    <Compass className="h-3 w-3" />
-                    Norte arriba
-                  </button>
-                </div>
-              </div>
-            </FloatingPanel>
+          {(is3D || hud3DOpen) && (
+            <Hud3DPopover
+              pitch={pitch}
+              exaggeration={exaggeration}
+              bearing={bearing}
+              is3D={is3D}
+              onChangePitch={(val) => {
+                if (val > 0 && !is3D) {
+                  toggle3D().then(() => changePitch(val))
+                } else if (val === 0) {
+                  changePitch(0)
+                  if (is3D) toggle3D()
+                } else {
+                  changePitch(val)
+                }
+              }}
+              onChangeExaggeration={(val) => changeExaggeration(val)}
+              onChangeBearing={(val) => changeBearing(val)}
+              onResetNorth={resetNorth}
+              onClose={() => setHud3DOpen(false)}
+            />
           )}
 
           {/* Las herramientas de dibujo. Panel flotante y no ventana anclada:
@@ -930,13 +881,21 @@ export default function MapComponentGL({
         </MapButton>
 
         <MapButton
-          onClick={toggle3D}
-          active={is3D}
+          onClick={() => {
+            if (!is3D) {
+              toggle3D()
+              setHud3DOpen(true)
+            } else {
+              setHud3DOpen((open) => !open)
+            }
+          }}
+          active={is3D || hud3DOpen}
           aria-pressed={is3D}
           icon={Box}
-          title="Levantar el terreno e inclinar la cámara"
+          badge={is3D ? `${Math.round(pitch)}°` : null}
+          title="Levantar el terreno e inclinar la cámara (HUD 3D)"
         >
-          {is3D ? "Volver a 2D" : "Ver en 3D"}
+          {is3D ? "Opciones 3D" : "Ver en 3D"}
         </MapButton>
 
         <MapButton

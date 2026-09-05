@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { Rotate3d, X } from "lucide-react"
+import { Box, Rotate3d, X } from "lucide-react"
 
 /**
  * Las piezas sueltas de la interfaz del mapa: un botón, una fila de ajuste, un
@@ -167,3 +167,174 @@ export const RotateHint = ({ onClose }) => {
     </div>
   )
 }
+
+/**
+ * HUD 3D de alta precisión con botones segmentados (CERO SLIDERS).
+ * Permite cambiar la inclinación (tilt), la exageración de relieve vertical (hasta 5×)
+ * y la rotación orbital horizontal de forma instantánea y elegante.
+ */
+export const Hud3DPopover = ({
+  pitch = 0,
+  exaggeration = 1.5,
+  bearing = 0,
+  onChangePitch,
+  onChangeExaggeration,
+  onChangeBearing,
+  onResetNorth,
+  onClose,
+}) => {
+  const normBearing = Math.round(((bearing % 360) + 360) % 360)
+  const normPitch = Math.round(pitch)
+
+  const compassHeading = (b) => {
+    if (b >= 337.5 || b < 22.5) return "Norte"
+    if (b >= 22.5 && b < 67.5) return "NE"
+    if (b >= 67.5 && b < 112.5) return "Este"
+    if (b >= 112.5 && b < 157.5) return "SE"
+    if (b >= 157.5 && b < 202.5) return "Sur"
+    if (b >= 202.5 && b < 247.5) return "SO"
+    if (b >= 247.5 && b < 292.5) return "Oeste"
+    return "NO"
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Perspectiva 3D del Terreno"
+      className="pointer-events-auto w-[295px] rounded-xl border border-slate-750/80 bg-[#0b1329]/95 p-3.5 text-slate-100 shadow-2xl backdrop-blur-2xl transition-all"
+    >
+      {/* Cabecera */}
+      <div className="mb-3 flex items-center justify-between border-b border-slate-800/80 pb-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-sky-400">
+          <Box className="h-4 w-4 text-sky-400" />
+          <span className="tracking-wide">Perspectiva 3D del Terreno</span>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar controles 3D"
+            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* 1. Inclinación (Tilt) - Cero sliders */}
+      <div className="mb-3">
+        <div className="mb-1.5 flex items-center justify-between text-[11px]">
+          <span className="font-medium text-slate-300">Inclinación de Cámara</span>
+          <span className="rounded bg-sky-950/80 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-sky-300 border border-sky-800/50">
+            {normPitch === 0 ? "0° 2D" : `${normPitch}°`}
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-1 rounded-lg bg-slate-950/70 p-1 border border-slate-800/70">
+          {[
+            { label: "0° 2D", val: 0 },
+            { label: "30°", val: 30 },
+            { label: "45°", val: 45 },
+            { label: "60°", val: 60 },
+          ].map((item) => {
+            const active = normPitch === item.val
+            return (
+              <button
+                key={item.val}
+                type="button"
+                onClick={() => onChangePitch?.(item.val)}
+                aria-pressed={active}
+                className={`rounded-md py-1 text-center text-[11px] font-medium transition-all ${
+                  active
+                    ? "bg-blue-600 text-white shadow-sm font-semibold"
+                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                }`}
+              >
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 2. Exageración Vertical - Hasta 5x (Cero sliders) */}
+      <div className="mb-3">
+        <div className="mb-1.5 flex items-center justify-between text-[11px]">
+          <span className="font-medium text-slate-300">Exageración Vertical</span>
+          <span className="rounded bg-emerald-950/80 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-300 border border-emerald-800/50">
+            {Number(exaggeration).toFixed(1)}×
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-1 rounded-lg bg-slate-950/70 p-1 border border-slate-800/70">
+          {[
+            { label: "1×", val: 1 },
+            { label: "2×", val: 2 },
+            { label: "3×", val: 3 },
+            { label: "5× Máx", val: 5 },
+          ].map((item) => {
+            const active = Math.round(exaggeration) === item.val
+            return (
+              <button
+                key={item.val}
+                type="button"
+                onClick={() => onChangeExaggeration?.(item.val)}
+                aria-pressed={active}
+                className={`rounded-md py-1 text-center text-[11px] font-medium transition-all ${
+                  active
+                    ? "bg-emerald-600 text-white shadow-sm font-semibold"
+                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                }`}
+              >
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 3. Rotación Orbital Rápida */}
+      <div>
+        <div className="mb-1.5 flex items-center justify-between text-[11px]">
+          <span className="font-medium text-slate-300">Rotación Horizontal</span>
+          <span className="rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] text-slate-300 border border-slate-800">
+            {normBearing}° {compassHeading(normBearing)}
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-1">
+          <button
+            type="button"
+            onClick={() => onChangeBearing?.((normBearing - 45 + 360) % 360)}
+            title="Girar 45° a la izquierda"
+            className="rounded-lg border border-slate-800 bg-slate-950/60 py-1.5 text-center text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+          >
+            ↺ -45°
+          </button>
+          <button
+            type="button"
+            onClick={onResetNorth}
+            title="Orientar al Norte (0°)"
+            className="rounded-lg border border-blue-900/60 bg-blue-950/40 py-1.5 text-center text-[11px] font-medium text-blue-300 transition-colors hover:bg-blue-900/60 hover:text-white"
+          >
+            Norte 0°
+          </button>
+          <button
+            type="button"
+            onClick={() => onChangeBearing?.((normBearing + 45) % 360)}
+            title="Girar 45° a la derecha"
+            className="rounded-lg border border-slate-800 bg-slate-950/60 py-1.5 text-center text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+          >
+            ↻ +45°
+          </button>
+          <button
+            type="button"
+            onClick={() => onChangeBearing?.(180)}
+            title="Mirar hacia el Sur (180°)"
+            className="rounded-lg border border-slate-800 bg-slate-950/60 py-1.5 text-center text-[11px] font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+          >
+            180° Sur
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+

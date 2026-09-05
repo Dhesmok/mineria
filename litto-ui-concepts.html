@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Litto Labs — Visor Territorial</title>
+  <style>
+    :root {
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      
+      /* Elegante Azul Oscuro Noche / Midnight Slate */
+      --navy-deep: #070b14;
+      --navy-panel: rgba(11, 18, 33, 0.88);
+      --navy-card: rgba(18, 28, 51, 0.94);
+      --navy-hover: rgba(25, 39, 68, 0.7);
+      --navy-border: rgba(255, 255, 255, 0.1);
+      --navy-border-glow: rgba(56, 189, 248, 0.35);
+      
+      --ice-accent: #38bdf8;
+      --ice-glow: rgba(56, 189, 248, 0.25);
+      --emerald-accent: #10b981;
+      --emerald-surface: rgba(16, 185, 129, 0.16);
+      --amber-accent: #f59e0b;
+      
+      --text-main: #f1f5f9;
+      --text-dim: #94a3b8;
+      --text-muted: #64748b;
+      
+      --shadow-luxe: 0 20px 50px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--navy-border);
+      --shadow-pill: 0 16px 36px -6px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--navy-border);
+      --shadow-hud: 0 24px 60px -8px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.15);
+      
+      --ease-luxe: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--navy-deep);
+      color: var(--text-main);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* =====================================================================
+       ESCENARIO Y MAPA VECTORIAL
+       ===================================================================== */
+    #viewport {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      cursor: grab;
+      touch-action: none;
+      background: #e1e7e2;
+      transition: background 0.4s ease;
+    }
+    #viewport.dragging { cursor: grabbing; }
+    #viewport.measuring { cursor: crosshair; }
+
+    #map-svg-container {
+      width: 100%;
+      height: 100%;
+      display: block;
+      transform-origin: 50% 50%;
+      transition: transform 0.6s var(--ease-luxe);
+    }
+
+    .map-land { fill: #e2e8e0; transition: fill 0.3s; }
+    .map-relief { fill: #cbd8ca; opacity: 0.7; transition: all 0.4s ease; }
+    .map-contour { fill: none; stroke: #879e85; stroke-width: 0.8; opacity: 0.28; transition: opacity 0.4s ease; }
+    .map-river-edge { fill: none; stroke: #b6dce2; stroke-width: 11; stroke-linecap: round; }
+    .map-river { fill: none; stroke: #87b9c4; stroke-width: 6.5; stroke-linecap: round; stroke-linejoin: round; }
+    .map-road-bg { fill: none; stroke: #cfcaba; stroke-width: 7; stroke-linecap: round; }
+    .map-road { fill: none; stroke: #ffffff; stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Polígonos de expedientes mineros */
+    .claim-poly {
+      cursor: pointer;
+      fill-opacity: 0.22;
+      stroke-width: 2.2;
+      vector-effect: non-scaling-stroke;
+      transition: fill-opacity 0.25s, stroke-width 0.25s, filter 0.25s;
+    }
+    .claim-poly.vigente { fill: #10b981; stroke: #059669; }
+    .claim-poly.tramite { fill: #f59e0b; stroke: #d97706; }
+    .claim-poly:hover {
+      fill-opacity: 0.45;
+      stroke-width: 3.5;
+      filter: drop-shadow(0 4px 14px rgba(16, 185, 129, 0.35));
+    }
+    .claim-poly.selected {
+      fill-opacity: 0.55;
+      stroke: #022c19;
+      stroke-width: 4;
+      filter: drop-shadow(0 6px 20px rgba(2, 44, 25, 0.45));
+    }
+
+    .poly-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      fill: #0c2014;
+      pointer-events: none;
+      paint-order: stroke;
+      stroke: rgba(255, 255, 255, 0.95);
+      stroke-width: 3.5px;
+    }
+
+    /* Mapas base */
+    #viewport[data-base="relief"] .map-relief { opacity: 0.95; fill: #b8ccb5; }
+    #viewport[data-base="relief"] .map-contour { opacity: 0.6; stroke: #6f8a6d; }
+    
+    #viewport[data-base="satellite"] { background: #13241b; }
+    #viewport[data-base="satellite"] .map-land { fill: #1c3327; }
+    #viewport[data-base="satellite"] .map-relief { fill: #284435; opacity: 0.9; }
+    #viewport[data-base="satellite"] .map-river { stroke: #2d6b78; }
+    #viewport[data-base="satellite"] .map-river-edge { stroke: #19464f; }
+    #viewport[data-base="satellite"] .map-road { stroke: #eab308; stroke-width: 3; }
+    #viewport[data-base="satellite"] .map-road-bg { stroke: #854d0e; }
+    #viewport[data-base="satellite"] .poly-label { fill: #fef08a; stroke: #022c19; }
+
+    #viewport[data-base="dark"] { background: #0b111c; }
+    #viewport[data-base="dark"] .map-land { fill: #131c2c; }
+    #viewport[data-base="dark"] .map-relief { fill: #1a273c; opacity: 0.8; }
+    #viewport[data-base="dark"] .map-river { stroke: #1e4b6d; }
+    #viewport[data-base="dark"] .map-river-edge { stroke: #112c42; }
+    #viewport[data-base="dark"] .map-road { stroke: #334155; }
+    #viewport[data-base="dark"] .map-road-bg { stroke: #1e293b; }
+    #viewport[data-base="dark"] .map-contour { stroke: #334966; }
+    #viewport[data-base="dark"] .poly-label { fill: #38bdf8; stroke: #0b111c; }
+
+    /* =====================================================================
+       1. PANEL LATERAL PEGADO AL COSTADO IZQUIERDO (DOCK COLAPSABLE)
+       ===================================================================== */
+    #sidebar-dock {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 60px; /* Colapsado: solo iconos */
+      z-index: 40;
+      display: flex;
+      background: var(--navy-panel);
+      backdrop-filter: blur(32px) saturate(190%);
+      -webkit-backdrop-filter: blur(32px) saturate(190%);
+      border-right: 1px solid var(--navy-border);
+      box-shadow: var(--shadow-luxe);
+      transition: width 0.36s var(--ease-luxe);
+      overflow: hidden;
+    }
+
+    #sidebar-dock:hover,
+    #sidebar-dock.expanded {
+      width: 340px;
+    }
+
+    /* Riel permanente (60px) */
+    .dock-rail {
+      width: 60px;
+      height: 100%;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      border-right: 1px solid var(--navy-border);
+      gap: 16px;
+    }
+
+    .dock-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 11px;
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 16px;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+      cursor: pointer;
+    }
+
+    .dock-icons-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+      flex: 1;
+    }
+
+    .rail-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 11px;
+      display: grid;
+      place-items: center;
+      color: var(--text-dim);
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.2s;
+    }
+    .rail-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+    }
+    .rail-btn.active {
+      background: var(--ice-glow);
+      color: var(--ice-accent);
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+    .rail-btn.active::before {
+      content: "";
+      position: absolute;
+      left: -10px;
+      top: 10px;
+      bottom: 10px;
+      width: 4px;
+      border-radius: 0 4px 4px 0;
+      background: var(--ice-accent);
+      box-shadow: 0 0 10px var(--ice-accent);
+    }
+    .rail-btn svg { width: 19px; height: 19px; }
+
+    .dock-bottom-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .dock-pin-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      color: var(--text-dim);
+      background: transparent;
+      border: none;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .dock-pin-btn:hover { color: var(--text-main); background: rgba(255, 255, 255, 0.08); }
+    .dock-pin-btn.pinned { color: var(--ice-accent); }
+
+    /* Contenido Desplegable (280px) */
+    .dock-drawer {
+      width: 280px;
+      height: 100%;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 16px;
+      opacity: 0;
+      transform: translateX(-15px);
+      transition: opacity 0.3s var(--ease-luxe), transform 0.3s var(--ease-luxe);
+      pointer-events: none;
+    }
+
+    #sidebar-dock:hover .dock-drawer,
+    #sidebar-dock.expanded .dock-drawer {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    /* Pestañas Capas / Herramientas (Segmented Control) */
+    .drawer-nav-tabs {
+      display: flex;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--navy-border);
+      border-radius: 11px;
+      padding: 3px;
+      margin-bottom: 14px;
+    }
+    .drawer-tab-btn {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .drawer-tab-btn.active {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-main);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+    .drawer-tab-btn .badge-count {
+      font-size: 9.5px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: var(--ice-glow);
+      color: var(--ice-accent);
+      font-family: var(--font-mono);
+    }
+
+    .drawer-scroll-body {
+      flex: 1;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+      padding-right: 2px;
+    }
+
+    /* =====================================================================
+       ÁRBOL DE CATEGORÍAS Y CAPAS COMPACTO (SIN ESPACIOS EXCESIVOS)
+       ===================================================================== */
+    .category-group {
+      margin-bottom: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--navy-border);
+      border-radius: 11px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .category-group:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .category-header {
+      width: 100%;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+    }
+    .category-header .chevron {
+      color: var(--text-muted);
+      transition: transform 0.22s var(--ease-luxe);
+    }
+    .category-group.open .chevron { transform: rotate(180deg); }
+    
+    .category-body {
+      padding: 2px 8px 8px;
+      display: none;
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .category-group.open .category-body { display: block; }
+
+    /* Fila de Capa Individual */
+    .layer-card-row {
+      display: flex;
+      flex-direction: column;
+      padding: 6px 6px;
+      border-radius: 8px;
+      margin-bottom: 2px;
+      transition: background 0.15s;
+    }
+    .layer-card-row:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .layer-main-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .layer-left-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--text-dim);
+      cursor: pointer;
+      flex: 1;
+    }
+    .layer-card-row:has(input:checked) .layer-left-info {
+      color: var(--text-main);
+    }
+
+    /* Muestra de color (Color Swatch) para cambiar color de relleno y borde */
+    .swatch-color-btn {
+      width: 15px;
+      height: 15px;
+      border-radius: 4px;
+      border: 1.5px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      flex-shrink: 0;
+      transition: transform 0.15s;
+    }
+    .swatch-color-btn:hover { transform: scale(1.25); }
+
+    /* Switch iOS */
+    .switch-apple {
+      position: relative;
+      width: 30px;
+      height: 17px;
+      display: inline-block;
+      cursor: pointer;
+    }
+    .switch-apple input { opacity: 0; width: 0; height: 0; }
+    .switch-bg {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 20px;
+      transition: background 0.2s var(--ease-luxe);
+    }
+    .switch-bg::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      transition: transform 0.2s var(--ease-luxe);
+    }
+    .switch-apple input:checked + .switch-bg {
+      background: var(--emerald-accent);
+    }
+    .switch-apple input:checked + .switch-bg::after {
+      transform: translateX(13px);
+    }
+
+    /* Slider de transparencia/opacidad individual */
+    .layer-slider-subrow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 5px;
+      padding-left: 23px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .layer-slider-subrow input[type="range"] {
+      flex: 1;
+      height: 3px;
+      accent-color: var(--ice-accent);
+      cursor: pointer;
+    }
+    .layer-slider-subrow span {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      min-width: 28px;
+      text-align: right;
+    }
+
+    /* Subcapas SGC desplegables */
+    .sublayer-tree {
+      margin-left: 20px;
+      padding-left: 8px;
+      border-left: 1px dashed rgba(255, 255, 255, 0.12);
+      margin-top: 4px;
+    }
+
+    /* =====================================================================
+       PESTAÑA HERRAMIENTAS: 1° SISTEMA DE COORDENADAS (CRS)
+       ===================================================================== */
+    .tool-group-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin: 10px 0 6px;
+    }
+    .tool-group-label:first-child { margin-top: 0; }
+
+    /* 1° Sistema de Coordenadas */
+    .crs-card-picker {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--navy-border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .crs-select-box {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--navy-border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      color: var(--ice-accent);
+      font-family: var(--font-sans);
+      font-size: 11.5px;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* 2° Medición y captura (Íconos compactos 16-18px) */
+    .measure-toolbar {
+      display: flex;
+      gap: 6px;
+    }
+    .measure-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 6px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--navy-border);
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .measure-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+    }
+    .measure-btn.active {
+      background: var(--ice-glow);
+      border-color: var(--ice-accent);
+      color: var(--ice-accent);
+    }
+    .measure-btn svg { width: 16px; height: 16px; }
+
+    /* 3° Mapa Base con Miniaturas Visuales */
+    .basemap-grid-visual {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .basemap-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      border-radius: 8px;
+      padding: 3px;
+      transition: all 0.18s;
+    }
+    .basemap-tile-thumb {
+      width: 100%;
+      height: 42px;
+      border-radius: 7px;
+      border: 2px solid transparent;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    .basemap-tile.active .basemap-tile-thumb {
+      border-color: var(--ice-accent);
+      box-shadow: 0 0 0 1px var(--ice-accent), 0 4px 10px var(--ice-glow);
+    }
+    .basemap-tile-label {
+      font-size: 9.5px;
+      font-weight: 600;
+      color: var(--text-dim);
+    }
+    .basemap-tile.active .basemap-tile-label { color: var(--ice-accent); }
+
+    .thumb-vector-light { background: #e2e8e0; border-bottom: 8px solid #cbd8ca; }
+    .thumb-topo-relief { background: linear-gradient(135deg, #c7d8be, #9cb598); }
+    .thumb-satellite { background: linear-gradient(135deg, #1e3a29, #0f241a); }
+    .thumb-dark-canvas { background: #0f172a; border-bottom: 8px solid #1e293b; }
+
+    /* 4° Exportar Presets */
+    .export-grid-chips {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+    }
+    .export-mini-btn {
+      padding: 7px 4px;
+      text-align: center;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--navy-border);
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .export-mini-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-main);
+    }
+
+    /* =====================================================================
+       2. BUSCADOR EN MODO ISLA INFERIOR (LIMPIO, SIN ÍCONOS EXTRAÑOS)
+       ===================================================================== */
+    #bottom-search-island {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .island-search-bar {
+      width: 480px;
+      max-width: calc(100vw - 40px);
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      background: var(--navy-panel);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border: 1px solid var(--navy-border);
+      border-radius: 9999px;
+      box-shadow: var(--shadow-pill);
+      transition: all 0.25s var(--ease-luxe);
+    }
+    .island-search-bar:focus-within {
+      border-color: var(--ice-accent);
+      box-shadow: 0 18px 45px -4px rgba(0, 0, 0, 0.65), 0 0 0 2px var(--ice-glow);
+      background: rgba(15, 24, 44, 0.98);
+    }
+
+    /* Lupa estándar y limpia */
+    .clean-search-icon {
+      width: 18px;
+      height: 18px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .island-search-bar input {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text-main);
+      font-family: var(--font-sans);
+    }
+    .island-search-bar input::placeholder {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .clean-clear-btn {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: var(--text-dim);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      font-size: 10px;
+    }
+    .clean-clear-btn:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
+
+    /* Resultados desplegados hacia ARRIBA */
+    .island-results-popover {
+      position: absolute;
+      bottom: 58px;
+      width: 480px;
+      max-width: calc(100vw - 40px);
+      max-height: 360px;
+      overflow-y: auto;
+      background: var(--navy-card);
+      backdrop-filter: blur(32px) saturate(190%);
+      -webkit-backdrop-filter: blur(32px) saturate(190%);
+      border: 1px solid var(--navy-border);
+      border-radius: 18px;
+      box-shadow: var(--shadow-hud);
+      padding: 8px;
+      display: none;
+      animation: popUp 0.22s var(--ease-luxe);
+    }
+    .island-results-popover.visible { display: block; }
+
+    @keyframes popUp {
+      from { opacity: 0; transform: translateY(10px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .result-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .result-row:hover {
+      background: var(--navy-hover);
+    }
+    .result-code {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .result-details {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 1px;
+    }
+    .status-badge {
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .status-badge.vigente { background: var(--emerald-surface); color: var(--emerald-accent); }
+    .status-badge.tramite { background: rgba(245, 158, 11, 0.16); color: var(--amber-accent); }
+
+    /* =====================================================================
+       3. CONTROLES DEL MAPA (CON BOTÓN 3D INTEGRADO)
+       ===================================================================== */
+    .map-dock-controls {
+      position: fixed;
+      right: 20px;
+      bottom: 24px;
+      z-index: 35;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .controls-vertical-bar {
+      display: flex;
+      flex-direction: column;
+      background: var(--navy-panel);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid var(--navy-border);
+      border-radius: 14px;
+      box-shadow: var(--shadow-hud);
+      overflow: hidden;
+    }
+
+    .ctrl-btn {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .ctrl-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+    }
+    .ctrl-btn + .ctrl-btn {
+      border-top: 1px solid var(--navy-border);
+    }
+    .ctrl-btn svg { width: 18px; height: 18px; }
+
+    /* Botón 3D con indicador */
+    .btn-3d-trigger {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-main);
+      letter-spacing: -0.5px;
+    }
+    .btn-3d-trigger.active {
+      color: var(--ice-accent);
+      background: var(--ice-glow);
+    }
+    .btn-3d-trigger.active::after {
+      content: "";
+      position: absolute;
+      bottom: 6px;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--ice-accent);
+      box-shadow: 0 0 6px var(--ice-accent);
+    }
+
+    .compass-disc {
+      border-radius: 50% !important;
+      background: var(--navy-panel);
+      border: 1px solid var(--navy-border);
+      box-shadow: var(--shadow-hud);
+    }
+    .compass-arrow {
+      width: 20px;
+      height: 20px;
+      transition: transform 0.4s var(--ease-luxe);
+    }
+
+    /* =====================================================================
+       HUD POPUP 3D (ROTAR, INCLINAR, EXAGERAR HASTA 5X SIN SLIDERS)
+       ===================================================================== */
+    #hud-3d-popup {
+      position: fixed;
+      right: 74px;
+      bottom: 24px;
+      width: 320px;
+      background: var(--navy-card);
+      backdrop-filter: blur(32px);
+      -webkit-backdrop-filter: blur(32px);
+      border: 1px solid var(--navy-border);
+      border-radius: 18px;
+      box-shadow: var(--shadow-hud);
+      padding: 16px;
+      display: none;
+      animation: popRight 0.22s var(--ease-luxe);
+      z-index: 38;
+    }
+    #hud-3d-popup.open { display: block; }
+
+    @keyframes popRight {
+      from { opacity: 0; transform: translateX(10px) scale(0.97); }
+      to { opacity: 1; transform: translateX(0) scale(1); }
+    }
+
+    .hud-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .hud-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .hud-close-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+    }
+    .hud-close-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+    .hud-section { margin-bottom: 13px; }
+    .hud-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .hud-val-badge {
+      color: var(--ice-accent);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    /* Píldoras Segmentadas (Zero Sliders!) */
+    .stepper-segmented-group {
+      display: flex;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--navy-border);
+      border-radius: 10px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .stepper-pill {
+      flex: 1;
+      padding: 7px 4px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.18s;
+    }
+    .stepper-pill:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .stepper-pill.active {
+      background: var(--ice-glow);
+      color: var(--ice-accent);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+
+    .rotation-orbit-row {
+      display: flex;
+      gap: 6px;
+    }
+    .orbit-btn {
+      flex: 1;
+      padding: 8px 6px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--navy-border);
+      color: var(--text-dim);
+      font-size: 10.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    .orbit-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-main);
+    }
+
+    /* =====================================================================
+       4. POPUP SELECTOR DE COLOR PARA POLÍGONOS Y BORDES
+       ===================================================================== */
+    #color-picker-popover {
+      position: fixed;
+      left: 350px;
+      top: 140px;
+      width: 220px;
+      background: var(--navy-card);
+      backdrop-filter: blur(28px);
+      border: 1px solid var(--navy-border);
+      border-radius: 14px;
+      box-shadow: var(--shadow-hud);
+      padding: 12px;
+      display: none;
+      z-index: 45;
+    }
+    #color-picker-popover.open { display: block; }
+    .color-swatch-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .color-choice-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .color-choice-dot:hover { transform: scale(1.15); }
+
+    /* =====================================================================
+       5. TARJETA FLOTANTE DE INSPECCIÓN
+       ===================================================================== */
+    #floating-inspect-card {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 320px;
+      background: var(--navy-card);
+      backdrop-filter: blur(32px);
+      -webkit-backdrop-filter: blur(32px);
+      border: 1px solid var(--navy-border);
+      border-radius: 18px;
+      box-shadow: var(--shadow-luxe);
+      padding: 16px 18px;
+      display: none;
+      animation: slideRight 0.25s var(--ease-luxe);
+      z-index: 35;
+    }
+    #floating-inspect-card.open { display: block; }
+
+    @keyframes slideRight {
+      from { opacity: 0; transform: translateX(15px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .inspect-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+    .inspect-code {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+    .inspect-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      font-size: 11.5px;
+      margin-bottom: 14px;
+    }
+    .inspect-row {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-bottom: 5px;
+    }
+    .inspect-row dt { color: var(--text-muted); }
+    .inspect-row dd { font-weight: 600; color: var(--text-main); }
+
+    .inspect-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .inspect-btn {
+      flex: 1;
+      padding: 9px;
+      border-radius: 10px;
+      border: 1px solid var(--navy-border);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-main);
+      font-size: 11px;
+      font-weight: 650;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .inspect-btn:hover {
+      background: var(--ice-glow);
+      color: var(--ice-accent);
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+
+    /* Toast */
+    #toast-notice {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(7, 11, 20, 0.95);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--navy-border);
+      color: #fff;
+      padding: 9px 18px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s var(--ease-luxe);
+      z-index: 60;
+    }
+    #toast-notice.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- =====================================================================
+       ESCENARIO Y MAPA VECTORIAL
+       ===================================================================== -->
+  <div id="viewport" data-base="light">
+    <div id="map-svg-container">
+      <svg id="map-svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <pattern id="plancha-grid" width="180" height="150" patternUnits="userSpaceOnUse">
+            <rect width="180" height="150" fill="none" stroke="#688a91" stroke-width="0.8" stroke-dasharray="4 4"/>
+            <text x="10" y="20" fill="#688a91" font-size="9" font-family="monospace">PL-132 SGC</text>
+          </pattern>
+        </defs>
+
+        <!-- Fondo base -->
+        <rect width="100%" height="100%" class="map-land" />
+        
+        <!-- Relieve sombreado y curvas de nivel -->
+        <g id="terrain-mesh">
+          <path id="relief-path-1" d="M-50,180 Q220,60 500,220 T950,140 T1480,260 L1480,900 L-50,900 Z" class="map-relief" />
+          <path id="relief-path-2" d="M100,380 Q360,280 680,430 T1280,360 L1480,900 L100,900 Z" class="map-relief" style="opacity: 0.5" />
+          
+          <g id="contours-group">
+            <path d="M-20,160 Q250,40 520,190 T970,120 T1460,240" class="map-contour" />
+            <path d="M-20,220 Q250,100 520,250 T970,180 T1460,300" class="map-contour" />
+            <path d="M-20,280 Q250,160 520,310 T970,240 T1460,360" class="map-contour" />
+            <path d="M-20,400 Q350,280 720,420 T1250,350" class="map-contour" />
+          </g>
+        </g>
+
+        <!-- Río Cauca -->
+        <path d="M1100,-50 Q980,300 750,550 T400,950" class="map-river-edge" />
+        <path d="M1100,-50 Q980,300 750,550 T400,950" class="map-river" />
+
+        <!-- Red vial -->
+        <path d="M-50,480 Q400,520 800,460 T1480,620" class="map-road-bg" />
+        <path d="M-50,480 Q400,520 800,460 T1480,620" class="map-road" />
+
+        <!-- Planchas Geológicas -->
+        <rect id="layer-planchas-svg" width="100%" height="100%" fill="url(#plancha-grid)" opacity="0.6" />
+
+        <!-- Unidades Geológicas SGC -->
+        <g id="layer-sgc-svg" opacity="0.75">
+          <path id="poly-sgc-geo" d="M260,190 Q460,270 560,490 L360,590 L190,350 Z" fill="#10b981" fill-opacity="0.28" stroke="#059669" stroke-dasharray="3 2" stroke-width="2" />
+          <text x="310" y="320" fill="#047857" font-size="10" font-family="sans-serif">K-gb (Gabro de Medellín)</text>
+        </g>
+
+        <!-- Expedientes / Títulos mineros -->
+        <g id="layer-expedientes-svg">
+          <!-- HIZ-084 -->
+          <g onclick="selectExpediente('HIZ-084')">
+            <polygon points="580,260 740,240 790,380 630,420" class="claim-poly vigente selected" id="poly-HIZ-084" />
+            <text x="640" y="335" class="poly-label">HIZ-084 · Oro</text>
+          </g>
+
+          <!-- T-1923005 -->
+          <g onclick="selectExpediente('T-1923005')">
+            <polygon points="340,410 490,390 530,520 380,550" class="claim-poly vigente" id="poly-T-1923005" />
+            <text x="390" y="475" class="poly-label">T-1923005 · Cobre</text>
+          </g>
+
+          <!-- SOL-50123 -->
+          <g onclick="selectExpediente('SOL-50123')">
+            <polygon points="820,390 980,360 1020,490 860,530" class="claim-poly tramite" id="poly-SOL-50123" />
+            <text x="870" y="455" class="poly-label">SOL-50123 · Trámite</text>
+          </g>
+
+          <!-- KJJ-11002 -->
+          <g onclick="selectExpediente('KJJ-11002')">
+            <polygon points="460,610 620,590 650,720 500,740" class="claim-poly tramite" id="poly-KJJ-11002" />
+            <text x="520" y="670" class="poly-label">KJJ-11002 · Carbón</text>
+          </g>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       1. PANEL LATERAL PEGADO AL COSTADO IZQUIERDO (DOCK COLAPSABLE)
+       ===================================================================== -->
+  <aside id="sidebar-dock">
+    <!-- Riel de Iconos (60px permanente) -->
+    <div class="dock-rail">
+      <div class="dock-logo" onclick="toggleSidebarPin()" title="Litto Labs">L</div>
+      
+      <div class="dock-icons-list">
+        <!-- Botón Capas -->
+        <button class="rail-btn active" id="rail-btn-capas" onclick="setDrawerView('capas')" title="Capas Cartográficas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></svg>
+        </button>
+        
+        <!-- Botón Herramientas -->
+        <button class="rail-btn" id="rail-btn-herramientas" onclick="setDrawerView('herramientas')" title="Herramientas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        </button>
+      </div>
+
+      <div class="dock-bottom-actions">
+        <button class="dock-pin-btn" id="pin-btn" onclick="toggleSidebarPin()" title="Fijar barra abierta">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-2l-3-4V5h1V2H7v3h1v6l-3 4v2z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Cuerpo Desplegable (280px) -->
+    <div class="dock-drawer">
+      <!-- Pestañas Capas / Herramientas -->
+      <div class="drawer-nav-tabs">
+        <button class="drawer-tab-btn active" id="btn-tab-capas" onclick="setDrawerView('capas')">
+          <span>Capas</span>
+          <span class="badge-count" id="active-layers-count">4</span>
+        </button>
+        <button class="drawer-tab-btn" id="btn-tab-herramientas" onclick="setDrawerView('herramientas')">
+          <span>Herramientas</span>
+        </button>
+      </div>
+
+      <!-- Contenido scrolleable -->
+      <div class="drawer-scroll-body">
+        
+        <!-- ==================== VISTA 1: CAPAS COMPACTAS ==================== -->
+        <div id="view-capas-content">
+          <!-- 1. Categoría Minería ANM -->
+          <div class="category-group open">
+            <button class="category-header" onclick="toggleCategory(this)">
+              <span>MINERÍA (ANM)</span>
+              <svg class="chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="category-body">
+              <!-- Capa Títulos Vigentes -->
+              <div class="layer-card-row">
+                <div class="layer-main-line">
+                  <div class="layer-left-info">
+                    <button class="swatch-color-btn" style="background: #10b981; border-color: #059669;" onclick="openColorPicker('concesiones', this)" title="Cambiar color"></button>
+                    <span>Títulos Vigentes</span>
+                  </div>
+                  <label class="switch-apple">
+                    <input type="checkbox" id="chk-concesiones" checked onchange="toggleLayerVisibility('concesiones', this.checked)">
+                    <span class="switch-bg"></span>
+                  </label>
+                </div>
+                <div class="layer-slider-subrow">
+                  <input type="range" min="0" max="100" value="70" oninput="setLayerOpacity('concesiones', this.value)">
+                  <span id="op-val-concesiones">70%</span>
+                </div>
+              </div>
+
+              <!-- Capa Solicitudes en Trámite -->
+              <div class="layer-card-row">
+                <div class="layer-main-line">
+                  <div class="layer-left-info">
+                    <button class="swatch-color-btn" style="background: #f59e0b; border-color: #d97706;" onclick="openColorPicker('solicitudes', this)" title="Cambiar color"></button>
+                    <span>Solicitudes en Trámite</span>
+                  </div>
+                  <label class="switch-apple">
+                    <input type="checkbox" id="chk-solicitudes" checked onchange="toggleLayerVisibility('solicitudes', this.checked)">
+                    <span class="switch-bg"></span>
+                  </label>
+                </div>
+                <div class="layer-slider-subrow">
+                  <input type="range" min="0" max="100" value="75" oninput="setLayerOpacity('solicitudes', this.value)">
+                  <span id="op-val-solicitudes">75%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Categoría Geología SGC (con subcapas individuales) -->
+          <div class="category-group open">
+            <button class="category-header" onclick="toggleCategory(this)">
+              <span>GEOLOGÍA (SGC)</span>
+              <svg class="chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="category-body">
+              <div class="layer-card-row">
+                <div class="layer-main-line">
+                  <div class="layer-left-info">
+                    <button class="swatch-color-btn" style="background: #06b6d4; border-color: #0891b2;" onclick="openColorPicker('sgc', this)" title="Cambiar color"></button>
+                    <span>Unidades Geológicas</span>
+                  </div>
+                  <label class="switch-apple">
+                    <input type="checkbox" id="chk-sgc" checked onchange="toggleLayerVisibility('sgc', this.checked)">
+                    <span class="switch-bg"></span>
+                  </label>
+                </div>
+                <div class="layer-slider-subrow">
+                  <input type="range" min="0" max="100" value="75" oninput="setLayerOpacity('sgc', this.value)">
+                  <span id="op-val-sgc">75%</span>
+                </div>
+                
+                <!-- Subcapas individuales desplegables -->
+                <div class="sublayer-tree">
+                  <div class="layer-card-row" style="padding: 3px 0;">
+                    <div class="layer-main-line">
+                      <div class="layer-left-info" style="font-size: 10.5px;">
+                        <span style="width: 6px; height: 6px; border-radius: 50%; background: #06b6d4;"></span>
+                        <span>Fallas y Contactos</span>
+                      </div>
+                      <label class="switch-apple" style="transform: scale(0.85); transform-origin: right;">
+                        <input type="checkbox" checked onchange="showToast('Fallas SGC actualizadas')">
+                        <span class="switch-bg"></span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="layer-card-row" style="padding: 3px 0;">
+                    <div class="layer-main-line">
+                      <div class="layer-left-info" style="font-size: 10.5px;">
+                        <span style="width: 6px; height: 6px; border-radius: 50%; background: #38bdf8;"></span>
+                        <span>Litología por Departamentos</span>
+                      </div>
+                      <label class="switch-apple" style="transform: scale(0.85); transform-origin: right;">
+                        <input type="checkbox" checked onchange="showToast('Litología Departamental actualizada')">
+                        <span class="switch-bg"></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Categoría Planchas Geológicas -->
+          <div class="category-group open">
+            <button class="category-header" onclick="toggleCategory(this)">
+              <span>PLANCHAS GEOLÓGICAS</span>
+              <svg class="chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="category-body">
+              <div class="layer-card-row">
+                <div class="layer-main-line">
+                  <div class="layer-left-info">
+                    <button class="swatch-color-btn" style="background: #3b82f6; border-color: #2563eb;" onclick="openColorPicker('planchas', this)" title="Cambiar color"></button>
+                    <span>Cuadrícula 1:100.000</span>
+                  </div>
+                  <label class="switch-apple">
+                    <input type="checkbox" id="chk-planchas" checked onchange="toggleLayerVisibility('planchas', this.checked)">
+                    <span class="switch-bg"></span>
+                  </label>
+                </div>
+                <div class="layer-slider-subrow">
+                  <input type="range" min="0" max="100" value="60" oninput="setLayerOpacity('planchas', this.value)">
+                  <span id="op-val-planchas">60%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== VISTA 2: HERRAMIENTAS ==================== -->
+        <div id="view-herramientas-content" style="display: none;">
+          
+          <!-- 1° SISTEMA DE COORDENADAS (PRIMERO) -->
+          <div class="tool-group-label">1. Sistema de Coordenadas (CRS)</div>
+          <div class="crs-card-picker">
+            <select class="crs-select-box" onchange="showToast('Proyección activa: ' + this.value)">
+              <option value="EPSG:9377">Magna-Sirgas / Origen Nal (EPSG:9377)</option>
+              <option value="EPSG:4326">WGS84 Geográficas (EPSG:4326)</option>
+              <option value="EPSG:3116">Bogotá Magna (EPSG:3116)</option>
+            </select>
+          </div>
+
+          <!-- 2° MEDICIÓN Y CAPTURA (ÍCONOS COMPACTOS 16-18px) -->
+          <div class="tool-group-label">2. Medición de Geometrías</div>
+          <div class="measure-toolbar">
+            <button class="measure-btn" id="btn-measure-dist" onclick="toggleMeasure('dist')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 16 13-13 5 5L8 21l-5-5Zm9-9 2 2m-6 2 2 2m-6 2 2 2"/></svg>
+              <span>Distancia</span>
+            </button>
+            <button class="measure-btn" id="btn-measure-area" onclick="toggleMeasure('area')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg>
+              <span>Área</span>
+            </button>
+          </div>
+
+          <!-- 3° MAPA BASE CON MINIATURAS VISUALES -->
+          <div class="tool-group-label">3. Mapa Base</div>
+          <div class="basemap-grid-visual">
+            <!-- Claro -->
+            <div class="basemap-tile active" onclick="setBasemapVisual('light', this)">
+              <div class="basemap-tile-thumb thumb-vector-light"></div>
+              <div class="basemap-tile-label">Claro</div>
+            </div>
+            <!-- Relieve -->
+            <div class="basemap-tile" onclick="setBasemapVisual('relief', this)">
+              <div class="basemap-tile-thumb thumb-topo-relief"></div>
+              <div class="basemap-tile-label">Relieve</div>
+            </div>
+            <!-- Satélite -->
+            <div class="basemap-tile" onclick="setBasemapVisual('satellite', this)">
+              <div class="basemap-tile-thumb thumb-satellite"></div>
+              <div class="basemap-tile-label">Satélite</div>
+            </div>
+            <!-- Oscuro -->
+            <div class="basemap-tile" onclick="setBasemapVisual('dark', this)">
+              <div class="basemap-tile-thumb thumb-dark-canvas"></div>
+              <div class="basemap-tile-label">Oscuro</div>
+            </div>
+          </div>
+
+          <!-- 4° EXPORTACIÓN RÁPIDA -->
+          <div class="tool-group-label">4. Exportar Datos</div>
+          <div class="export-grid-chips">
+            <button class="export-mini-btn" onclick="showToast('Exportando GeoJSON...')">GeoJSON</button>
+            <button class="export-mini-btn" onclick="showToast('Exportando AutoCAD DXF...')">AutoCAD</button>
+            <button class="export-mini-btn" onclick="showToast('Exportando Shapefile ZIP...')">Shapefile</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- =====================================================================
+       2. BUSCADOR EN MODO ISLA INFERIOR (LIMPIO, SIN ÍCONOS EXTRAÑOS)
+       ===================================================================== -->
+  <div id="bottom-search-island">
+    <!-- Popover con resultados (emerge hacia ARRIBA) -->
+    <div class="island-results-popover" id="island-results-popover">
+      <div style="padding: 6px 12px; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">
+        Expedientes coincidentes (<span id="results-count-number">4</span>)
+      </div>
+      <div id="results-container">
+        <!-- Render dinámico -->
+      </div>
+    </div>
+
+    <!-- Píldora de búsqueda -->
+    <div class="island-search-bar">
+      <!-- Lupa estándar -->
+      <svg class="clean-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      
+      <input 
+        type="text" 
+        id="search-exp-input"
+        placeholder="Buscar expediente..." 
+        autocomplete="off"
+        oninput="handleSearchType(this.value)"
+        onfocus="openSearchResults()"
+      />
+
+      <button class="clean-clear-btn" id="btn-clear-search" onclick="clearSearchField()" style="display: none;">✕</button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       3. CONTROLES DEL MAPA (CON BOTÓN 3D INTEGRADO)
+       ===================================================================== -->
+  <div class="map-dock-controls">
+    <!-- Brújula / Norte -->
+    <button class="ctrl-btn compass-disc" onclick="resetNorth()" title="Orientar al Norte">
+      <svg class="compass-arrow" id="compass-svg-arrow" viewBox="0 0 24 24" fill="none">
+        <polygon points="12 3 19 21 12 17 5 21 12 3" fill="#ef4444"/>
+        <polygon points="12 17 19 21 12 3" fill="#b91c1c"/>
+      </svg>
+    </button>
+
+    <!-- Cluster Vertical de Navegación -->
+    <div class="controls-vertical-bar">
+      <!-- Botón 3D con indicador -->
+      <button class="ctrl-btn btn-3d-trigger" id="btn-3d-toggle" onclick="toggle3DPopover()" title="Controles de Perspectiva 3D">
+        3D
+      </button>
+
+      <!-- Zoom In (+) -->
+      <button class="ctrl-btn" onclick="zoomMap(1.2)" title="Acercar (+)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+
+      <!-- Zoom Out (-) -->
+      <button class="ctrl-btn" onclick="zoomMap(0.8)" title="Alejar (-)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+
+      <!-- Centrar vista -->
+      <button class="ctrl-btn" onclick="resetMapView()" title="Centrar mapa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="7"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       HUD POPUP 3D (ROTAR, INCLINAR, EXAGERAR HASTA 5X SIN SLIDERS)
+       ===================================================================== -->
+  <div id="hud-3d-popup">
+    <div class="hud-header">
+      <div class="hud-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <span>Perspectiva 3D del Terreno</span>
+      </div>
+      <button class="hud-close-btn" onclick="toggle3DPopover()">✕</button>
+    </div>
+
+    <!-- 1. INCLINACIÓN (TILT) SIN SLIDERS -->
+    <div class="hud-section">
+      <div class="hud-section-label">
+        <span>Inclinación de Cámara</span>
+        <span class="hud-val-badge" id="hud-tilt-badge">0° (Plano 2D)</span>
+      </div>
+      <div class="stepper-segmented-group">
+        <button class="stepper-pill active" id="tilt-0-btn" onclick="setTilt(0, this)">0° 2D</button>
+        <button class="stepper-pill" onclick="setTilt(30, this)">30°</button>
+        <button class="stepper-pill" onclick="setTilt(45, this)">45°</button>
+        <button class="stepper-pill" onclick="setTilt(60, this)">60°</button>
+      </div>
+    </div>
+
+    <!-- 2. EXAGERACIÓN VERTICAL HASTA 5X (SIN SLIDERS) -->
+    <div class="hud-section">
+      <div class="hud-section-label">
+        <span>Exageración Vertical</span>
+        <span class="hud-val-badge" id="hud-exag-badge">1.0×</span>
+      </div>
+      <div class="stepper-segmented-group">
+        <button class="stepper-pill active" onclick="setExaggeration(1, this)">1×</button>
+        <button class="stepper-pill" onclick="setExaggeration(2, this)">2×</button>
+        <button class="stepper-pill" onclick="setExaggeration(3, this)">3×</button>
+        <button class="stepper-pill" onclick="setExaggeration(5, this)">5× Máx</button>
+      </div>
+    </div>
+
+    <!-- 3. ROTACIÓN ORBITAL RÁPIDA -->
+    <div class="hud-section" style="margin-bottom: 0;">
+      <div class="hud-section-label">
+        <span>Rotación Horizontal</span>
+        <span class="hud-val-badge" id="hud-rot-badge">0° Norte</span>
+      </div>
+      <div class="rotation-orbit-row">
+        <button class="orbit-btn" onclick="rotateBy(-45)">↺ -45°</button>
+        <button class="orbit-btn" onclick="rotateTo(0)">Norte 0°</button>
+        <button class="orbit-btn" onclick="rotateBy(45)">↻ +45°</button>
+        <button class="orbit-btn" onclick="rotateTo(180)">180° Sur</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       4. POPUP SELECTOR DE COLOR PARA POLÍGONOS Y BORDES
+       ===================================================================== -->
+  <div id="color-picker-popover">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-size: 11px; font-weight: 700; color: var(--text-main);">Color de capa</span>
+      <button class="hud-close-btn" onclick="closeColorPicker()">✕</button>
+    </div>
+    <div class="color-swatch-grid">
+      <div class="color-choice-dot" style="background: #10b981;" onclick="applyLayerColor('#10b981', '#059669')"></div>
+      <div class="color-choice-dot" style="background: #06b6d4;" onclick="applyLayerColor('#06b6d4', '#0891b2')"></div>
+      <div class="color-choice-dot" style="background: #3b82f6;" onclick="applyLayerColor('#3b82f6', '#2563eb')"></div>
+      <div class="color-choice-dot" style="background: #8b5cf6;" onclick="applyLayerColor('#8b5cf6', '#7c3aed')"></div>
+      <div class="color-choice-dot" style="background: #f59e0b;" onclick="applyLayerColor('#f59e0b', '#d97706')"></div>
+      <div class="color-choice-dot" style="background: #ef4444;" onclick="applyLayerColor('#ef4444', '#dc2626')"></div>
+      <div class="color-choice-dot" style="background: #ec4899;" onclick="applyLayerColor('#ec4899', '#db2777')"></div>
+      <div class="color-choice-dot" style="background: #eab308;" onclick="applyLayerColor('#eab308', '#ca8a04')"></div>
+      <div class="color-choice-dot" style="background: #14b8a6;" onclick="applyLayerColor('#14b8a6', '#0d9488')"></div>
+      <div class="color-choice-dot" style="background: #64748b;" onclick="applyLayerColor('#64748b', '#475569')"></div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       5. TARJETA FLOTANTE DE INSPECCIÓN DE EXPEDIENTE
+       ===================================================================== -->
+  <div id="floating-inspect-card">
+    <div class="inspect-top">
+      <div>
+        <span style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Expediente Minero</span>
+        <div class="inspect-code" id="card-code">HIZ-084</div>
+      </div>
+      <button class="hud-close-btn" onclick="closeInspectCard()">✕</button>
+    </div>
+
+    <div class="inspect-grid">
+      <div class="inspect-row">
+        <dt>Estado</dt>
+        <dd id="card-status"><span class="status-badge vigente">Título Vigente</span></dd>
+      </div>
+      <div class="inspect-row">
+        <dt>Mineral</dt>
+        <dd id="card-mineral">Oro y sus concentrados</dd>
+      </div>
+      <div class="inspect-row">
+        <dt>Titular</dt>
+        <dd id="card-titular">Minera del Norte S.A.S.</dd>
+      </div>
+      <div class="inspect-row">
+        <dt>Área Total</dt>
+        <dd id="card-area">482,45 ha</dd>
+      </div>
+      <div class="inspect-row">
+        <dt>Municipio</dt>
+        <dd id="card-municipio">Santa Fe de Antioquia</dd>
+      </div>
+    </div>
+
+    <div class="inspect-actions">
+      <button class="inspect-btn" onclick="showToast('Abriendo Plancha Geológica SGC asociada...')">
+        📄 Ver Plancha SGC
+      </button>
+      <button class="inspect-btn" onclick="showToast('Exportando expediente...')">
+        ↗ Exportar
+      </button>
+    </div>
+  </div>
+
+  <!-- Notificación Toast -->
+  <div id="toast-notice">Acción realizada</div>
+
+  <!-- =====================================================================
+       LÓGICA JAVASCRIPT REACTIVA
+       ===================================================================== -->
+  <script>
+    // Base de expedientes
+    const EXPEDIENTES = [
+      {
+        id: "HIZ-084",
+        tipo: "Título Vigente",
+        statusClass: "vigente",
+        mineral: "Oro y sus concentrados",
+        titular: "Minera del Norte S.A.S.",
+        area: "482,45 ha",
+        municipio: "Santa Fe de Antioquia"
+      },
+      {
+        id: "T-1923005",
+        tipo: "Título Vigente",
+        statusClass: "vigente",
+        mineral: "Cobre, Molibdeno",
+        titular: "Exploraciones Andinas Ltda.",
+        area: "1.120,80 ha",
+        municipio: "Buriticá"
+      },
+      {
+        id: "SOL-50123",
+        tipo: "Solicitud en Trámite",
+        statusClass: "tramite",
+        mineral: "Materiales de Construcción",
+        titular: "Canteras de Occidente",
+        area: "145,10 ha",
+        municipio: "San Jerónimo"
+      },
+      {
+        id: "KJJ-11002",
+        tipo: "Solicitud en Trámite",
+        statusClass: "tramite",
+        mineral: "Carbón térmico",
+        titular: "Carbones del Río S.A.",
+        area: "310,00 ha",
+        municipio: "Amagá"
+      }
+    ];
+
+    let currentTilt = 0;       // Inclinación
+    let currentRotation = 0;   // Rotación grados
+    let currentExag = 1;       // Exageración 1x - 5x
+    let currentZoom = 1;
+    let isSidebarPinned = false;
+    let activeColorLayerTarget = null;
+
+    // Transformación 3D del mapa
+    function updateTransform() {
+      const container = document.getElementById('map-svg-container');
+      const is3D = currentTilt > 0;
+      
+      const pStr = is3D ? `perspective(1200px) rotateX(${currentTilt}deg)` : '';
+      const rStr = `rotateZ(${currentRotation}deg)`;
+      const sStr = `scale(${currentZoom * (is3D ? 1.15 : 1)})`;
+      
+      container.style.transform = `${pStr} ${rStr} ${sStr}`;
+      
+      const arrow = document.getElementById('compass-svg-arrow');
+      arrow.style.transform = `rotate(${-currentRotation}deg)`;
+
+      document.getElementById('btn-3d-toggle').classList.toggle('active', is3D);
+    }
+
+    // =====================================================================
+    // CONTROLES 3D (ZERO SLIDERS)
+    // =====================================================================
+    function toggle3DPopover() {
+      document.getElementById('hud-3d-popup').classList.toggle('open');
+    }
+
+    function setTilt(angle, btnEl) {
+      currentTilt = angle;
+      btnEl.parentElement.querySelectorAll('.stepper-pill').forEach(b => b.classList.remove('active'));
+      btnEl.classList.add('active');
+      
+      document.getElementById('hud-tilt-badge').textContent = angle === 0 ? "0° (Plano 2D)" : `${angle}° (Inclinado)`;
+      updateTransform();
+      showToast(`Inclinación 3D a ${angle}°`);
+    }
+
+    function setExaggeration(factor, btnEl) {
+      currentExag = factor;
+      btnEl.parentElement.querySelectorAll('.stepper-pill').forEach(b => b.classList.remove('active'));
+      btnEl.classList.add('active');
+      
+      document.getElementById('hud-exag-badge').textContent = `${factor}.0×`;
+      
+      const p1 = document.getElementById('relief-path-1');
+      const p2 = document.getElementById('relief-path-2');
+      const contours = document.getElementById('contours-group');
+      
+      if (p1) p1.style.transform = `scaleY(${1 + (factor - 1) * 0.15})`;
+      if (p2) p2.style.transform = `scaleY(${1 + (factor - 1) * 0.15})`;
+      if (contours) contours.style.strokeWidth = `${0.8 + (factor - 1) * 0.4}px`;
+      
+      showToast(`Exageración vertical fijada en ${factor}×`);
+    }
+
+    function rotateBy(delta) {
+      currentRotation = (currentRotation + delta) % 360;
+      if (currentRotation < 0) currentRotation += 360;
+      document.getElementById('hud-rot-badge').textContent = `${currentRotation}°`;
+      updateTransform();
+    }
+
+    function rotateTo(angle) {
+      currentRotation = angle;
+      document.getElementById('hud-rot-badge').textContent = `${angle}° ${angle === 0 ? 'Norte' : 'Sur'}`;
+      updateTransform();
+      showToast(`Orientación en ${angle}°`);
+    }
+
+    function resetNorth() {
+      rotateTo(0);
+      showToast("Orientado al Norte");
+    }
+
+    function zoomMap(factor) {
+      currentZoom = Math.max(0.6, Math.min(2.8, currentZoom * factor));
+      updateTransform();
+    }
+
+    function resetMapView() {
+      currentZoom = 1;
+      currentTilt = 0;
+      currentRotation = 0;
+      document.getElementById('tilt-0-btn').click();
+      rotateTo(0);
+      updateTransform();
+      showToast("Vista centrada");
+    }
+
+    // =====================================================================
+    // SIDEBAR LATERAL PEGADO A LA IZQUIERDA
+    // =====================================================================
+    function toggleSidebarPin() {
+      isSidebarPinned = !isSidebarPinned;
+      const dock = document.getElementById('sidebar-dock');
+      const pinBtn = document.getElementById('pin-btn');
+      
+      dock.classList.toggle('expanded', isSidebarPinned);
+      pinBtn.classList.toggle('pinned', isSidebarPinned);
+      showToast(isSidebarPinned ? "Barra lateral fijada abierta" : "Barra lateral en modo hover automático");
+    }
+
+    function setDrawerView(view) {
+      const isCapas = view === 'capas';
+      document.getElementById('rail-btn-capas').classList.toggle('active', isCapas);
+      document.getElementById('rail-btn-herramientas').classList.toggle('active', !isCapas);
+      
+      document.getElementById('btn-tab-capas').classList.toggle('active', isCapas);
+      document.getElementById('btn-tab-herramientas').classList.toggle('active', !isCapas);
+      
+      document.getElementById('view-capas-content').style.display = isCapas ? 'block' : 'none';
+      document.getElementById('view-herramientas-content').style.display = isCapas ? 'none' : 'block';
+      
+      if (!isSidebarPinned) {
+        document.getElementById('sidebar-dock').classList.add('expanded');
+      }
+    }
+
+    function toggleCategory(btnEl) {
+      btnEl.parentElement.classList.toggle('open');
+    }
+
+    function toggleLayerVisibility(layerKey, isVisible) {
+      const el = document.getElementById('layer-' + layerKey + '-svg');
+      if (el) el.style.display = isVisible ? 'block' : 'none';
+      
+      const count = document.querySelectorAll('#view-capas-content input[type="checkbox"]:checked').length;
+      document.getElementById('active-layers-count').textContent = count;
+      showToast((isVisible ? "Activada: " : "Ocultada: ") + layerKey);
+    }
+
+    function setLayerOpacity(layerKey, val) {
+      document.getElementById('op-val-' + layerKey).textContent = val + '%';
+      const el = document.getElementById('layer-' + layerKey + '-svg');
+      if (el) el.style.opacity = val / 100;
+    }
+
+    // SELECTOR DE COLOR DE POLÍGONOS Y BORDES
+    function openColorPicker(layerKey, btnEl) {
+      activeColorLayerTarget = { layerKey, btnEl };
+      const pop = document.getElementById('color-picker-popover');
+      const rect = btnEl.getBoundingClientRect();
+      pop.style.top = Math.min(window.innerHeight - 150, rect.top - 20) + 'px';
+      pop.classList.add('open');
+    }
+
+    function closeColorPicker() {
+      document.getElementById('color-picker-popover').classList.remove('open');
+    }
+
+    function applyLayerColor(fillColor, strokeColor) {
+      if (!activeColorLayerTarget) return;
+      const { layerKey, btnEl } = activeColorLayerTarget;
+      
+      btnEl.style.backgroundColor = fillColor;
+      btnEl.style.borderColor = strokeColor;
+      
+      // Aplicar a los polígonos del SVG correspondientes
+      if (layerKey === 'concesiones') {
+        document.querySelectorAll('.claim-poly.vigente').forEach(p => {
+          p.style.fill = fillColor;
+          p.style.stroke = strokeColor;
+        });
+      } else if (layerKey === 'solicitudes') {
+        document.querySelectorAll('.claim-poly.tramite').forEach(p => {
+          p.style.fill = fillColor;
+          p.style.stroke = strokeColor;
+        });
+      } else if (layerKey === 'sgc') {
+        const p = document.getElementById('poly-sgc-geo');
+        if (p) { p.style.fill = fillColor; p.style.stroke = strokeColor; }
+      }
+      
+      closeColorPicker();
+      showToast("Color de capa actualizado");
+    }
+
+    // HERRAMIENTAS: MEDICIÓN Y MAPA BASE
+    function toggleMeasure(type) {
+      const btn = document.getElementById(type === 'dist' ? 'btn-measure-dist' : 'btn-measure-area');
+      const wasActive = btn.classList.contains('active');
+      document.querySelectorAll('.measure-btn').forEach(b => b.classList.remove('active'));
+      
+      const vp = document.getElementById('viewport');
+      if (!wasActive) {
+        btn.classList.add('active');
+        vp.classList.add('measuring');
+        showToast("Herramienta activa: Haz clic en el mapa para medir " + (type === 'dist' ? 'distancia' : 'área'));
+      } else {
+        vp.classList.remove('measuring');
+        showToast("Medición desactivada");
+      }
+    }
+
+    function setBasemapVisual(baseId, tileEl) {
+      document.getElementById('viewport').setAttribute('data-base', baseId);
+      document.querySelectorAll('.basemap-tile').forEach(t => t.classList.remove('active'));
+      tileEl.classList.add('active');
+      showToast("Mapa base cambiado a: " + baseId);
+    }
+
+    // =====================================================================
+    // BUSCADOR EN MODO ISLA INFERIOR
+    // =====================================================================
+    const searchInput = document.getElementById('search-exp-input');
+    const searchPopover = document.getElementById('island-results-popover');
+    const resultsContainer = document.getElementById('results-container');
+    const resultsCountEl = document.getElementById('results-count-number');
+    const clearBtn = document.getElementById('btn-clear-search');
+
+    function openSearchResults() {
+      searchPopover.classList.add('visible');
+      renderResults(searchInput.value);
+    }
+
+    function handleSearchType(val) {
+      clearBtn.style.display = val.length > 0 ? 'grid' : 'none';
+      searchPopover.classList.add('visible');
+      renderResults(val);
+    }
+
+    function clearSearchField() {
+      searchInput.value = '';
+      clearBtn.style.display = 'none';
+      renderResults('');
+      searchInput.focus();
+    }
+
+    function renderResults(query = '') {
+      const q = query.trim().toLowerCase();
+      const filtered = EXPEDIENTES.filter(exp => 
+        exp.id.toLowerCase().includes(q) ||
+        exp.mineral.toLowerCase().includes(q) ||
+        exp.municipio.toLowerCase().includes(q) ||
+        exp.tipo.toLowerCase().includes(q)
+      );
+
+      resultsCountEl.textContent = filtered.length;
+
+      if (filtered.length === 0) {
+        resultsContainer.innerHTML = `<div style="padding: 14px; text-align: center; color: var(--text-muted); font-size: 11.5px;">No se encontraron expedientes coincidentes</div>`;
+        return;
+      }
+
+      resultsContainer.innerHTML = filtered.map(exp => `
+        <div class="result-row" onclick="selectExpediente('${exp.id}')">
+          <div>
+            <div class="result-code">${exp.id}</div>
+            <div class="result-details">${exp.mineral} · ${exp.municipio}</div>
+          </div>
+          <span class="status-badge ${exp.statusClass}">${exp.tipo}</span>
+        </div>
+      `).join('');
+    }
+
+    document.addEventListener('click', (e) => {
+      const island = document.getElementById('bottom-search-island');
+      if (!island.contains(e.target)) {
+        searchPopover.classList.remove('visible');
+      }
+      
+      const hud = document.getElementById('hud-3d-popup');
+      const btn3D = document.getElementById('btn-3d-toggle');
+      if (!hud.contains(e.target) && !btn3D.contains(e.target)) {
+        hud.classList.remove('open');
+      }
+
+      const colorPop = document.getElementById('color-picker-popover');
+      if (!colorPop.contains(e.target) && !e.target.classList.contains('swatch-color-btn')) {
+        closeColorPicker();
+      }
+    });
+
+    function selectExpediente(id) {
+      const exp = EXPEDIENTES.find(e => e.id === id);
+      if (!exp) return;
+
+      document.querySelectorAll('.claim-poly').forEach(p => p.classList.remove('selected'));
+      const poly = document.getElementById('poly-' + id);
+      if (poly) poly.classList.add('selected');
+
+      document.getElementById('card-code').textContent = exp.id;
+      document.getElementById('card-status').innerHTML = `<span class="status-badge ${exp.statusClass}">${exp.tipo}</span>`;
+      document.getElementById('card-mineral').textContent = exp.mineral;
+      document.getElementById('card-titular').textContent = exp.titular;
+      document.getElementById('card-area').textContent = exp.area;
+      document.getElementById('card-municipio').textContent = exp.municipio;
+
+      document.getElementById('floating-inspect-card').classList.add('open');
+      searchPopover.classList.remove('visible');
+      showToast("Expediente seleccionado: " + exp.id);
+    }
+
+    function closeInspectCard() {
+      document.getElementById('floating-inspect-card').classList.remove('open');
+      document.querySelectorAll('.claim-poly').forEach(p => p.classList.remove('selected'));
+    }
+
+    let toastTimer;
+    function showToast(text) {
+      const el = document.getElementById('toast-notice');
+      el.textContent = text;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+    }
+
+    renderResults('');
+  </script>
+</body>
+</html>

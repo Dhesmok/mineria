@@ -84,11 +84,11 @@ const LayerSwitch = ({ layer, state, area, disabled, onToggle }) => (
     disabled={disabled}
     onClick={() => onToggle(layer.key)}
     title={disabled ? "Todavía no está conectado el servicio de esta capa" : undefined}
-    className="relative h-[19px] w-[34px] shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-    style={{ backgroundColor: state.on ? area.color : "#e2e8f0" }}
+    className="relative h-[19px] w-[34px] shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+    style={{ backgroundColor: state.on ? area.color : "#334155" }}
   >
     <span
-      className="absolute left-0.5 top-0.5 block h-[15px] w-[15px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform"
+      className="absolute left-0.5 top-0.5 block h-[15px] w-[15px] rounded-full bg-white shadow-sm transition-transform"
       style={{ transform: state.on ? "translateX(15px)" : "translateX(0)" }}
     />
   </button>
@@ -116,11 +116,11 @@ const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
     type="button"
     onClick={onClick}
     aria-pressed={estado === "todo"}
-    className={`flex w-full items-center gap-2 py-1 pr-4 text-left transition-colors hover:bg-white ${sangria}`}
+    className={`flex w-full items-center gap-2 py-1 pr-4 text-left transition-colors hover:bg-slate-800/50 ${sangria}`}
   >
     <span
       className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border ${
-        estado === "nada" ? "border-slate-300" : "border-slate-800 bg-slate-800"
+        estado === "nada" ? "border-slate-600 bg-slate-900/50" : "border-sky-500 bg-sky-600"
       }`}
     >
       {estado === "todo" && <Check className="h-2.5 w-2.5 text-white" />}
@@ -128,8 +128,8 @@ const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
     </span>
     <span
       className={`min-w-0 flex-1 truncate text-[11px] ${
-        estado === "nada" ? "text-slate-500" : "text-slate-800"
-      } ${fuerte ? "font-medium" : ""}`}
+        estado === "nada" ? "text-slate-400" : "text-slate-200"
+      } ${fuerte ? "font-medium text-slate-100" : ""}`}
     >
       {label}
     </span>
@@ -176,9 +176,9 @@ const Departamento = ({ grupo, marcadas, onToggle }) => {
             onClick={() => setAbierto((v) => !v)}
             aria-expanded={abierto}
             aria-label={`Capas de ${grupo?.label}`}
-            className="-ml-2 mr-2 shrink-0 rounded p-1 text-slate-300 transition-colors hover:bg-white hover:text-slate-500"
+            className="-ml-2 mr-2 shrink-0 rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
           >
-            <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180" : ""}`} />
+            <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180 text-sky-400" : ""}`} />
           </button>
         )}
       </div>
@@ -229,21 +229,21 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
   return (
     <>
       {children}
-      <div className="border-b border-slate-100 bg-slate-50/60">
+      <div className="border-b border-slate-800/40 bg-slate-950/40">
         <button
           type="button"
           onClick={() => setAbierta((v) => !v)}
           aria-expanded={abierta}
-          className="flex w-full items-center justify-between gap-2 py-1.5 pl-11 pr-4 text-[11px] text-slate-500 transition-colors hover:text-slate-700"
+          className="flex w-full items-center justify-between gap-2 py-1.5 pl-11 pr-4 text-[11px] text-slate-400 transition-colors hover:text-slate-200"
         >
           <span>
             {dibujados === 0 ? "Elige qué dibujar" : `${dibujados} de ${gruposValidos.length}`}
           </span>
-          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${abierta ? "rotate-180" : ""}`} />
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${abierta ? "rotate-180 text-sky-400" : ""}`} />
         </button>
 
         {abierta && (
-          <div className="max-h-[13rem] overflow-y-auto pb-1.5">
+          <div className="max-h-[14rem] overflow-y-auto pb-1.5">
             {gruposValidos.map((grupo) => (
               <Departamento
                 key={grupo.id}
@@ -258,7 +258,7 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
         {/* Desmarcarlo todo deja la capa en blanco, y conviene decirlo: si no, se
             lee como que la capa dejó de funcionar. */}
         {marcadas.length === 0 && !abierta && (
-          <p className="pb-1.5 pl-11 pr-4 text-[10px] leading-tight text-slate-400">
+          <p className="pb-1.5 pl-11 pr-4 text-[10px] leading-tight text-slate-500">
             Sin nada marcado, esta capa no dibuja nada.
           </p>
         )}
@@ -294,13 +294,13 @@ const LayerRow = ({
   >
   <div
     ref={(node) => registerRow(layer.key, node)}
-    className={`flex h-[38px] items-center gap-2.5 border-b border-slate-100 px-4 transition-colors ${
-      dragging ? "bg-slate-100 opacity-60" : "hover:bg-slate-50"
+    className={`flex h-[36px] items-center gap-2.5 border-b border-slate-800/40 px-3.5 transition-colors ${
+      dragging ? "bg-slate-800/70 opacity-60" : "hover:bg-slate-800/40"
     }`}
     // En la lista de activas no hay encabezados de área —es una lista plana
     // porque su orden es el orden de pintado—, así que una franja del color del
     // área es lo que recuerda de dónde viene cada capa sin gastar ancho.
-    style={draggable ? { borderLeft: `3px solid ${area.color}`, paddingLeft: "13px" } : undefined}
+    style={draggable ? { borderLeft: `3px solid ${area.color}`, paddingLeft: "11px" } : undefined}
   >
     {draggable && (
       <button
@@ -311,7 +311,7 @@ const LayerRow = ({
         onPointerCancel={onDragEnd}
         aria-label={`Reordenar ${layer.label}`}
         title="Arrastra para cambiar qué capa se ve encima"
-        className="-ml-1.5 shrink-0 cursor-grab touch-none text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+        className="-ml-1.5 shrink-0 cursor-grab touch-none text-slate-500 hover:text-slate-300 active:cursor-grabbing"
       >
         <GripVertical className="h-4 w-4" />
       </button>
@@ -333,8 +333,8 @@ const LayerRow = ({
     )}
 
     <span
-      className={`min-w-0 flex-1 truncate text-[13px] ${
-        state.on ? "text-slate-900" : layer.pending ? "text-slate-400" : "text-slate-600"
+      className={`min-w-0 flex-1 truncate text-[12.5px] ${
+        state.on ? "text-slate-100 font-medium" : layer.pending ? "text-slate-500" : "text-slate-300"
       }`}
       // La pista y la escala van al `title`: es donde caben sin gastar ancho, y
       // «1:500.000» contra «1:100.000» es la diferencia entre dos capas que en la
@@ -388,18 +388,18 @@ const HeaderButton = ({ icon: Icon, label, color, active, disabled, onClick }) =
       event.stopPropagation()
       onClick(event.currentTarget)
     }}
-    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
-      active ? "border-transparent text-white" : "border-slate-200 bg-white"
+    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors disabled:cursor-not-allowed disabled:opacity-20 ${
+      active ? "border-transparent text-white shadow-sm" : "border-slate-700/60 bg-slate-900/60 hover:bg-slate-800"
     }`}
     style={
       active
         ? { backgroundColor: color }
         : disabled
-          ? { color: "#94a3b8" }
+          ? { color: "#64748b" }
           : { color }
     }
   >
-    <Icon className="h-3.5 w-3.5" />
+    <Icon className="h-3 w-3" />
   </button>
 )
 
@@ -493,10 +493,10 @@ export const LayerPanel = ({
   })
 
   return (
-    <div className="-mx-4">
+    <div className="-mx-4 text-slate-100">
       {/* Filtro y cuenta */}
-      <div className="mb-3 flex items-center gap-2 px-4">
-        <div className="flex rounded-lg bg-slate-100 p-0.5">
+      <div className="mb-2 flex items-center justify-between gap-2 px-4">
+        <div className="flex rounded-lg bg-slate-950/80 p-0.5 border border-slate-800/80">
           {[
             { id: "todas", label: "Todas", value: false },
             { id: "activas", label: "Activas", value: true },
@@ -506,32 +506,31 @@ export const LayerPanel = ({
               type="button"
               onClick={() => setOnlyActive(tab.value)}
               aria-pressed={onlyActive === tab.value}
-              className={`rounded-md px-3 py-[5px] text-xs font-medium transition-colors ${
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
                 onlyActive === tab.value
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "bg-slate-800 text-sky-400 font-semibold shadow-sm border border-slate-700/60"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
-        <span className="flex-1" />
-        <span className="text-xs text-slate-500">
+        <span className="text-[11px] font-mono text-slate-400">
           {activeCount === 1 ? "1 encendida" : `${activeCount} encendidas`}
         </span>
       </div>
 
-      <div className="max-h-[420px] overflow-y-auto border-t border-slate-200">
+      <div className="max-h-[calc(100vh-140px)] overflow-y-auto border-t border-slate-800/60">
         {onlyActive ? (
           // ───────────── Activas: lista plana y ordenable ─────────────
           activeCount === 0 ? (
-            <p className="px-4 py-6 text-center text-xs text-slate-400">
+            <p className="px-4 py-6 text-center text-xs text-slate-500">
               Enciende una capa para verla aquí.
             </p>
           ) : (
             <>
-              <p className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] leading-tight text-slate-500">
+              <p className="border-b border-slate-800/50 bg-slate-950/60 px-4 py-2 text-[11px] leading-tight text-slate-400">
                 Arrastra para ordenar. La de arriba se dibuja encima de las demás.
               </p>
               {activeKeys.map((key, index) => (
@@ -554,13 +553,13 @@ export const LayerPanel = ({
             const filtrada = areaHasFilter(area.id)
 
             return (
-              <div key={area.id}>
+              <div key={area.id} className="border-b border-slate-800/50">
                 {/* El encabezado es el propio botón de plegar. Los dos botones
                     de la derecha llevan `stopPropagation` porque viven dentro de
                     él: sin eso, filtrar o buscar cerraría el área de paso. */}
                 <div
-                  className={`sticky top-0 z-[2] flex items-center gap-2 border-b border-slate-200 px-4 py-2 transition-colors ${
-                    abierta ? "bg-slate-100" : "bg-slate-50 hover:bg-slate-100"
+                  className={`sticky top-0 z-[2] flex items-center gap-2 px-3 py-1.5 transition-colors ${
+                    abierta ? "bg-[#0e172e]" : "bg-[#0b1329]/80 hover:bg-[#0e172e]/70"
                   }`}
                 >
                   <button
@@ -577,20 +576,20 @@ export const LayerPanel = ({
                   >
                     <ChevronRight
                       className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${
-                        abierta ? "rotate-90" : ""
+                        abierta ? "rotate-90 text-sky-400" : ""
                       }`}
                     />
                     <AreaIcon area={area} className="h-3.5 w-3.5 shrink-0" />
                     <span
-                      className="truncate text-[11px] font-semibold uppercase tracking-[0.06em]"
+                      className="truncate text-[11px] font-bold uppercase tracking-[0.06em]"
                       style={{ color: area.color }}
                     >
                       {area.name}
                     </span>
-                    <span className="shrink-0 text-[11px] text-slate-400">{area.source}</span>
+                    <span className="shrink-0 text-[10px] text-slate-400">{area.source}</span>
                   </button>
 
-                  <span className="shrink-0 text-[11px] tabular-nums text-slate-500">
+                  <span className="shrink-0 font-mono text-[10px] text-slate-400">
                     {encendidas}/{delArea.length}
                   </span>
 
