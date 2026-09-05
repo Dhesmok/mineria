@@ -117,7 +117,7 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
       {plancha.canvas && (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="w-[52px] shrink-0 text-[10px] uppercase tracking-wide text-slate-400">
+            <span className="w-[52px] shrink-0 text-[10px] uppercase tracking-wide text-zinc-400">
               Opacidad
             </span>
             <OpacitySlider
@@ -126,12 +126,12 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
               label="Opacidad de la plancha"
               className="min-w-0 flex-1"
             />
-            <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-slate-500">
+            <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-zinc-400">
               {Math.round((opacity ?? 1) * 100)}%
             </span>
           </div>
 
-          <dl className="space-y-[3px] border-t border-slate-100 pt-2 text-[10px] leading-tight text-slate-500">
+          <dl className="space-y-[3px] border-t border-zinc-800 pt-2 text-[10px] leading-tight text-zinc-400">
             <Dato nombre="Origen" valor={plancha.crs?.label} />
             <Dato
               nombre="Hoja"
@@ -157,7 +157,7 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
               // esquinas otra— y que el visor ha hecho caso a los de esquina. Es
               // una decisión con consecuencias sobre dónde queda la geología, y
               // quien la vaya a usar tiene que poder ir a mirar el papel.
-              <p className="pt-1 text-amber-700">
+              <p className="pt-1 text-amber-400">
                 Los rótulos abreviados de esta hoja van {corrida(plancha.shift)} corridos
                 respecto a los de las esquinas. Se colocó con los de las esquinas.
               </p>
@@ -166,14 +166,14 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
               // Sin los cuatro bordes del marco el recorte se hizo por la última
               // línea de la cuadrícula, así que a la hoja le falta un borde. Se
               // dice, porque desde el mapa no hay forma de notarlo.
-              <p className="pt-1 text-amber-700">
+              <p className="pt-1 text-amber-400">
                 No se encontraron los cuatro bordes del marco: puede faltarle una
                 franja a la hoja.
               </p>
             )}
           </dl>
 
-          <div className="flex gap-1.5 border-t border-slate-100 pt-2">
+          <div className="flex gap-1.5 border-t border-zinc-800 pt-2">
             <Boton onClick={onEncuadrar} icon={Maximize2}>
               Encuadrar
             </Boton>
@@ -190,8 +190,8 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
 const Dato = ({ nombre, valor }) =>
   valor ? (
     <div className="flex items-baseline gap-2">
-      <dt className="w-[52px] shrink-0 uppercase tracking-wide text-slate-400">{nombre}</dt>
-      <dd className="min-w-0 flex-1 break-words text-slate-600">{valor}</dd>
+      <dt className="w-[52px] shrink-0 uppercase tracking-wide text-zinc-500">{nombre}</dt>
+      <dd className="min-w-0 flex-1 break-words text-zinc-300">{valor}</dd>
     </div>
   ) : null
 
@@ -199,7 +199,7 @@ const Boton = ({ onClick, icon: Icon, children }) => (
   <button
     type="button"
     onClick={onClick}
-    className="flex flex-1 items-center justify-center gap-1.5 rounded border border-slate-200 px-2 py-1 text-[11px] text-slate-600 transition-colors hover:bg-slate-50"
+    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-200 hover:text-white transition-colors shadow-sm"
   >
     <Icon className="h-3 w-3" />
     {children}

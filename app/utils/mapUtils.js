@@ -259,7 +259,10 @@ export const escapeXml = (value) => String(value ?? "").replace(/[&<>"']/g, (cha
 
 const field = (value) => escapeXml(value || "N/A")
 
-const row = (label, value) => `<p><strong>${label}:</strong> ${value}</p>`
+const row = (label, value) => {
+  const isNa = !value || value === "N/A"
+  return `<p class="popup-row ${isNa ? "popup-row-na" : ""}"><strong>${label}:</strong> ${value}</p>`
+}
 
 /** Fila que solo aparece si hay dato: sirve para campos propios de una sola capa. */
 const optionalRow = (label, value) => (value ? row(label, field(value)) : "")
@@ -280,8 +283,22 @@ export const createPopupContent = (properties = {}) => {
   // mismo dato con otro nombre.
   const par = properties.PAR || properties.GRUPO_DE_TRABAJO
 
+  const codigo = properties.CODIGO_EXPEDIENTE || properties.TENURE_ID || "Expediente"
+  let tipoCapa = "Expediente ANM"
+  if (properties.NOMBRE_DE_TITULAR || properties.FECHA_DE_INSCRIPCION || properties.CODIGO_EXPEDIENTE?.startsWith("SF")) {
+    tipoCapa = "Subcontrato"
+  } else if (properties.TITULO_ESTADO || properties.FECHA_DE_EXPEDICION) {
+    tipoCapa = "Título Minero"
+  } else if (properties.FECHA_DE_SOLICITUD && !properties.FECHA_DE_EXPEDICION) {
+    tipoCapa = "Solicitud Minera"
+  }
+
   return `
     <div class="popup-content">
+      <div class="popup-header-bar">
+        <span class="popup-type-badge">${escapeXml(tipoCapa)}</span>
+        <span class="popup-code-title">${escapeXml(codigo)}</span>
+      </div>
       <h3>Información del Expediente</h3>
       ${row("Código Expediente", field(properties.CODIGO_EXPEDIENTE || properties.TENURE_ID))}
       ${row("Modalidad", field(properties.MODALIDAD))}

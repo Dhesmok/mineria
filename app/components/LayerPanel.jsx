@@ -58,78 +58,50 @@ const ColorSwatch = ({ layer, state, disabled, onOpen }) => (
   <button
     type="button"
     disabled={disabled}
-    onClick={(event) => onOpen(layer.key, event.currentTarget)}
+    onClick={(event) => {
+      event.stopPropagation()
+      onOpen(layer.key, event.currentTarget)
+    }}
     title={disabled ? undefined : `Cambiar el color de ${layer.label}`}
     aria-label={`Cambiar el color de ${layer.label}`}
-    className="-mx-1 flex h-6 w-6 shrink-0 items-center justify-center rounded transition-transform disabled:cursor-default enabled:hover:scale-125"
+    className="-mx-1 flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded transition-transform disabled:cursor-default enabled:hover:scale-125"
   >
     <span
-      className="block h-3.5 w-3.5 rounded-[3px]"
+      className="block h-4 w-4 rounded-[3.5px] shadow-sm transition-all"
       style={{
         backgroundColor: state.fillColor,
         border: `1.5px solid ${state.lineColor}`,
-        opacity: state.on ? Math.max(state.opacity, 0.35) : 0.4,
+        opacity: state.on ? Math.max(state.opacity, 0.4) : 0.25,
+        filter: state.on ? "none" : "grayscale(80%)",
       }}
     />
   </button>
 )
 
-/** El interruptor, con el color del área cuando está encendido. */
-const LayerSwitch = ({ layer, state, area, disabled, onToggle }) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={state.on}
-    aria-label={layer.label}
-    disabled={disabled}
-    onClick={() => onToggle(layer.key)}
-    title={disabled ? "Todavía no está conectado el servicio de esta capa" : undefined}
-    className="relative h-[19px] w-[34px] shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-    style={{ backgroundColor: state.on ? area.color : "#e2e8f0" }}
-  >
-    <span
-      className="absolute left-0.5 top-0.5 block h-[15px] w-[15px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform"
-      style={{ transform: state.on ? "translateX(15px)" : "translateX(0)" }}
-    />
-  </button>
-)
-
-/**
- * Una fila de capa.
- *
- * Va aquí fuera y no dentro de `LayerPanel` a propósito: un componente definido
- * dentro de otro es un tipo nuevo en cada render, así que React desmonta y
- * vuelve a montar todas las filas cada vez que cambia cualquier cosa. Eso
- * rompería justo las dos funciones nuevas —el arrastre pierde el elemento que
- * tenía agarrado y el deslizador de opacidad pierde el foco a media pulsación—.
- */
 /**
  * Una casilla de subcapa: un departamento, o una de las capas que lleva dentro.
- *
- * El mismo componente para los dos niveles porque es la misma acción —marcar lo
- * que se quiere ver— y solo cambian la sangría y el peso de la letra. Un
- * departamento a medias no se dibuja ni marcado ni vacío: se enseña a medias,
- * que es la verdad y es lo que invita a desplegarlo.
  */
 const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
   <button
     type="button"
     onClick={onClick}
     aria-pressed={estado === "todo"}
-    className={`flex w-full items-center gap-2 py-1 pr-4 text-left transition-colors hover:bg-white ${sangria}`}
+    className={`flex w-full items-center gap-2 py-1 pr-4 text-left transition-colors hover:bg-zinc-800/40 ${sangria}`}
   >
     <span
-      className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border ${
-        estado === "nada" ? "border-slate-300" : "border-slate-800 bg-slate-800"
+      className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
+        estado === "nada"
+          ? "border-zinc-700 bg-zinc-900/60 text-transparent"
+          : "border-zinc-400 bg-zinc-200 text-zinc-950"
       }`}
     >
-      {estado === "todo" && <Check className="h-2.5 w-2.5 text-white" />}
-      {estado === "parte" && <span className="h-[2px] w-[7px] rounded-full bg-white" />}
+      {estado === "todo" && <Check className="h-2.5 w-2.5" />}
+      {estado === "parte" && <span className="h-[2px] w-[7px] rounded-full bg-zinc-950" />}
     </span>
     <span
-      className={`min-w-0 flex-1 truncate text-[11px] ${
-        estado === "nada" ? "text-slate-500" : "text-slate-800"
-      } ${fuerte ? "font-medium" : ""}`}
+      className={`min-w-0 flex-1 truncate text-[11px] transition-colors ${
+        estado === "nada" ? "text-zinc-500 hover:text-zinc-300" : "text-white font-semibold"
+      } ${fuerte ? (estado === "nada" ? "font-medium text-zinc-400" : "font-bold text-white") : ""}`}
     >
       {label}
     </span>
@@ -176,9 +148,9 @@ const Departamento = ({ grupo, marcadas, onToggle }) => {
             onClick={() => setAbierto((v) => !v)}
             aria-expanded={abierto}
             aria-label={`Capas de ${grupo?.label}`}
-            className="-ml-2 mr-2 shrink-0 rounded p-1 text-slate-300 transition-colors hover:bg-white hover:text-slate-500"
+            className="-ml-2 mr-2 shrink-0 rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
           >
-            <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180" : ""}`} />
+            <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180 text-white" : ""}`} />
           </button>
         )}
       </div>
@@ -229,21 +201,21 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
   return (
     <>
       {children}
-      <div className="border-b border-slate-100 bg-slate-50/60">
+      <div className="border-b border-zinc-800/40 bg-zinc-950/60">
         <button
           type="button"
           onClick={() => setAbierta((v) => !v)}
           aria-expanded={abierta}
-          className="flex w-full items-center justify-between gap-2 py-1.5 pl-11 pr-4 text-[11px] text-slate-500 transition-colors hover:text-slate-700"
+          className="flex w-full items-center justify-between gap-2 py-1.5 pl-11 pr-4 text-[11px] text-zinc-400 transition-colors hover:text-zinc-200"
         >
           <span>
             {dibujados === 0 ? "Elige qué dibujar" : `${dibujados} de ${gruposValidos.length}`}
           </span>
-          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${abierta ? "rotate-180" : ""}`} />
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform text-zinc-400 ${abierta ? "rotate-180 text-white" : ""}`} />
         </button>
 
         {abierta && (
-          <div className="max-h-[13rem] overflow-y-auto pb-1.5">
+          <div className="max-h-[14rem] overflow-y-auto pb-1.5">
             {gruposValidos.map((grupo) => (
               <Departamento
                 key={grupo.id}
@@ -258,7 +230,7 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
         {/* Desmarcarlo todo deja la capa en blanco, y conviene decirlo: si no, se
             lee como que la capa dejó de funcionar. */}
         {marcadas.length === 0 && !abierta && (
-          <p className="pb-1.5 pl-11 pr-4 text-[10px] leading-tight text-slate-400">
+          <p className="pb-1.5 pl-11 pr-4 text-[10px] leading-tight text-zinc-500">
             Sin nada marcado, esta capa no dibuja nada.
           </p>
         )}
@@ -294,13 +266,15 @@ const LayerRow = ({
   >
   <div
     ref={(node) => registerRow(layer.key, node)}
-    className={`flex h-[38px] items-center gap-2.5 border-b border-slate-100 px-4 transition-colors ${
-      dragging ? "bg-slate-100 opacity-60" : "hover:bg-slate-50"
+    onClick={() => !layer.pending && onToggle(layer.key)}
+    className={`group flex h-[38px] cursor-pointer items-center gap-2 border-b border-zinc-800/40 px-3 transition-all ${
+      dragging
+        ? "bg-zinc-800/70 opacity-60"
+        : state.on
+        ? "bg-zinc-800/50 hover:bg-zinc-800/70 text-white"
+        : "opacity-60 hover:opacity-100 hover:bg-zinc-900/30"
     }`}
-    // En la lista de activas no hay encabezados de área —es una lista plana
-    // porque su orden es el orden de pintado—, así que una franja del color del
-    // área es lo que recuerda de dónde viene cada capa sin gastar ancho.
-    style={draggable ? { borderLeft: `3px solid ${area.color}`, paddingLeft: "13px" } : undefined}
+    style={draggable ? { borderLeft: `3px solid ${area.color}`, paddingLeft: "10px" } : undefined}
   >
     {draggable && (
       <button
@@ -309,74 +283,64 @@ const LayerRow = ({
         onPointerMove={onDragMove}
         onPointerUp={onDragEnd}
         onPointerCancel={onDragEnd}
+        onClick={(e) => e.stopPropagation()}
         aria-label={`Reordenar ${layer.label}`}
         title="Arrastra para cambiar qué capa se ve encima"
-        className="-ml-1.5 shrink-0 cursor-grab touch-none text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+        className="-ml-1 shrink-0 cursor-grab touch-none text-zinc-500 hover:text-zinc-300 active:cursor-grabbing"
       >
-        <GripVertical className="h-4 w-4" />
+        <GripVertical className="h-3.5 w-3.5" />
       </button>
     )}
 
-    {/* Sin selector de color en las capas ráster: llegan ya dibujadas por el
-        servicio, con la simbología que un geólogo reconoce —el amarillo de un
-        cuaternario, el granate de un batolito—.
-
-        Y no apagado sino ausente. Apagado ya se probó, y no basta: un cuadrito
-        gris junto a la capa sigue pareciendo un botón, se sigue intentando
-        pulsar, y no pasa nada. Lo que ocupa su sitio es un hueco del mismo
-        ancho, para que las filas no bailen entre las capas que sí eligen color
-        y las que no. */}
     {layer.raster ? (
       <span className="h-4 w-4 shrink-0" aria-hidden="true" />
     ) : (
       <ColorSwatch layer={layer} state={state} disabled={layer.pending} onOpen={onOpenColor} />
     )}
 
-    <span
-      className={`min-w-0 flex-1 truncate text-[13px] ${
-        state.on ? "text-slate-900" : layer.pending ? "text-slate-400" : "text-slate-600"
-      }`}
-      // La pista y la escala van al `title`: es donde caben sin gastar ancho, y
-      // «1:500.000» contra «1:100.000» es la diferencia entre dos capas que en la
-      // lista se llaman casi igual.
+    <button
+      type="button"
+      role="switch"
+      aria-checked={state.on}
+      aria-label={layer.label}
+      disabled={layer.pending}
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle(layer.key)
+      }}
       title={[layer.label, layer.scale, layer.hint].filter(Boolean).join(" · ")}
+      className={`min-w-0 flex-1 truncate text-left text-[13px] transition-colors ${
+        state.on
+          ? "font-semibold text-white tracking-tight"
+          : layer.pending
+          ? "cursor-not-allowed text-zinc-600"
+          : "text-zinc-400 group-hover:text-zinc-200"
+      }`}
     >
       {layer.label}
-    </span>
+    </button>
 
-    {/* La barra reserva su sitio aunque la capa esté apagada: si apareciera y
-        desapareciera, la lista entera daría un salto en cada interruptor. */}
-    {state.on ? (
-      <OpacitySlider
-        value={state.opacity}
-        onChange={(valor) => onOpacity(layer.key, valor)}
-        label={`Opacidad de ${layer.label}`}
-        className="w-[62px] shrink-0"
-      />
-    ) : (
-      <span className="w-[62px] shrink-0" />
-    )}
-
-    <LayerSwitch
-      layer={layer}
-      state={state}
-      area={area}
-      disabled={layer.pending}
-      onToggle={onToggle}
-    />
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="w-[64px] shrink-0 flex items-center justify-end"
+    >
+      {state.on ? (
+        <OpacitySlider
+          value={state.opacity}
+          onChange={(valor) => onOpacity(layer.key, valor)}
+          label={`Opacidad de ${layer.label}`}
+          className="w-full"
+        />
+      ) : (
+        <span className="w-full" />
+      )}
+    </div>
   </div>
   </SubLayerHost>
 )
 
 /**
  * Uno de los dos botones del encabezado de un área.
- *
- * Llevan el color del área para que se entiendan sin explicación: son "cosas de
- * Minería" o "cosas de Geología". Encendido cuando ese filtro está puesto, para
- * que se vea desde fuera que un área está filtrada aunque esté plegada.
- *
- * `stopPropagation` no es opcional: viven dentro del botón que pliega el área, y
- * sin él, filtrar o buscar cerraría el área de paso.
  */
 const HeaderButton = ({ icon: Icon, label, color, active, disabled, onClick }) => (
   <button
@@ -388,18 +352,18 @@ const HeaderButton = ({ icon: Icon, label, color, active, disabled, onClick }) =
       event.stopPropagation()
       onClick(event.currentTarget)
     }}
-    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
-      active ? "border-transparent text-white" : "border-slate-200 bg-white"
+    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors disabled:cursor-not-allowed disabled:opacity-20 ${
+      active
+        ? "border-transparent text-white shadow-sm"
+        : "border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:bg-zinc-800 hover:text-white"
     }`}
     style={
       active
-        ? { backgroundColor: color }
-        : disabled
-          ? { color: "#94a3b8" }
-          : { color }
+        ? { backgroundColor: color || "#3b82f6" }
+        : undefined
     }
   >
-    <Icon className="h-3.5 w-3.5" />
+    <Icon className="h-3 w-3" />
   </button>
 )
 
@@ -421,9 +385,28 @@ export const LayerPanel = ({
   onToggleSubLayer,
 }) => {
   const [onlyActive, setOnlyActive] = useState(false)
-  // Qué área está desplegada. Solo una a la vez: con cuatro áreas abiertas el
-  // panel medía más que la pantalla y había que desplazarse para todo.
-  const [openArea, setOpenArea] = useState("mineria")
+  // Qué áreas están desplegadas. Permite múltiples a la vez o todas con Ctrl+clic.
+  const [openAreas, setOpenAreas] = useState(() => new Set(["mineria"]))
+
+  const toggleArea = (areaId, event) => {
+    if (event?.ctrlKey || event?.metaKey) {
+      setOpenAreas((prev) => {
+        const allOpen = AREAS.every((a) => prev.has(a.id))
+        return allOpen ? new Set() : new Set(AREAS.map((a) => a.id))
+      })
+    } else {
+      setOpenAreas((prev) => {
+        const next = new Set(prev)
+        if (next.has(areaId)) {
+          next.delete(areaId)
+        } else {
+          next.add(areaId)
+        }
+        return next
+      })
+    }
+  }
+
   const [colorTarget, setColorTarget] = useState(null)
   // Qué se está arrastrando y dónde caería si se soltara ahora.
   const [drag, setDrag] = useState(null)
@@ -493,10 +476,10 @@ export const LayerPanel = ({
   })
 
   return (
-    <div className="-mx-4">
+    <div className="-mx-4 text-slate-100">
       {/* Filtro y cuenta */}
-      <div className="mb-3 flex items-center gap-2 px-4">
-        <div className="flex rounded-lg bg-slate-100 p-0.5">
+      <div className="mb-2 flex items-center justify-between gap-2 px-4">
+        <div className="flex rounded-lg bg-zinc-950/80 p-0.5 border border-zinc-800/80">
           {[
             { id: "todas", label: "Todas", value: false },
             { id: "activas", label: "Activas", value: true },
@@ -506,39 +489,38 @@ export const LayerPanel = ({
               type="button"
               onClick={() => setOnlyActive(tab.value)}
               aria-pressed={onlyActive === tab.value}
-              className={`rounded-md px-3 py-[5px] text-xs font-medium transition-colors ${
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
                 onlyActive === tab.value
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/60"
+                  : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
-        <span className="flex-1" />
-        <span className="text-xs text-slate-500">
+        <span className="text-[11px] font-mono text-zinc-400">
           {activeCount === 1 ? "1 encendida" : `${activeCount} encendidas`}
         </span>
       </div>
 
-      <div className="max-h-[420px] overflow-y-auto border-t border-slate-200">
+      <div className="max-h-[calc(100vh-140px)] overflow-y-auto border-t border-zinc-800/60">
         {onlyActive ? (
           // ───────────── Activas: lista plana y ordenable ─────────────
           activeCount === 0 ? (
-            <p className="px-4 py-6 text-center text-xs text-slate-400">
+            <p className="px-4 py-6 text-center text-xs text-zinc-500">
               Enciende una capa para verla aquí.
             </p>
           ) : (
             <>
-              <p className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-[11px] leading-tight text-slate-500">
+              <p className="border-b border-zinc-800/50 bg-zinc-950/60 px-4 py-2 text-[11px] leading-tight text-zinc-400">
                 Arrastra para ordenar. La de arriba se dibuja encima de las demás.
               </p>
               {activeKeys.map((key, index) => (
                 <div key={key} className="relative">
                   {/* Línea de destino mientras se arrastra. */}
                   {drag && drag.to === index && drag.from !== index && (
-                    <span className="pointer-events-none absolute inset-x-3 -top-px z-10 h-0.5 rounded bg-blue-500" />
+                    <span className="pointer-events-none absolute inset-x-3 -top-px z-10 h-0.5 rounded bg-zinc-400" />
                   )}
                   <LayerRow {...filaProps(layerByKey(key), index, true)} />
                 </div>
@@ -546,51 +528,41 @@ export const LayerPanel = ({
             </>
           )
         ) : (
-          // ───────────── Todas: un área abierta a la vez ─────────────
+          // ───────────── Todas: áreas desplegables independientes ─────────────
           AREAS.map((area) => {
             const delArea = THEME_LAYERS.filter((layer) => layer.areaId === area.id)
             const encendidas = delArea.filter((layer) => layers[layer.key]?.on).length
-            const abierta = openArea === area.id
+            const abierta = openAreas.has(area.id)
             const filtrada = areaHasFilter(area.id)
 
             return (
-              <div key={area.id}>
-                {/* El encabezado es el propio botón de plegar. Los dos botones
-                    de la derecha llevan `stopPropagation` porque viven dentro de
-                    él: sin eso, filtrar o buscar cerraría el área de paso. */}
+              <div key={area.id} className="border-b border-zinc-800/50">
                 <div
-                  className={`sticky top-0 z-[2] flex items-center gap-2 border-b border-slate-200 px-4 py-2 transition-colors ${
-                    abierta ? "bg-slate-100" : "bg-slate-50 hover:bg-slate-100"
+                  className={`sticky top-0 z-[2] flex items-center gap-2 px-3 py-2 transition-colors ${
+                    abierta ? "bg-[#141416]" : "bg-[#09090b]/90 hover:bg-[#141416]/70"
                   }`}
                 >
                   <button
                     type="button"
-                    onClick={() => setOpenArea(abierta ? null : area.id)}
+                    onClick={(e) => toggleArea(area.id, e)}
                     aria-expanded={abierta}
-                    // El nombre accesible se pone a mano aunque el botón ya lleve
-                    // el texto del área dentro: si no, los tres botones del
-                    // encabezado —este, filtrar y buscar— se llamarían todos
-                    // "Geología" y no habría forma de distinguirlos, ni para un
-                    // lector de pantalla ni para las pruebas.
                     aria-label={`Capas de ${area.name}`}
+                    title="Clic para desplegar/plegar · Ctrl+Clic para todas"
                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
                     <ChevronRight
-                      className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${
-                        abierta ? "rotate-90" : ""
+                      className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${
+                        abierta ? "rotate-90 text-white" : ""
                       }`}
                     />
-                    <AreaIcon area={area} className="h-3.5 w-3.5 shrink-0" />
-                    <span
-                      className="truncate text-[11px] font-semibold uppercase tracking-[0.06em]"
-                      style={{ color: area.color }}
-                    >
+                    <AreaIcon area={area} className="h-4 w-4 shrink-0 text-zinc-400" />
+                    <span className="truncate text-[13px] font-semibold tracking-wide text-zinc-100">
                       {area.name}
                     </span>
-                    <span className="shrink-0 text-[11px] text-slate-400">{area.source}</span>
+                    <span className="shrink-0 text-[10.5px] font-mono text-zinc-500">{area.source}</span>
                   </button>
 
-                  <span className="shrink-0 text-[11px] tabular-nums text-slate-500">
+                  <span className="shrink-0 font-mono text-[10.5px] text-zinc-400">
                     {encendidas}/{delArea.length}
                   </span>
 
@@ -602,18 +574,20 @@ export const LayerPanel = ({
                     disabled={false}
                     onClick={(el) => onOpenFilters(area.id, el)}
                   />
-                  <HeaderButton
-                    icon={Search}
-                    label={
-                      area.searchable
-                        ? `Buscar en ${area.name}`
-                        : `Buscar en ${area.name}: falta conectar su servicio`
-                    }
-                    color={area.color}
-                    active={false}
-                    disabled={!area.searchable}
-                    onClick={(el) => onOpenSearch(area.id, el)}
-                  />
+                  {onOpenSearch && (
+                    <HeaderButton
+                      icon={Search}
+                      label={
+                        area.searchable
+                          ? `Buscar en ${area.name}`
+                          : `Buscar en ${area.name}: falta conectar su servicio`
+                      }
+                      color={area.color}
+                      active={false}
+                      disabled={!area.searchable}
+                      onClick={(el) => onOpenSearch(area.id, el)}
+                    />
+                  )}
                 </div>
 
                 {abierta &&
@@ -628,10 +602,12 @@ export const LayerPanel = ({
 
       {colorTarget && (
         <ColorPopover
-          color={layers[colorTarget.key].fillColor}
+          color={layers[colorTarget.key]?.fillColor || "#3b82f6"}
+          alpha={layers[colorTarget.key]?.opacity ?? 0.6}
           anchorRect={colorTarget.el.getBoundingClientRect()}
           anchorEl={colorTarget.el}
           onChange={(color) => onColor(colorTarget.key, color, darken(color, 0.35))}
+          onAlphaChange={(alpha) => onOpacity(colorTarget.key, alpha)}
           onClose={() => setColorTarget(null)}
         />
       )}

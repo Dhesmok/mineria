@@ -19,15 +19,20 @@ import { LAYER_PALETTE, darken, readableInk } from "../utils/colors"
  * pareja, así que lo que se ve en el botón es exactamente lo que va a aparecer
  * en el mapa.
  */
-export const ColorPopover = ({ color, onChange, onClose, anchorRect, anchorEl }) => {
+export const ColorPopover = ({
+  color = "#3b82f6",
+  alpha = 1,
+  onChange,
+  onAlphaChange,
+  onClose,
+  anchorRect,
+  anchorEl,
+}) => {
   const panelRef = useRef(null)
   useDismiss(panelRef, anchorEl, onClose)
 
-  // Se posiciona sobre la ventana y no dentro de la lista: la lista tiene
-  // desplazamiento propio y `overflow` recorta cualquier cosa que asome, así que
-  // dentro de ella el selector aparecería cortado por el borde del panel.
-  const top = Math.min((anchorRect?.bottom ?? 0) + 6, window.innerHeight - 210)
-  const left = Math.min(anchorRect?.left ?? 0, window.innerWidth - 232)
+  const top = Math.min((anchorRect?.bottom ?? 0) + 6, window.innerHeight - 260)
+  const left = Math.min(anchorRect?.left ?? 0, window.innerWidth - 240)
 
   return (
     <div
@@ -35,9 +40,17 @@ export const ColorPopover = ({ color, onChange, onClose, anchorRect, anchorEl })
       role="dialog"
       aria-label="Elegir el color de la capa"
       style={{ top, left }}
-      className="fixed z-50 w-56 rounded-lg border border-slate-200 bg-white p-3 shadow-xl"
+      className="fixed z-50 w-60 rounded-xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl"
     >
-      <p className="mb-2 text-[11px] font-medium text-slate-500">Color de la capa</p>
+      <div className="mb-2.5 flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+          Color y opacidad
+        </p>
+        <span
+          className="h-4 w-6 rounded border border-zinc-700/80"
+          style={{ backgroundColor: color, opacity: Math.max(alpha, 0.2) }}
+        />
+      </div>
 
       <div className="grid grid-cols-6 gap-1.5">
         {LAYER_PALETTE.map((swatch) => {
@@ -46,7 +59,7 @@ export const ColorPopover = ({ color, onChange, onClose, anchorRect, anchorEl })
             <button
               key={swatch}
               type="button"
-              onClick={() => onChange(swatch)}
+              onClick={() => onChange?.(swatch)}
               title={swatch}
               aria-label={`Usar el color ${swatch}`}
               aria-pressed={elegido}
@@ -59,16 +72,37 @@ export const ColorPopover = ({ color, onChange, onClose, anchorRect, anchorEl })
         })}
       </div>
 
-      <label className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-2.5 text-[11px] text-slate-500">
-        <input
-          type="color"
-          value={color}
-          onChange={(event) => onChange(event.target.value)}
-          className="h-7 w-9 cursor-pointer rounded border border-slate-200 bg-white p-0.5"
-          aria-label="Elegir un color exacto"
-        />
-        Otro color
-      </label>
+      <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5 text-[11px] text-zinc-400">
+        <span>Color personalizado</span>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="color"
+            value={color && color.startsWith("#") && color.length === 7 ? color : "#3b82f6"}
+            onChange={(event) => onChange?.(event.target.value)}
+            className="h-6 w-8 cursor-pointer rounded border border-zinc-700 bg-zinc-900 p-0.5"
+            aria-label="Elegir un color exacto"
+          />
+          <span className="font-mono text-[10px] text-zinc-300 uppercase">{color}</span>
+        </div>
+      </div>
+
+      {onAlphaChange && (
+        <div className="mt-2.5 border-t border-zinc-800/80 pt-2 text-[11px] text-zinc-400">
+          <div className="mb-1 flex items-center justify-between">
+            <span>Transparencia</span>
+          </div>
+          <input
+            type="range"
+            min="0.05"
+            max="1"
+            step="0.05"
+            value={alpha}
+            onChange={(event) => onAlphaChange(parseFloat(event.target.value))}
+            className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-zinc-200"
+            aria-label="Ajustar transparencia"
+          />
+        </div>
+      )}
     </div>
   )
 }

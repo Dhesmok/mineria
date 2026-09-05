@@ -5,6 +5,7 @@ import {
   supportsLabelToggle,
   visibleBasemapLayers,
 } from "../../utils/basemaps"
+import { HILLSHADE_LAYER_ID } from "../../utils/mapStyles"
 import { readPreferences, writePreferences } from "../../utils/preferences"
 
 /**
@@ -46,6 +47,14 @@ export const useMapInitializationGL = (mapRef, mapInstance = null) => {
         if (!map.getLayer(layerId)) return
         map.setLayoutProperty(layerId, "visibility", visibles.has(layerId) ? "visible" : "none")
       })
+
+      if (map.getLayer(HILLSHADE_LAYER_ID)) {
+        map.setLayoutProperty(
+          HILLSHADE_LAYER_ID,
+          "visibility",
+          id === "relief" ? "visible" : "none",
+        )
+      }
     },
     [mapRef],
   )

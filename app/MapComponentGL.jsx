@@ -1,16 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Map as MapLibreMap, NavigationControl, ScaleControl, setWorkerUrl } from "maplibre-gl"
+import { Map as MapLibreMap, ScaleControl, setWorkerUrl } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 
 import { useMapInitializationGL } from "./hooks/map/useMapInitializationGL"
-import {
-  useTerrainGL,
-  EXAGGERATION_MAX,
-  EXAGGERATION_MIN,
-  PITCH_MAX,
-} from "./hooks/map/useTerrainGL"
+import { useTerrainGL, PITCH_MAX } from "./hooks/map/useTerrainGL"
 import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
 import { useSgcLayersGL } from "./hooks/map/useSgcLayersGL"
 import { useAnhLayersGL } from "./hooks/map/useAnhLayersGL"
@@ -32,10 +27,8 @@ import { whenSized } from "./utils/whenSized"
 import { ANM_LAYERS } from "./utils/anmLayers"
 import { SGC_LAYERS } from "./utils/sgcLayers"
 import { ANH_LAYERS, anhLayerByKey } from "./utils/anhLayers"
-import { BasemapPicker } from "./components/BasemapPicker"
 import { FloatingPanel } from "./components/FloatingPanel"
 import { DrawToolbar } from "./components/DrawToolbar"
-import { MapMenuItem, MapMenuPanel, MapMenuSeparator } from "./components/MapMenu"
 import { ImageExport } from "./components/ImageExport"
 import { TerrainQuery } from "./components/TerrainQuery"
 import { TerrainRasterLegend } from "./components/TerrainRasterLegend"
@@ -43,25 +36,23 @@ import { SgcPanel, activeRasterKeys } from "./components/SgcPanel"
 import { PlanchaPanel } from "./components/PlanchaPanel"
 import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
-import { MapButton, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
+import { Hud3DPopover, MapButton, MapHUD, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
+import { BasemapPicker } from "./components/BasemapPicker"
+import { TerrainMenu } from "./components/TerrainMenu"
+import BlockModel3D from "./components/BlockModel3D"
 import {
-  Blend,
-  Box,
+  Boxes,
   ChevronLeft,
-  Compass,
   Crosshair,
   Download,
+  GripVertical,
   Loader2,
-  ImageDown,
-  MountainSnow,
-  PencilRuler,
-  Spline,
-  Triangle,
-  Layers,
   Mountain,
-  Play,
+  Layers,
+  Map as MapIcon,
+  PencilRuler,
   Square,
-  User,
+  X,
 } from "lucide-react"
 
 /**
@@ -109,7 +100,7 @@ export default function MapComponentGL({
   onSgcState,
   panelOpen = false,
   blendMode = "multiply",
-  onBlendModeChange,
+  onBlendModeChange: _onBlendModeChange,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
@@ -122,13 +113,215 @@ export default function MapComponentGL({
   const [error, setError] = useState(null)
   const [showErrorBanner, setShowErrorBanner] = useState(false)
 
+  // División de pantalla y Modelo de Bloque 3D del Terreno
+  const [blockModelOpen, setBlockModelOpen] = useState(false)
+  const [splitRatio, setSplitRatio] = useState(0.5)
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false)
+  const splitContainerRef = useRef(null)
+
+  const [selectedRectangle, setSelectedRectangle] = useState(null)
+  const [isDrawingBox, setIsDrawingBox] = useState(false)
+  const [boxDragStart, setBoxDragStart] = useState(null)
+  const [boxDragCurrent, setBoxDragCurrent] = useState(null)
+
+  const handleStartDrawBox = useCallback(() => {
+    setBlockModelOpen(false)
+    setIsDrawingBox(true)
+    setBoxDragStart(null)
+    setBoxDragCurrent(null)
+    requestAnimationFrame(() => {
+      mapRef.current?.resize()
+    })
+  }, [])
+
+  const handleBoxPointerDown = useCallback((e) => {
+    if (e.button !== 0) return // solo clic izquierdo
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const lngLat = mapRef.current?.unproject([x, y])
+    if (!lngLat) return
+    setBoxDragStart({ x, y, lng: lngLat.lng, lat: lngLat.lat })
+    setBoxDragCurrent({ x, y, lng: lngLat.lng, lat: lngLat.lat })
+  }, [])
+
+  const handleBoxPointerMove = useCallback((e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const lngLat = mapRef.current?.unproject([x, y])
+    if (!lngLat) return
+    setBoxDragCurrent((prev) => (prev ? { x, y, lng: lngLat.lng, lat: lngLat.lat } : null))
+  }, [])
+
+  const handleBoxPointerUp = useCallback((e) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      // ignore
+    }
+
+    setBoxDragStart((start) => {
+      setBoxDragCurrent((current) => {
+        if (start && current) {
+          const dx = Math.abs(current.x - start.x)
+          const dy = Math.abs(current.y - start.y)
+          if (dx > 20 && dy > 20) {
+            const minLng = Math.min(start.lng, current.lng)
+            const maxLng = Math.max(start.lng, current.lng)
+            const minLat = Math.min(start.lat, current.lat)
+            const maxLat = Math.max(start.lat, current.lat)
+
+            // Vista previa inicial inmediata desde el lienzo
+            let textureDataUrl = null
+            try {
+              const mapCanvas = mapRef.current?.getCanvas()
+              if (mapCanvas) {
+                const cropX = Math.min(start.x, current.x)
+                const cropY = Math.min(start.y, current.y)
+                const offCanvas = document.createElement("canvas")
+                offCanvas.width = 1024
+                offCanvas.height = 1024
+                const ctx = offCanvas.getContext("2d")
+                if (ctx) {
+                  ctx.drawImage(mapCanvas, cropX, cropY, dx, dy, 0, 0, 1024, 1024)
+                  textureDataUrl = offCanvas.toDataURL("image/jpeg", 0.88)
+                }
+              }
+            } catch {
+              // fallback
+            }
+
+            setSelectedRectangle({
+              bbox: [minLng, minLat, maxLng, maxLat],
+              center: [(minLng + maxLng) / 2, (minLat + maxLat) / 2],
+              textureDataUrl,
+            })
+            setIsDrawingBox(false)
+            setBlockModelOpen(true)
+            requestAnimationFrame(() => mapRef.current?.resize())
+          }
+        }
+        return null
+      })
+      return null
+    })
+  }, [])
+
+  const handleSplitPointerDown = useCallback((e) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setIsDraggingSplit(true)
+  }, [])
+
+  const handleSplitPointerMove = useCallback(
+    (e) => {
+      if (!isDraggingSplit || !splitContainerRef.current) return
+      const rect = splitContainerRef.current.getBoundingClientRect()
+      if (rect.width <= 0) return
+      const rawRatio = (e.clientX - rect.left) / rect.width
+      const clamped = Math.max(0.15, Math.min(0.85, rawRatio))
+      setSplitRatio(clamped)
+      mapRef.current?.resize()
+    },
+    [isDraggingSplit],
+  )
+
+  const handleSplitPointerUp = useCallback(
+    (e) => {
+      if (isDraggingSplit) {
+        setIsDraggingSplit(false)
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId)
+        } catch {
+          // ignore
+        }
+        mapRef.current?.resize()
+      }
+    },
+    [isDraggingSplit],
+  )
+
   const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
-  // Qué ventana de la columna está abierta y de qué botón salió. Una sola, y no
-  // un estado por menú: abrir una tiene que cerrar la anterior, y con estados
-  // separados se quedaban dos abiertas, una encima de otra.
-  const [menuAbierto, setMenuAbierto] = useState(null)
-  // El dibujo no es una ventana anclada como las demás: es un panel que se
-  // arrastra y se queda puesto mientras se trabaja, así que su estado es aparte.
+  const [basemapOpen, setBasemapOpen] = useState(false)
+  const basemapBtnRef = useRef(null)
+  const basemapContainerRef = useRef(null)
+  const basemapLeaveTimerRef = useRef(null)
+
+  const handleBasemapMouseEnter = useCallback(() => {
+    if (basemapLeaveTimerRef.current) {
+      clearTimeout(basemapLeaveTimerRef.current)
+      basemapLeaveTimerRef.current = null
+    }
+  }, [])
+
+  const handleBasemapMouseLeave = useCallback(() => {
+    if (!basemapOpen) return
+    if (basemapLeaveTimerRef.current) {
+      clearTimeout(basemapLeaveTimerRef.current)
+    }
+    basemapLeaveTimerRef.current = setTimeout(() => {
+      setBasemapOpen(false)
+    }, 800)
+  }, [basemapOpen])
+
+  useEffect(() => {
+    if (!basemapOpen) return
+    const handleClickOutside = (e) => {
+      if (basemapContainerRef.current && !basemapContainerRef.current.contains(e.target)) {
+        setBasemapOpen(false)
+      }
+    }
+    window.addEventListener("pointerdown", handleClickOutside)
+    return () => {
+      window.removeEventListener("pointerdown", handleClickOutside)
+      if (basemapLeaveTimerRef.current) {
+        clearTimeout(basemapLeaveTimerRef.current)
+      }
+    }
+  }, [basemapOpen])
+
+
+  const [terrainOpen, setTerrainOpen] = useState(false)
+  const terrainBtnRef = useRef(null)
+  const terrainContainerRef = useRef(null)
+  const terrainLeaveTimerRef = useRef(null)
+
+  const handleTerrainMouseEnter = useCallback(() => {
+    if (terrainLeaveTimerRef.current) {
+      clearTimeout(terrainLeaveTimerRef.current)
+      terrainLeaveTimerRef.current = null
+    }
+  }, [])
+
+  const handleTerrainMouseLeave = useCallback(() => {
+    if (!terrainOpen) return
+    if (terrainLeaveTimerRef.current) {
+      clearTimeout(terrainLeaveTimerRef.current)
+    }
+    terrainLeaveTimerRef.current = setTimeout(() => {
+      setTerrainOpen(false)
+    }, 800)
+  }, [terrainOpen])
+
+  useEffect(() => {
+    if (!terrainOpen) return
+    const handleClickOutside = (e) => {
+      if (terrainContainerRef.current && !terrainContainerRef.current.contains(e.target)) {
+        setTerrainOpen(false)
+      }
+    }
+    window.addEventListener("pointerdown", handleClickOutside)
+    return () => {
+      window.removeEventListener("pointerdown", handleClickOutside)
+      if (terrainLeaveTimerRef.current) {
+        clearTimeout(terrainLeaveTimerRef.current)
+      }
+    }
+  }, [terrainOpen])
+
   const [dibujoAbierto, setDibujoAbierto] = useState(false)
   const [dibujoCompacto, setDibujoCompacto] = useState(false)
   const [exportandoImagen, setExportandoImagen] = useState(false)
@@ -156,23 +349,54 @@ export default function MapComponentGL({
   const {
     is3D,
     toggle3D,
-    showHillshade,
-    toggleHillshade,
     exaggeration,
     changeExaggeration,
     bearing,
     changeBearing,
     resetNorth,
-    isSpinning,
-    spin,
     pitch,
     changePitch,
+    isSpinning,
+    spin,
     elevationAt,
     terrainError,
     dismissTerrainError,
     setTerrainForQuery,
     queryTerrain,
   } = useTerrainGL(mapRef, mapInstance)
+
+  const [hud3DOpen, setHud3DOpen] = useState(false)
+  const [is3DPinned, setIs3DPinned] = useState(false)
+  const hud3DContainerRef = useRef(null)
+  const hud3DLeaveTimerRef = useRef(null)
+
+  const handleHud3DMouseEnter = useCallback(() => {
+    if (hud3DLeaveTimerRef.current) {
+      clearTimeout(hud3DLeaveTimerRef.current)
+      hud3DLeaveTimerRef.current = null
+    }
+    if (is3D) {
+      setHud3DOpen(true)
+    }
+  }, [is3D])
+
+  const handleHud3DMouseLeave = useCallback(() => {
+    if (!is3D || is3DPinned) return
+    if (hud3DLeaveTimerRef.current) {
+      clearTimeout(hud3DLeaveTimerRef.current)
+    }
+    hud3DLeaveTimerRef.current = setTimeout(() => {
+      setHud3DOpen(false)
+    }, 700)
+  }, [is3D, is3DPinned])
+
+  useEffect(() => {
+    return () => {
+      if (hud3DLeaveTimerRef.current) {
+        clearTimeout(hud3DLeaveTimerRef.current)
+      }
+    }
+  }, [])
 
   // Si hay algo que enseñar en el lienzo de arriba. Mientras no lo haya, ese
   // lienzo se apaga: son un contexto WebGL y un juego de teselas de más, y en un
@@ -326,7 +550,6 @@ export default function MapComponentGL({
     compassSize,
     changeCompassSize,
     handleLocateUser,
-    handleToggleCompass360,
   } = useGeolocationGL(mapRef, setError, setShowErrorBanner)
 
   const { profileActive, toggleProfile, profile, profileHover, onProfileHover } =
@@ -342,6 +565,12 @@ export default function MapComponentGL({
     terrainRasterProgress,
     terrainRasterCellSize,
   } = useTerrainRasterGL(mapRef, mapInstance)
+
+  useEffect(() => {
+    if (mode && mode !== "simple_select") {
+      setDibujoAbierto(true)
+    }
+  }, [mode])
 
   /**
    * La consulta puntual al terreno: un modo, no un botón de una sola vez.
@@ -371,48 +600,6 @@ export default function MapComponentGL({
     setQueryingTerrain(siguiente)
     setTerrainResult(null)
   }, [])
-
-  /**
-   * Abrir la ventana de un botón, o cerrarla si ya estaba abierta por él.
-   *
-   * Lo segundo importa: sin ello, volver a pulsar el botón la cerraba —por el
-   * clic de fuera— y la abría otra vez en el mismo gesto, así que parecía que no
-   * respondiera.
-   */
-  const abrirMenu = useCallback((id, event) => {
-    const el = event.currentTarget
-    setMenuAbierto((actual) =>
-      actual?.id === id ? null : { id, el, rect: el.getBoundingClientRect() },
-    )
-  }, [])
-
-  const cerrarMenu = useCallback(() => setMenuAbierto(null), [])
-
-  /**
-   * Qué anuncia cada botón de grupo en su distintivo.
-   *
-   * Agrupar botones tiene un precio: lo que está encendido deja de verse. El
-   * distintivo lo devuelve —«Pendiente», «2 figuras»— para que no haya que abrir
-   * la ventana solo para averiguar en qué estado se quedó el mapa.
-   */
-  const terrenoActivo =
-    terrainMode === "slope"
-      ? "Pendiente"
-      : terrainMode === "aspect"
-        ? "Orientación"
-        : queryingTerrain
-          ? "Consulta"
-          : profileActive
-            ? "Perfil"
-            : showHillshade
-              ? "Relieve"
-              : null
-
-  const figurasDibujadas =
-    (drawSummary?.polygons ?? 0) + (drawSummary?.lines ?? 0) + (drawSummary?.points ?? 0)
-  const resumenDibujo = figurasDibujadas
-    ? `${figurasDibujadas} ${figurasDibujadas === 1 ? "figura" : "figuras"}`
-    : null
 
   useEffect(() => {
     if (!mapInstance || !queryingTerrain) return
@@ -484,7 +671,9 @@ export default function MapComponentGL({
     // misma vía que el ratón, así que sale con el mismo símbolo y se borra con
     // la misma papelera.
     mapInstance.addPointAt = addPointAt
-  }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult, addPointAt])
+    mapInstance.chooseBasemap = chooseBasemap
+    mapInstance.startMode = startMode
+  }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult, addPointAt, chooseBasemap, startMode])
 
   /**
    * El aviso de "mapa listo", por referencia.
@@ -560,10 +749,6 @@ export default function MapComponentGL({
         attributionControl: { compact: true },
       })
 
-      // visualizePitch inclina la brújula junto con el mapa. Todavía no sirve de
-      // nada porque el mapa está plano, pero es la pieza que en la Fase 4 le
-      // indica al usuario que está mirando el terreno en 3D.
-      map.addControl(new NavigationControl({ visualizePitch: true }), "top-right")
       map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
 
       mapRef.current = map
@@ -619,44 +804,59 @@ export default function MapComponentGL({
   }, [])
 
   return (
-    <>
-      {/* h-full w-full además de absolute inset-0, y no es redundante: al
-          construir el mapa, MapLibre le pone al contenedor su clase
-          .maplibregl-map, cuyo CSS declara `position: relative`. Esa regla pisa
-          a la clase `absolute` de Tailwind —las dos tienen la misma
-          especificidad y gana la que se cargue después—, con lo que `inset-0`
-          deja de dimensionar nada y el mapa colapsaba a 0 px de alto. Con el
-          alto y el ancho explícitos el contenedor llena a su padre gane quien
-          gane. Leaflet no sufría esto porque su CSS no toca `position` en el
-          contenedor. */}
-      <div ref={containerRef} className="absolute inset-0 h-full w-full z-0" />
-
-      {/* El lienzo de arriba, donde van las capas que se funden con el relieve.
-          Son **dos divs y no uno**, y es por la misma regla del comentario de
-          arriba: `.maplibregl-map` declara `position: relative` y pisa al
-          `absolute` de Tailwind. Al primer mapa eso no le hacía daño —es el
-          primero del flujo, así que aterriza igual en la esquina—, pero el
-          segundo se colocaba **detrás del primero en el flujo normal**, es
-          decir 900 px más abajo: fuera de la pantalla entera. El síntoma era
-          que ni la geología del SGC, ni los hidrocarburos de la ANH, ni la
-          plancha se veían nunca, mientras todo lo medible decía que estaban
-          bien —capa visible, imagen cargada, opacidad 0,6—. Se vio mirando
-          dónde caía el lienzo, no qué contenía.
-          Con el envoltorio, quien coloca es un div que MapLibre no toca, y el
-          de dentro se queda con el `position: relative` que quiera. */}
+    <div ref={splitContainerRef} className="relative h-full w-full overflow-hidden flex select-none">
+      {/* Vista Mapa Izquierda (MapLibre 2D/3D) */}
       <div
-        className="pointer-events-none absolute inset-0 z-[1] h-full w-full"
-        style={{
-          mixBlendMode: blendMode === "multiply" ? "multiply" : "normal",
-          // Escondido mientras no haya nada temático que enseñar: es un contexto
-          // WebGL y un juego de teselas de relieve de más, y en un teléfono eso
-          // se paga. Lo pone React al pintar y no un efecto a mano, para que el
-          // tamaño ya sea el bueno cuando los efectos vayan a medirlo.
-          display: hasActiveOverlayLayers ? "block" : "none",
-        }}
+        className="relative h-full overflow-hidden"
+        style={{ width: blockModelOpen ? `${splitRatio * 100}%` : "100%" }}
       >
-        <div ref={overlayContainerRef} className="h-full w-full" />
-      </div>
+        <div
+          ref={containerRef}
+          className={`absolute inset-0 h-full w-full z-0 ${is3D ? "mode-3d" : "mode-2d"}`}
+        />
+        <div
+          className="pointer-events-none absolute inset-0 z-[1] h-full w-full"
+          style={{
+            mixBlendMode: blendMode === "multiply" ? "multiply" : "normal",
+            display: hasActiveOverlayLayers ? "block" : "none",
+          }}
+        >
+          <div ref={overlayContainerRef} className="h-full w-full" />
+        </div>
+
+        {/* Capa interactiva para dibujar el rectángulo del bloque 3D */}
+        {isDrawingBox && (
+          <div
+            onWheel={(e) => {
+              // Permitir al usuario hacer zoom libre con la rueda del ratón antes o durante la selección
+              const canvas = mapRef.current?.getCanvas()
+              if (canvas) {
+                canvas.dispatchEvent(new WheelEvent("wheel", e.nativeEvent))
+              }
+            }}
+            onPointerDown={handleBoxPointerDown}
+            onPointerMove={handleBoxPointerMove}
+            onPointerUp={handleBoxPointerUp}
+            className="absolute inset-0 z-30 cursor-crosshair select-none touch-none bg-black/15"
+          >
+            {boxDragStart && boxDragCurrent && (
+              <div
+                className="absolute border-2 border-emerald-400 bg-emerald-500/25 rounded shadow-[0_0_20px_rgba(16,185,129,0.4)] pointer-events-none"
+                style={{
+                  left: Math.min(boxDragStart.x, boxDragCurrent.x),
+                  top: Math.min(boxDragStart.y, boxDragCurrent.y),
+                  width: Math.abs(boxDragCurrent.x - boxDragStart.x),
+                  height: Math.abs(boxDragCurrent.y - boxDragStart.y),
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* CONTROLES DEL MAPA (FIJOS AL VISOR IZQUIERDO) */}
+        <div className="pointer-events-none absolute inset-0 z-40 overflow-hidden">
+
+
 
       {/* Los controles del mapa van todos a la derecha y el panel de consulta se
           queda con la izquierda entera. Estaban los dos a la izquierda y se
@@ -680,78 +880,11 @@ export default function MapComponentGL({
         //
         // Alineado abajo (`items-end`) para que el panel salga a la altura del
         // último botón y no flotando a media pantalla.
-        className={`absolute bottom-16 right-2 z-10 items-end gap-2 md:bottom-10 md:right-4 ${
+        className={`pointer-events-auto absolute bottom-16 right-2 z-10 items-end gap-2 md:bottom-10 md:right-4 ${
           panelOpen ? "hidden md:flex" : "flex"
         }`}
       >
         <div className="flex flex-col items-end gap-2">
-          {is3D && (
-            <FloatingPanel title="Opciones 3D" icon={Box}>
-              <div className="space-y-1.5">
-                <SliderRow
-                  id="exageracion"
-                  label="Exageración"
-                  title="Solo afecta a cómo se ve: no cambia alturas ni áreas"
-                  min={EXAGGERATION_MIN}
-                  max={EXAGGERATION_MAX}
-                  step="0.1"
-                  value={exaggeration}
-                  display={`${exaggeration.toFixed(1)}×`}
-                  onChange={changeExaggeration}
-                />
-                {/* Girar e inclinar sin pelearse con la brújula de 29 px que
-                    trae MapLibre, y sin tener que saber el atajo de Ctrl. */}
-                <SliderRow
-                  id="inclinacion"
-                  label="Inclinación"
-                  min={0}
-                  max={PITCH_MAX}
-                  step="1"
-                  value={Math.round(pitch)}
-                  display={`${Math.round(pitch)}°`}
-                  onChange={changePitch}
-                />
-                <SliderRow
-                  id="giro"
-                  label="Giro"
-                  min={0}
-                  max={360}
-                  step="1"
-                  value={Math.round((bearing + 360) % 360)}
-                  display={`${Math.round((bearing + 360) % 360)}°`}
-                  onChange={changeBearing}
-                />
-                <div className="flex items-center gap-2 pt-0.5">
-                  {/* Play y stop en el mismo sitio: es un único estado con dos
-                      caras, no dos acciones distintas. */}
-                  <button
-                    type="button"
-                    onClick={spin}
-                    aria-pressed={isSpinning}
-                    title={isSpinning ? "Detener el giro" : "Girar el mapa solo, en bucle"}
-                    className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
-                      isSpinning
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    {isSpinning ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                    {isSpinning ? "Detener" : "Girar solo"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetNorth}
-                    title="Volver a dejar el norte hacia arriba"
-                    className="flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-blue-600 hover:text-blue-800"
-                  >
-                    <Compass className="h-3 w-3" />
-                    Norte arriba
-                  </button>
-                </div>
-              </div>
-            </FloatingPanel>
-          )}
-
           {/* Las herramientas de dibujo. Panel flotante y no ventana anclada:
               se usan mientras se mira el mapa, y una ventana que se cierra al
               primer clic fuera obligaba a reabrirla para cambiar de herramienta
@@ -797,7 +930,7 @@ export default function MapComponentGL({
 
           {/* 250 px es mucho en un celular y poco en un monitor grande. */}
           {isCompassActive && (
-            <div className="rounded-md bg-white px-3 py-2 shadow-md">
+            <div className="rounded-xl border border-zinc-800 bg-[#09090b]/95 px-3 py-2 text-zinc-100 shadow-2xl backdrop-blur-2xl">
               <SliderRow
                 id="tamano-brujula"
                 label="Brújula"
@@ -901,119 +1034,222 @@ export default function MapComponentGL({
           </MapButton>
         )}
 
-        {/* Las herramientas de dibujo. Estaban sueltas sobre el mapa, en una
-            esquina distinta según el tamaño de la pantalla; ahora salen de aquí,
-            que es donde el usuario ya busca lo demás. */}
-        <MapButton
-          onClick={() => setDibujoAbierto((abierto) => !abierto)}
-          active={dibujoAbierto || mode.startsWith("draw_")}
-          icon={PencilRuler}
-          badge={resumenDibujo}
-          title="Dibujar y medir polígonos, líneas y puntos"
-        >
-          Dibujo
-        </MapButton>
-
-        {/* Relieve, pendiente, orientación y la consulta de cota eran cuatro
-            botones seguidos que hacen lo mismo: mirar el terreno. Juntos ocupaban
-            casi media columna en un teléfono. El 3D se queda fuera a propósito:
-            es un interruptor que se usa a cada rato y esconderlo tras dos toques
-            sería peor que el problema que se está resolviendo. */}
-        <MapButton
-          onClick={(event) => abrirMenu("terreno", event)}
-          active={menuAbierto?.id === "terreno" || Boolean(terrenoActivo)}
-          icon={Mountain}
-          badge={terrenoActivo}
-          title="Relieve, pendiente, orientación y consulta de cota"
-        >
-          Terreno
-        </MapButton>
-
-        <MapButton
-          onClick={toggle3D}
-          active={is3D}
-          aria-pressed={is3D}
-          icon={Box}
-          title="Levantar el terreno e inclinar la cámara"
-        >
-          {is3D ? "Volver a 2D" : "Ver en 3D"}
-        </MapButton>
-
-        <MapButton
-          onClick={() => onBlendModeChange?.(blendMode === "multiply" ? "normal" : "multiply")}
-          active={blendMode === "multiply"}
-          aria-pressed={blendMode === "multiply"}
-          icon={Blend}
-          badge={blendMode === "multiply" ? "MULT" : "NORM"}
-          title={
-            blendMode === "multiply"
-              ? "Modo de fusión: Multiplicar (funde capas temáticas con el relieve). Clic para cambiar a Normal"
-              : "Modo de fusión: Normal (transparencia simple). Clic para cambiar a Multiplicar"
-          }
-        >
-          {blendMode === "multiply" ? "Multiplicar" : "Fusión normal"}
-        </MapButton>
-
-        <MapButton
-          onClick={handleLocateUser}
-          active={hasLocated}
-          icon={Crosshair}
-          title="Mostrar tu ubicación con el GPS"
-          className={isLocating ? "animate-pulse [&_svg]:animate-spin" : ""}
-        >
-          {isLocating ? "Ubicando…" : hasLocated ? "Ubicación activa" : "Activar GPS"}
-        </MapButton>
-
-        {/* La brújula 360° se dibuja encima del marcador del GPS: sin ubicación
-            no hay dónde ponerla. Estaba siempre visible y pulsarla sin el GPS
-            encendido no hacía nada, que es la peor respuesta posible. */}
-        {hasLocated && (
-          <MapButton
-            onClick={handleToggleCompass360}
-            active={isCompassActive}
-            aria-pressed={isCompassActive}
-            icon={Compass}
-            title="Girar una rosa de los vientos con la orientación del celular"
+        {/* Controles de navegación y HUD unificados del mapa */}
+        <div className="flex flex-col items-end gap-2">
+          {/* Botón Bloque 3D del Terreno */}
+          <button
+            type="button"
+            onClick={() => {
+              if (blockModelOpen) {
+                setBlockModelOpen(false)
+                requestAnimationFrame(() => {
+                  mapRef.current?.resize()
+                  overlayMapRef.current?.resize()
+                })
+              } else {
+                if (selectedRectangle) {
+                  setBlockModelOpen(true)
+                  requestAnimationFrame(() => {
+                    mapRef.current?.resize()
+                    overlayMapRef.current?.resize()
+                  })
+                } else {
+                  handleStartDrawBox()
+                }
+              }
+            }}
+            title={
+              blockModelOpen
+                ? "Cerrar bloque 3D del terreno"
+                : isDrawingBox
+                ? "Dibujando rectángulo sobre el mapa..."
+                : "Generar bloque 3D del terreno (dibuja un rectángulo)"
+            }
+            aria-label="Bloque 3D del terreno"
+            aria-expanded={blockModelOpen}
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+              blockModelOpen || isDrawingBox
+                ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
+                : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            }`}
           >
-            {isCompassActive ? "Ocultar 360°" : "Brújula 360°"}
-          </MapButton>
-        )}
+            <Boxes className="h-4.5 w-4.5" />
+          </button>
 
-        <MapButton
-          onClick={() => setExportandoImagen(true)}
-          icon={ImageDown}
-          title="Guardar el mapa como imagen, sin los controles"
-        >
-          Exportar imagen
-        </MapButton>
+          {/* Botón Análisis de Terreno */}
+          <div
+            ref={terrainContainerRef}
+            onMouseEnter={handleTerrainMouseEnter}
+            onMouseLeave={handleTerrainMouseLeave}
+            className="relative"
+          >
+            <button
+              ref={terrainBtnRef}
+              type="button"
+              onClick={() => {
+                if (terrainLeaveTimerRef.current) {
+                  clearTimeout(terrainLeaveTimerRef.current)
+                  terrainLeaveTimerRef.current = null
+                }
+                setTerrainOpen((v) => !v)
+              }}
+              title="Análisis de terreno (pendiente, orientación, corte topográfico, cota)"
+              aria-label="Análisis de terreno"
+              aria-expanded={terrainOpen}
+              className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+                terrainOpen || Boolean(terrainMode) || profileActive || queryingTerrain
+                  ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
+                  : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              }`}
+            >
+              <Mountain className="h-4.5 w-4.5" />
+            </button>
+            <div
+              className={`absolute right-full mr-3 bottom-0 z-30 origin-bottom-right transition-all duration-200 ease-out ${
+                terrainOpen
+                  ? "scale-100 opacity-100 translate-x-0 pointer-events-auto"
+                  : "scale-75 opacity-0 translate-x-4 pointer-events-none"
+              }`}
+            >
+              <TerrainMenu
+                terrainMode={terrainMode}
+                onChooseTerrainMode={chooseTerrainMode}
+                profileActive={profileActive}
+                onToggleProfile={toggleProfile}
+                queryingTerrain={queryingTerrain}
+                onToggleQuery={toggleTerrainQuery}
+                onClose={() => setTerrainOpen(false)}
+              />
+            </div>
+          </div>
 
-        {/* Se llamaba «Satélite» y alternaba entre dos fondos. Con cinco, un
-            botón que va rotando obliga a pasar por todos para llegar al que se
-            quiere, así que ahora abre una lista.
+          {/* Botón Mapa Base */}
+          <div
+            ref={basemapContainerRef}
+            onMouseEnter={handleBasemapMouseEnter}
+            onMouseLeave={handleBasemapMouseLeave}
+            className="relative"
+          >
+            <button
+              ref={basemapBtnRef}
+              type="button"
+              onClick={() => {
+                if (basemapLeaveTimerRef.current) {
+                  clearTimeout(basemapLeaveTimerRef.current)
+                  basemapLeaveTimerRef.current = null
+                }
+                setBasemapOpen((v) => !v)
+              }}
+              title="Cambiar mapa base (6 estilos disponibles)"
+              aria-label="Mapa base"
+              aria-expanded={basemapOpen}
+              className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+                basemapOpen
+                  ? "border-white/40 bg-zinc-800 text-white"
+                  : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              }`}
+            >
+              <MapIcon className="h-4.5 w-4.5" />
+            </button>
+            <div
+              className={`absolute right-full mr-3 bottom-0 z-30 origin-bottom-right transition-all duration-200 ease-out ${
+                basemapOpen
+                  ? "scale-100 opacity-100 translate-x-0 pointer-events-auto"
+                  : "scale-75 opacity-0 translate-x-4 pointer-events-none"
+              }`}
+            >
+              <BasemapPicker
+                current={basemap}
+                showLabels={showLabels}
+                onChoose={(id) => {
+                  chooseBasemap(id)
+                }}
+                onClose={() => setBasemapOpen(false)}
+              />
+            </div>
+          </div>
 
-            Va abajo del todo, pegado a la firma: el fondo se elige una vez al
-            empezar y no se vuelve a tocar, mientras que relieve, 3D y GPS se
-            encienden y apagan a cada rato. Lo que más se usa queda más cerca
-            del pulgar. */}
-        <MapButton
-          onClick={(event) => abrirMenu("fondo", event)}
-          active={menuAbierto?.id === "fondo"}
-          icon={Layers}
-          badge={basemapById(basemap).short}
-          title="Elegir el mapa de fondo"
-        >
-          Mapa base
-        </MapButton>
+          {/* Botón GPS */}
+          <button
+            type="button"
+            onClick={handleLocateUser}
+            title={isLocating ? "Ubicando…" : hasLocated ? "Ubicación GPS activa" : "Activar GPS"}
+            aria-label="Ubicación GPS"
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-800/90 bg-[#09090b]/90 shadow-2xl backdrop-blur-2xl transition-all ${
+              hasLocated
+                ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300"
+                : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            }`}
+          >
+            <Crosshair className={`h-4.5 w-4.5 ${isLocating ? "animate-spin" : ""}`} />
+          </button>
 
-        <MapButton
-          onClick={() =>
-            window.open("https://www.linkedin.com/in/fabio-espinosa/", "_blank", "noopener,noreferrer")
-          }
-          icon={User}
-          title="Perfil del autor en LinkedIn"
-        >
-          Fabio A. Espinosa
-        </MapButton>
+          {/* MapHUD: Norte, Zoom +, Zoom -, 3D y Popover de opciones 3D */}
+          <div
+            ref={hud3DContainerRef}
+            onMouseEnter={handleHud3DMouseEnter}
+            onMouseLeave={handleHud3DMouseLeave}
+            className="relative flex items-center"
+          >
+            {is3D && (
+              <div
+                className={`absolute right-full mr-3 bottom-0 z-30 max-h-[calc(100vh-5rem)] overflow-y-auto origin-bottom-right transition-all duration-200 ease-out ${
+                  hud3DOpen
+                    ? "scale-100 opacity-100 translate-x-0 pointer-events-auto"
+                    : "scale-75 opacity-0 translate-x-4 pointer-events-none"
+                }`}
+              >
+                <Hud3DPopover
+                  pitch={pitch}
+                  exaggeration={exaggeration}
+                  bearing={bearing}
+                  isSpinning={isSpinning}
+                  isPinned={is3DPinned}
+                  onTogglePin={() => setIs3DPinned((p) => !p)}
+                  onToggleSpin={spin}
+                  onChangePitch={changePitch}
+                  onChangeExaggeration={changeExaggeration}
+                  onChangeBearing={changeBearing}
+                  onRotateBy={(delta) => {
+                    if (!mapRef.current) return
+                    const current = mapRef.current.getBearing()
+                    mapRef.current.easeTo({
+                      bearing: current + delta,
+                      duration: 600,
+                      easing: (t) => t * (2 - t),
+                    })
+                  }}
+                  onResetNorth={resetNorth}
+                  onClose={() => setHud3DOpen(false)}
+                  onMouseEnter={handleHud3DMouseEnter}
+                  onMouseLeave={handleHud3DMouseLeave}
+                />
+              </div>
+            )}
+            <MapHUD
+              bearing={bearing}
+              is3D={is3D}
+              hud3DOpen={hud3DOpen}
+              onResetNorth={resetNorth}
+              onZoomIn={() => mapRef.current?.zoomIn?.({ duration: 300 })}
+              onZoomOut={() => mapRef.current?.zoomOut?.({ duration: 300 })}
+              onMouseEnter3D={handleHud3DMouseEnter}
+              onToggle3D={() => {
+                if (!is3D) {
+                  toggle3D()
+                  setHud3DOpen(true)
+                } else {
+                  if (!hud3DOpen) {
+                    setHud3DOpen(true)
+                  } else {
+                    toggle3D()
+                    setHud3DOpen(false)
+                  }
+                }
+              }}
+            />
+          </div>
+        </div>
         </div>
       </div>
 
@@ -1030,6 +1266,26 @@ export default function MapComponentGL({
       )}
 
       <CursorCoordinates map={mapInstance} crsId={coordinateSystem} />
+
+      {/* Banner de instrucción para dibujar el rectángulo del bloque 3D */}
+      {isDrawingBox && (
+        <div className="pointer-events-auto fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full border border-emerald-500/50 bg-[#09090b]/95 px-5 py-2.5 text-xs sm:text-sm font-medium text-emerald-300 shadow-2xl backdrop-blur-2xl animate-in fade-in slide-in-from-top-4">
+          <Square className="h-4 w-4 text-emerald-400 shrink-0" />
+          <span>Haz clic y arrastra sobre el mapa para definir el área del bloque 3D</span>
+          <button
+            type="button"
+            onClick={() => {
+              setIsDrawingBox(false)
+              setBoxDragStart(null)
+              setBoxDragCurrent(null)
+            }}
+            className="ml-2 rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+            title="Cancelar selección"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {showRotateHint && <RotateHint onClose={hideRotateHint} />}
 
@@ -1056,74 +1312,7 @@ export default function MapComponentGL({
         />
       )}
 
-      {menuAbierto?.id === "fondo" && (
-        <BasemapPicker
-          current={basemap}
-          showLabels={showLabels}
-          anchorRect={menuAbierto.rect}
-          anchorEl={menuAbierto.el}
-          onChoose={chooseBasemap}
-          onClose={cerrarMenu}
-        />
-      )}
 
-      {/* Las cuatro formas de mirar el terreno, juntas.
-          Pendiente y orientación se excluyen entre sí —las pinta la misma capa—,
-          así que `chooseTerrainMode` con el modo que ya está puesto lo apaga. */}
-      {menuAbierto?.id === "terreno" && (
-        <MapMenuPanel
-          label="Terreno"
-          anchorRect={menuAbierto.rect}
-          anchorEl={menuAbierto.el}
-          onClose={cerrarMenu}
-        >
-          <MapMenuItem
-            icon={Mountain}
-            name="Relieve"
-            hint="Sombrear los cerros sobre el mapa plano"
-            active={showHillshade}
-            onClick={toggleHillshade}
-          />
-          <MapMenuItem
-            icon={Triangle}
-            name="Pendiente"
-            hint="Pintar la inclinación del terreno por colores"
-            active={terrainMode === "slope"}
-            onClick={() => chooseTerrainMode("slope")}
-          />
-          <MapMenuItem
-            icon={Compass}
-            name="Orientación"
-            hint="Pintar hacia dónde mira cada ladera"
-            active={terrainMode === "aspect"}
-            onClick={() => chooseTerrainMode("aspect")}
-          />
-          <MapMenuSeparator />
-          <MapMenuItem
-            icon={MountainSnow}
-            name="Consultar un punto"
-            hint="Pulsa en el mapa y lee cota, pendiente y orientación"
-            active={queryingTerrain}
-            onClick={toggleTerrainQuery}
-          />
-          {/* Esta cierra la ventana al elegirla, a diferencia de las demás. No
-              es un capricho: deja el mapa en modo dibujo, y la ventana se queda
-              encima de donde hay que trazar la línea. Además se cerraría con
-              Escape, que en modo dibujo **también cancela el trazo** — así que
-              el usuario que la cerrara de esa forma se quedaría con el perfil
-              encendido y sin poder dibujar, sin entender por qué. */}
-          <MapMenuItem
-            icon={Spline}
-            name="Perfil longitudinal"
-            hint="Dibuja una línea y mira el corte del terreno"
-            active={profileActive}
-            onClick={() => {
-              toggleProfile()
-              cerrarMenu()
-            }}
-          />
-        </MapMenuPanel>
-      )}
 
       {/* El perfil ocupa el ancho de la pantalla, no la columna de la derecha:
           es una gráfica de distancia, y en una columna de 256 px un recorrido de
@@ -1168,7 +1357,7 @@ export default function MapComponentGL({
       </div>
 
       {error && showErrorBanner && (
-        <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 z-10 flex items-center justify-between gap-2">
+        <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 z-10 flex items-center justify-between gap-2 pointer-events-auto">
           <span className="text-sm">{error}</span>
           <button
             type="button"
@@ -1179,76 +1368,197 @@ export default function MapComponentGL({
           </button>
         </div>
       )}
+        </div>
+      </div>
+
+      {/* Divisor Arrastrable (Split Divider) */}
+      {blockModelOpen && (
+        <div
+          onPointerDown={handleSplitPointerDown}
+          onPointerMove={handleSplitPointerMove}
+          onPointerUp={handleSplitPointerUp}
+          className="relative w-2 bg-zinc-950 border-x border-zinc-800 hover:border-emerald-500 cursor-col-resize flex items-center justify-center transition-colors z-30 select-none touch-none group shrink-0"
+          title="Arrastrar para ajustar la división de pantalla"
+        >
+          <div className="absolute w-5 h-10 rounded-full bg-zinc-800 border border-zinc-700 group-hover:border-emerald-500 flex items-center justify-center shadow-lg transition-colors">
+            <GripVertical className="h-3.5 w-3.5 text-zinc-400 group-hover:text-emerald-300" />
+          </div>
+        </div>
+      )}
+
+      {/* Vista Bloque 3D del Terreno Derecha */}
+      {blockModelOpen && (
+        <div
+          className="relative h-full overflow-hidden shrink-0"
+          style={{ width: `${(1 - splitRatio) * 100}%` }}
+        >
+          <BlockModel3D
+            isOpen={blockModelOpen}
+            onClose={() => {
+              setBlockModelOpen(false)
+              requestAnimationFrame(() => {
+                mapRef.current?.resize()
+                overlayMapRef.current?.resize()
+              })
+            }}
+            rectangle={selectedRectangle}
+            elevationAt={elevationAt}
+            map={mapRef.current}
+            basemap={basemap}
+            onRedrawRectangle={handleStartDrawBox}
+            expedientCode={expedientCode}
+            isMaximized={splitRatio <= 0.05}
+            onToggleMaximize={() => {
+              setSplitRatio((r) => (r <= 0.05 ? 0.5 : 0.02))
+              requestAnimationFrame(() => {
+                mapRef.current?.resize()
+                overlayMapRef.current?.resize()
+              })
+            }}
+          />
+        </div>
+      )}
 
       <style jsx global>{`
         /* Mismas etiquetas que el visor Leaflet: texto blanco con contorno negro,
            que es lo único legible tanto sobre el mapa claro como sobre satélite. */
         .map-label {
-          background: none;
-          border: none;
-          box-shadow: none;
+          background: none !important;
+          border: none !important;
+          box-shadow: none !important;
           pointer-events: none;
         }
-        .map-label div {
-          font-size: 14px;
-          font-weight: bold;
-          color: white;
+        /* En 2D: Rótulos limpios con halo cartográfico nítido sin cuadrado negro */
+        .mode-2d .map-label div {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          color: #ffffff;
+          background: transparent !important;
+          border: none !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          padding: 0 !important;
           text-shadow:
-            -1px -1px 0 #000,
-             1px -1px 0 #000,
-            -1px  1px 0 #000,
-             1px  1px 0 #000;
+            -1px -1px 0 #000000,
+             1px -1px 0 #000000,
+            -1px  1px 0 #000000,
+             1px  1px 0 #000000,
+             0    2px 4px rgba(0, 0, 0, 0.95);
+          white-space: nowrap;
+        }
+        /* En 3D: Chip flotante con efecto cristal y borde sutil */
+        .mode-3d .map-label div {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          color: #f4f4f5;
+          background: rgba(9, 9, 11, 0.88);
+          border: 1px solid rgba(63, 63, 70, 0.8);
+          border-radius: 6px;
+          padding: 2px 7px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
           white-space: nowrap;
         }
         .maplibregl-popup-content {
-          background: rgba(255, 255, 255, 0.95);
-          color: #333;
-          font-size: 13px;
-          line-height: 1.35;
-          border-radius: 4px;
-          max-height: 400px;
+          background: rgba(9, 9, 11, 0.95) !important;
+          color: #f4f4f5 !important;
+          font-size: 12px !important;
+          line-height: 1.4 !important;
+          border-radius: 16px !important;
+          border: 1px solid rgba(39, 39, 42, 0.8) !important;
+          box-shadow: 0 20px 45px -8px rgba(0, 0, 0, 0.85) !important;
+          backdrop-filter: blur(16px) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
+          max-height: 420px;
           overflow-y: auto;
-          padding: 10px 12px;
+          padding: 14px 16px !important;
+        }
+        .popup-header-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 6px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(63, 63, 70, 0.5);
+        }
+        .popup-type-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 2px 8px;
+          border-radius: 9999px;
+          font-size: 10px;
+          font-weight: 600;
+          background: rgba(16, 185, 129, 0.12);
+          color: #6ee7b7;
+          border: 1px solid rgba(16, 185, 129, 0.25);
+          letter-spacing: 0.02em;
+        }
+        .popup-code-title {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 11px;
+          font-weight: 700;
+          color: #e4e4e7;
         }
         .maplibregl-popup-content h3 {
-          font-size: 15px;
-          font-weight: bold;
-          margin-bottom: 6px;
-          border-bottom: 1px solid #ccc;
-          padding-bottom: 4px;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: #a1a1aa !important;
+          margin-bottom: 6px !important;
+          margin-top: 2px !important;
         }
-        /* Un filete tenue entre dato y dato. Sin él las trece filas se leían
-           como un bloque macizo y había que ir contando con el dedo para no
-           saltarse una; con él, cada renglón es una unidad y el ojo salta de una
-           a otra sin perderse. El aire va dentro de la fila y no entre filas,
-           para que la separación se note sin alargar la ficha. */
+        /* Un filete tenue entre dato y dato con alto contraste y legibilidad */
         .maplibregl-popup-content p {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: 10px;
           margin: 0;
-          padding: 4px 0;
-          border-bottom: 1px solid #eef2f6;
+          padding: 4px 0 !important;
+          border-bottom: 1px solid rgba(39, 39, 42, 0.4) !important;
+          color: #f4f4f5 !important;
+          font-size: 11.5px !important;
+        }
+        .maplibregl-popup-content .popup-row-na {
+          opacity: 0.4;
         }
         .maplibregl-popup-content p:last-child {
-          border-bottom: none;
-          padding-bottom: 0;
+          border-bottom: none !important;
+          padding-bottom: 0 !important;
         }
-        /* La equis de cerrar, con tamaño de dedo.
-           MapLibre la dibuja pensada para un ratón, y en un teléfono la ficha
-           tapa media pantalla: la única forma de quitarla de en medio es
-           acertarle a ese cuadrito. Se agranda solo donde el puntero es grueso
-           —un dedo—, para no engordarla en el escritorio, donde ya se acierta. */
+        .maplibregl-popup-tip {
+          border-top-color: rgba(9, 9, 11, 0.95) !important;
+          border-bottom-color: rgba(9, 9, 11, 0.95) !important;
+        }
+        .maplibregl-popup-close-button {
+          color: #a1a1aa !important;
+          padding: 4px 8px !important;
+          font-size: 16px !important;
+          border-radius: 8px !important;
+          transition: color 0.15s, background 0.15s;
+        }
+        .maplibregl-popup-close-button:hover {
+          color: #ffffff !important;
+          background: rgba(255, 255, 255, 0.1) !important;
+        }
         @media (pointer: coarse) {
           .maplibregl-popup-close-button {
-            width: 44px;
-            height: 44px;
-            font-size: 22px;
-            line-height: 44px;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            line-height: 40px;
           }
         }
-        /* La etiqueta del dato, en gris, y el valor en negro: así se distinguen
-           de un vistazo sin necesidad de más líneas. */
         .maplibregl-popup-content p strong {
-          font-weight: 500;
-          color: #64748b;
+          font-weight: 600 !important;
+          color: #a1a1aa !important;
         }
         /* Esta regla estaba puesta sobre todos los globos y era la causa de que
            la ficha de un expediente saliera con un renglón en blanco entre cada
@@ -1375,6 +1685,6 @@ export default function MapComponentGL({
           }
         }
       `}</style>
-    </>
+    </div>
   )
 }

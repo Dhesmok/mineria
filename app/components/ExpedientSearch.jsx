@@ -30,6 +30,59 @@ import { likePrefixPattern } from "../utils/sqlText"
 const MIN_SUGGESTION_LENGTH = 3
 const MAX_SUGGESTIONS = 10
 
+export async function queryExpedientSuggestions(query, signal) {
+  const patron = likePrefixPattern(query, MIN_SUGGESTION_LENGTH)
+  if (!patron) return []
+  const where = `(UPPER(TENURE_ID) LIKE '${patron}' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${patron}')`
+  const consulta = `query?where=${encodeURIComponent(where)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`
+
+  const layerNumbers = await findTenureLayerNumbers()
+  if (signal?.aborted) return []
+
+  const sources = [
+    ...(layerNumbers[TITLE_LAYER_NAME] !== undefined
+      ? [{ layerName: "Título", url: `${tenureLayerUrl(layerNumbers[TITLE_LAYER_NAME])}/${consulta}` }]
+      : []),
+    ...(layerNumbers[REQUEST_LAYER_NAME] !== undefined
+      ? [{ layerName: "Solicitud", url: `${tenureLayerUrl(layerNumbers[REQUEST_LAYER_NAME])}/${consulta}` }]
+      : []),
+    {
+      layerName: "Título",
+      url: `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/${consulta}`,
+    },
+    {
+      layerName: "Solicitud",
+      url: `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/${consulta}`,
+    },
+  ]
+
+  const settled = await Promise.allSettled(
+    sources.map((s) => fetchArcgisJson(s.url, { signal })),
+  )
+  if (signal?.aborted) return []
+
+  const suggestions = []
+  const seenCodes = new Set()
+
+  settled.forEach((result, idx) => {
+    if (result.status !== "fulfilled" || !result.value?.features) return
+    const layerName = sources[idx].layerName
+    for (const f of result.value.features) {
+      const code = f.attributes?.CODIGO_EXPEDIENTE || f.attributes?.TENURE_ID
+      if (code && !seenCodes.has(code)) {
+        seenCodes.add(code)
+        suggestions.push({ code, layerName })
+      }
+    }
+  })
+
+  if (settled.every((r) => r.status === "rejected")) {
+    throw new Error("No fue posible consultar las capas de sugerencias.")
+  }
+
+  return suggestions.slice(0, MAX_SUGGESTIONS)
+}
+
 export const ExpedientSearch = ({
   initialCode = "",
   areaColor = "#8B4A3C",
@@ -69,8 +122,6 @@ export const ExpedientSearch = ({
   useEffect(() => () => abortRef.current?.abort(), [])
 
   const fetchSuggestions = useCallback(async (query) => {
-    // Cancelar la consulta anterior: sin esto una respuesta lenta podía llegar
-    // después de una más reciente y pisar sus sugerencias.
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -78,50 +129,10 @@ export const ExpedientSearch = ({
     setLoading(true)
     setError(null)
     try {
-      // `%` y `_` son comodines dentro de un LIKE, no caracteres normales:
-      // teclear «%%%» cumplía el mínimo de tres y barría el dataset nacional.
-      // `likePrefixPattern` los quita y devuelve null si no queda bastante.
-      const patron = likePrefixPattern(query, MIN_SUGGESTION_LENGTH)
-      if (!patron) {
-        setSuggestions([])
-        setLoading(false)
-        return
+      const results = await queryExpedientSuggestions(query, controller.signal)
+      if (!controller.signal.aborted) {
+        setSuggestions(results)
       }
-      const where = `(UPPER(TENURE_ID) LIKE '${patron}' OR UPPER(CODIGO_EXPEDIENTE) LIKE '${patron}')`
-      const consulta = `query?where=${encodeURIComponent(where)}&outFields=CODIGO_EXPEDIENTE,TENURE_ID&returnGeometry=false&f=json`
-
-      // Los números de las capas de tenencia se descubren, igual que en el mapa.
-      // Aquí estuvieron fijos en 3 y 4, y discrepaban del resto de la aplicación.
-      const layerNumbers = await findTenureLayerNumbers()
-      if (controller.signal.aborted) return
-
-      const urls = [
-        ...[TITLE_LAYER_NAME, REQUEST_LAYER_NAME]
-          .map((name) => layerNumbers[name])
-          .filter((layerNumber) => layerNumber !== undefined)
-          .map((layerNumber) => `${tenureLayerUrl(layerNumber)}/${consulta}`),
-        `https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/${consulta}`,
-        `https://annamineria.anm.gov.co/annageo/rest/services/SIGM/VisorInterno/MapServer/87/${consulta}`,
-      ]
-
-      // fetchArcgisJson reconoce los errores que ArcGIS devuelve con HTTP 200;
-      // antes una capa que respondía {"error": ...} se contaba como consulta
-      // exitosa sin resultados, y las sugerencias salían incompletas en silencio.
-      const settled = await Promise.allSettled(
-        urls.map((url) => fetchArcgisJson(url, { signal: controller.signal })),
-      )
-      if (controller.signal.aborted) return
-
-      const data = settled.filter((r) => r.status === "fulfilled").map((r) => r.value)
-
-      const encontrados = data.flatMap((d) =>
-        (d.features || [])
-          .map((f) => f.attributes?.CODIGO_EXPEDIENTE || f.attributes?.TENURE_ID)
-          .filter(Boolean),
-      )
-      setSuggestions([...new Set(encontrados)].slice(0, MAX_SUGGESTIONS))
-
-      if (data.length === 0) throw new Error("No fue posible consultar las capas de sugerencias.")
     } catch (err) {
       if (err?.name === "AbortError" || controller.signal.aborted) return
       console.error("Error al buscar expedientes:", err)
@@ -165,10 +176,11 @@ export const ExpedientSearch = ({
   }
 
   const elegir = (sugerencia) => {
+    const valor = typeof sugerencia === "string" ? sugerencia : sugerencia?.code
     skipNextFetchRef.current = true
-    setCode(sugerencia)
+    setCode(valor)
     setSuggestions([])
-    buscar(sugerencia)
+    buscar(valor)
   }
 
   const alTeclear = (event) => {
@@ -214,20 +226,18 @@ export const ExpedientSearch = ({
       role="dialog"
       aria-label="Buscar expediente"
       style={{ top, left }}
-      className="fixed z-50 w-[min(19rem,calc(100vw-1.5rem))] rounded-xl border border-slate-200 bg-white shadow-xl"
+      className="fixed z-50 w-[min(19rem,calc(100vw-1.5rem))] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl"
     >
-      {/* Misma cabecera que la ventana de filtros —punto del color del área,
-          título en negrita, X a la derecha—: las dos salen del mismo encabezado
-          y verlas distintas hacía pensar que eran cosas de sitios distintos. */}
-      <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2.5">
+      {/* Misma cabecera que la ventana de filtros */}
+      <div className="flex items-center gap-2 border-b border-zinc-800/80 px-3.5 py-2.5">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: areaColor }} />
-        <span className="text-[13px] font-semibold text-slate-900">Buscar expediente</span>
+        <span className="text-[12.5px] font-semibold text-zinc-100">Buscar expediente</span>
         <span className="flex-1" />
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar la búsqueda"
-          className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          className="rounded-lg p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -235,7 +245,7 @@ export const ExpedientSearch = ({
 
       <div className="p-3">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
             ref={inputRef}
             value={code}
@@ -248,10 +258,10 @@ export const ExpedientSearch = ({
             aria-autocomplete="list"
             aria-expanded={suggestions.length > 0}
             aria-controls="sugerencias-expediente"
-            className="h-9 w-full rounded-md border border-slate-200 pl-8 pr-8 text-[13px] text-slate-900 outline-none focus:border-slate-400"
+            className="h-9 w-full rounded-xl border border-zinc-700/80 bg-zinc-900/90 pl-8 pr-8 text-[12.5px] text-zinc-100 outline-none focus:border-zinc-400 placeholder:text-zinc-500"
           />
           {loading && (
-            <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-blue-500" />
+            <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-white" />
           )}
         </div>
 
@@ -260,36 +270,49 @@ export const ExpedientSearch = ({
             id="sugerencias-expediente"
             role="listbox"
             aria-label="Expedientes sugeridos"
-            className="mt-1.5 max-h-52 overflow-auto rounded-md border border-slate-200"
+            className="mt-1.5 max-h-52 overflow-auto rounded-xl border border-zinc-800 bg-zinc-950/90"
           >
-            {suggestions.map((sugerencia, index) => (
-              <li
-                key={sugerencia}
-                role="option"
-                aria-selected={index === active}
-                // onMouseDown, no onClick: el clic fuera cierra la lista antes de
-                // que llegue el onClick del elemento.
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                  elegir(sugerencia)
-                }}
-                onMouseEnter={() => setActive(index)}
-                className={`cursor-pointer px-3 py-2 text-[13px] ${
-                  index === active ? "bg-blue-50 text-slate-900" : "text-slate-700"
-                }`}
-              >
-                {sugerencia}
-              </li>
-            ))}
+            {suggestions.map((item, index) => {
+              const codeVal = typeof item === "string" ? item : item.code
+              const layerName = typeof item === "object" ? item.layerName : null
+              return (
+                <li
+                  key={codeVal || index}
+                  role="option"
+                  aria-selected={index === active}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    elegir(item)
+                  }}
+                  onMouseEnter={() => setActive(index)}
+                  className={`flex items-center justify-between cursor-pointer px-3 py-2 text-[12.5px] transition-colors ${
+                    index === active ? "bg-zinc-800 text-white font-medium" : "text-zinc-200 hover:bg-zinc-800/50"
+                  }`}
+                >
+                  <span className="font-mono">{codeVal}</span>
+                  {layerName && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                        layerName.toLowerCase().includes("solicitud") || layerName.toLowerCase().includes("trámite")
+                          ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                      }`}
+                    >
+                      {layerName}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
 
-        {error && <p className="mt-1.5 text-[11px] text-red-500">{error}</p>}
+        {error && <p className="mt-1.5 text-[11px] text-red-400">{error}</p>}
 
         <button
           type="button"
           onClick={() => buscar()}
-          className="mt-2.5 h-9 w-full rounded-md bg-slate-900 text-[13px] font-medium text-white transition-colors hover:bg-slate-700"
+          className="mt-2.5 h-9 w-full rounded-xl bg-white text-[12.5px] font-semibold text-black transition-colors hover:bg-zinc-200 shadow-sm"
         >
           Buscar
         </button>

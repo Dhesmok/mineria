@@ -39,18 +39,18 @@ import { sampleGrid, slopeAspectFrom } from "../../utils/terrainAnalysis"
 export const PITCH_3D = 45
 export const EXAGGERATION_DEFAULT = 1.5
 export const EXAGGERATION_MIN = 0.5
-export const EXAGGERATION_MAX = 3
+export const EXAGGERATION_MAX = 5
 
 /**
  * El cielo. Sin él, al inclinar la cámara el horizonte queda cortado en seco
  * contra el fondo de la página y el relieve parece flotar en el vacío.
  */
 const SKY = {
-  "sky-color": "#8fc3f2",
-  "horizon-color": "#dfeaf5",
-  "fog-color": "#e8eef4",
-  "horizon-fog-blend": 0.6,
-  "fog-ground-blend": 0.1,
+  "sky-color": "#09090b",
+  "horizon-color": "#18181b",
+  "fog-color": "#09090b",
+  "horizon-fog-blend": 0.8,
+  "fog-ground-blend": 0.3,
 }
 
 /**
@@ -64,10 +64,9 @@ const SKY = {
 export const PITCH_MAX = 72
 
 /**
- * Velocidad del giro continuo, en grados por segundo. Una vuelta completa cada
- * 36 segundos: lo bastante lento para leer el terreno mientras pasa.
+ * Velocidad del giro continuo, en grados por segundo.
  */
-const SPIN_DEGREES_PER_SECOND = 10
+const SPIN_DEGREES_PER_SECOND = 24
 
 /**
  * Cuánto se espera, como mucho, a que el terreno tenga teselas antes de inclinar.
@@ -432,13 +431,66 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     let frame = 0
     let previous = performance.now()
     let lastPublished = 0
+    let isInteracting = false
+    let wheelTimeout = null
+
+    const canvas = mapInstance.getCanvas?.()
+
+    const onInteractionStart = () => {
+      isInteracting = true
+    }
+
+    const onInteractionEnd = () => {
+      isInteracting = false
+      previous = performance.now()
+    }
+
+    const onWheel = () => {
+      isInteracting = true
+      clearTimeout(wheelTimeout)
+      wheelTimeout = setTimeout(() => {
+        isInteracting = false
+        previous = performance.now()
+      }, 300)
+    }
+
+    const onPointerMove = (e) => {
+      if (e.buttons === 0 && isInteracting) {
+        isInteracting = false
+        previous = performance.now()
+      }
+    }
+
+    if (canvas) {
+      canvas.addEventListener("pointerdown", onInteractionStart, { passive: true })
+      canvas.addEventListener("touchstart", onInteractionStart, { passive: true })
+      canvas.addEventListener("wheel", onWheel, { passive: true })
+      canvas.addEventListener("pointermove", onPointerMove, { passive: true })
+    }
+    window.addEventListener("pointerup", onInteractionEnd, { passive: true })
+    window.addEventListener("mouseup", onInteractionEnd, { passive: true })
+    window.addEventListener("pointercancel", onInteractionEnd, { passive: true })
+    window.addEventListener("touchend", onInteractionEnd, { passive: true })
+
+    mapInstance.on?.("dragstart", onInteractionStart)
+    mapInstance.on?.("dragend", onInteractionEnd)
+    mapInstance.on?.("rotatestart", onInteractionStart)
+    mapInstance.on?.("rotateend", onInteractionEnd)
+    mapInstance.on?.("pitchstart", onInteractionStart)
+    mapInstance.on?.("pitchend", onInteractionEnd)
 
     const step = (now) => {
+      if (isInteracting) {
+        previous = now
+        frame = requestAnimationFrame(step)
+        return
+      }
+
       const seconds = (now - previous) / 1000
       previous = now
       // jumpTo y no easeTo: una animación por fotograma se pisaría con la
       // siguiente y el giro saldría a saltos.
-      const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * seconds
+      const bearing = mapInstance.getBearing() - SPIN_DEGREES_PER_SECOND * seconds
       mapInstance.jumpTo({ bearing })
 
       // El deslizador de giro sigue al mapa, pero no a 60 veces por segundo:
@@ -457,6 +509,25 @@ export const useTerrainGL = (mapRef, mapInstance) => {
 
     return () => {
       cancelAnimationFrame(frame)
+      clearTimeout(wheelTimeout)
+      if (canvas) {
+        canvas.removeEventListener("pointerdown", onInteractionStart)
+        canvas.removeEventListener("touchstart", onInteractionStart)
+        canvas.removeEventListener("wheel", onWheel)
+        canvas.removeEventListener("pointermove", onPointerMove)
+      }
+      window.removeEventListener("pointerup", onInteractionEnd)
+      window.removeEventListener("mouseup", onInteractionEnd)
+      window.removeEventListener("pointercancel", onInteractionEnd)
+      window.removeEventListener("touchend", onInteractionEnd)
+
+      mapInstance.off?.("dragstart", onInteractionStart)
+      mapInstance.off?.("dragend", onInteractionEnd)
+      mapInstance.off?.("rotatestart", onInteractionStart)
+      mapInstance.off?.("rotateend", onInteractionEnd)
+      mapInstance.off?.("pitchstart", onInteractionStart)
+      mapInstance.off?.("pitchend", onInteractionEnd)
+
       // Al parar, el estado se pone al día con dónde quedó de verdad la cámara.
       setBearing(mapInstance.getBearing())
     }
@@ -514,6 +585,41 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       mapInstance.off("rotateend", syncCamera)
       mapInstance.off("pitchend", syncCamera)
       mapInstance.off("moveend", syncCamera)
+    }
+  }, [mapInstance])
+
+  // Evitar que el clic derecho abra el menú contextual y deje trabado el giro 3D (dragRotate),
+  // y asegurar que si se mueve el ratón sin botones pulsados, MapLibre no quede "pegado".
+  useEffect(() => {
+    if (!mapInstance) return
+    const canvas = mapInstance.getCanvas?.()
+    if (!canvas) return
+
+    const onContextMenu = (e) => {
+      e.preventDefault()
+    }
+
+    const onGlobalPointerMove = (e) => {
+      if (e.buttons === 0) {
+        if (mapInstance.dragRotate?.isActive?.() || mapInstance.dragPan?.isActive?.()) {
+          canvas.dispatchEvent(
+            new MouseEvent("mouseup", {
+              bubbles: true,
+              cancelable: true,
+              clientX: e.clientX,
+              clientY: e.clientY,
+            }),
+          )
+        }
+      }
+    }
+
+    canvas?.addEventListener?.("contextmenu", onContextMenu)
+    window.addEventListener("pointermove", onGlobalPointerMove, { passive: true })
+
+    return () => {
+      canvas?.removeEventListener?.("contextmenu", onContextMenu)
+      window.removeEventListener("pointermove", onGlobalPointerMove)
     }
   }, [mapInstance])
 

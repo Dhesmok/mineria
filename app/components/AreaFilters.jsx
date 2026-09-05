@@ -72,7 +72,7 @@ export const AreaFilters = ({
     })
   }
 
-  const camposConOpciones = FILTER_FIELDS.filter((campo) => (values[campo.key] ?? []).length > 1)
+  const camposConOpciones = FILTER_FIELDS.filter((campo) => (values[campo.key] ?? []).length >= 1)
 
   // El ancho de aquí abajo tiene que ser el mismo que el de la clase: colocar la
   // ventana contando con un ancho que no es el que el navegador va a usar es
@@ -90,30 +90,30 @@ export const AreaFilters = ({
       role="dialog"
       aria-label={`Filtros de ${area.name}`}
       style={{ top, left }}
-      className="fixed z-50 max-h-[70vh] w-[min(19rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
+      className="fixed z-50 max-h-[70vh] w-[min(19rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl"
     >
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5">
+      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-800 bg-zinc-950/80 px-3.5 py-2.5 backdrop-blur-md">
         <span
           className="h-2.5 w-2.5 shrink-0 rounded-full"
           style={{ backgroundColor: area.color }}
         />
-        <span className="text-[13px] font-semibold text-slate-900">Filtrar {area.name}</span>
+        <span className="text-[13px] font-semibold text-white">Filtrar {area.name}</span>
         <span className="flex-1" />
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar los filtros"
-          className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <div className="space-y-3 p-3">
+      <div className="space-y-3 p-3.5">
         {/* Alcance. Es lo que más se malinterpreta, así que se explica en una
             frase en vez de dejarlo a que el usuario lo deduzca. */}
         <div>
-          <div className="flex rounded-lg bg-slate-100 p-0.5">
+          <div className="flex rounded-xl bg-zinc-900 border border-zinc-800 p-0.5">
             {[
               { id: "viewport", label: "En pantalla" },
               { id: "layer", label: "Toda la capa" },
@@ -123,17 +123,17 @@ export const AreaFilters = ({
                 type="button"
                 onClick={() => onScope(opcion.id)}
                 aria-pressed={scope === opcion.id}
-                className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${
                   scope === opcion.id
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
+                    ? "bg-zinc-800 text-white font-semibold border border-zinc-700 shadow-sm"
+                    : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
                 {opcion.label}
               </button>
             ))}
           </div>
-          <p className="mt-1.5 text-[10px] leading-tight text-slate-500">
+          <p className="mt-1.5 text-[10px] leading-tight text-zinc-400">
             {scope === "viewport"
               ? "Filtra únicamente los polígonos que se ven en la pantalla."
               : "Filtra la capa completa, en todo el país. Tarda un poco más."}
@@ -141,20 +141,20 @@ export const AreaFilters = ({
         </div>
 
         {properties.length === 0 ? (
-          <p className="text-[11px] leading-tight text-slate-500">
+          <p className="text-[11px] leading-tight text-zinc-400">
             Enciende una capa de {area.name} para ver por qué se puede filtrar.
           </p>
         ) : (
           <>
             {camposConOpciones.length === 0 && !rango && (
-              <p className="text-[11px] leading-tight text-slate-500">
+              <p className="text-[11px] leading-tight text-zinc-400">
                 Lo cargado no tiene valores distintos por los que filtrar.
               </p>
             )}
 
             {camposConOpciones.map((campo) => (
               <div key={campo.key}>
-                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                   {campo.label}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -168,8 +168,8 @@ export const AreaFilters = ({
                         aria-pressed={elegido}
                         className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
                           elegido
-                            ? "border-transparent text-white"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                            ? "border-transparent text-white shadow-sm"
+                            : "border-zinc-800 bg-zinc-900/90 text-zinc-300 hover:border-zinc-700 hover:text-white"
                         }`}
                         style={elegido ? { backgroundColor: area.color } : undefined}
                       >
@@ -183,7 +183,7 @@ export const AreaFilters = ({
 
             {rango && rango.max > rango.min && (
               <div>
-                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                   Área mínima: {Math.round(areaRange?.min ?? rango.min).toLocaleString("es")} ha
                 </p>
                 {/* Solo el mínimo. Un rango con dos extremos necesita dos
@@ -206,14 +206,14 @@ export const AreaFilters = ({
         )}
       </div>
 
-      <div className="sticky bottom-0 flex items-center gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2.5">
-        <span className="text-[11px] text-slate-600">
+      <div className="sticky bottom-0 flex items-center gap-2 border-t border-zinc-800 bg-zinc-950/90 px-3.5 py-2.5 backdrop-blur-md">
+        <span className="text-[11px] text-zinc-400">
           {activos ? `${cuantas} de ${properties.length}` : `${properties.length} cargados`}
         </span>
         {truncated && (
           <span
             title="El servicio recortó la respuesta: hay más de los que caben en una consulta"
-            className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+            className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 border border-amber-500/20"
           >
             recortado
           </span>
@@ -227,7 +227,7 @@ export const AreaFilters = ({
               onChange({})
               onArea(null)
             }}
-            className="text-[11px] font-medium text-blue-600 hover:text-blue-800"
+            className="text-[11px] font-medium text-sky-400 hover:text-sky-300 transition-colors"
           >
             Quitar
           </button>
@@ -238,7 +238,7 @@ export const AreaFilters = ({
           onClick={onOpenTable}
           disabled={properties.length === 0}
           title="Ver los resultados en una tabla"
-          className="flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-slate-700 disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1.5 text-[11px] font-medium text-white transition-colors disabled:opacity-40 shadow-sm"
         >
           <Table2 className="h-3.5 w-3.5" />
           Ver tabla

@@ -11,7 +11,7 @@ import {
   LAYERS_MIN_ZOOM,
 } from "../../utils/anmLayers"
 import { SEARCH_LAYERS } from "../../utils/mapStyles"
-import { buildMapFilter, buildWhereClause } from "../../utils/layerFilters"
+import { buildMapFilter, buildWhereClause, matchesFilters } from "../../utils/layerFilters"
 import { layerFieldsFor } from "../../utils/layerFields"
 import { layerByKey, styleLayerIdsFor } from "../../utils/themeAreas"
 import { bboxOfGeometry } from "../../utils/bboxDownload"
@@ -195,7 +195,13 @@ export const useMapLayersGL = (
           if (!anchor) return null
           const bbox = bboxOfGeometry(feature.geometry)
           if (!bbox) return null
-          return { key, anchor, bbox, text: getFeatureLabel(feature.properties) }
+          return {
+            key,
+            anchor,
+            bbox,
+            text: getFeatureLabel(feature.properties),
+            properties: feature.properties,
+          }
         })
         .filter(Boolean),
     [],
@@ -223,7 +229,11 @@ export const useMapLayersGL = (
 
     const candidatos = Object.entries(labelCandidatesRef.current)
       .filter(([key]) => Boolean(stateRef.current[key]?.on))
-      .flatMap(([, lista]) => lista)
+      .flatMap(([key, lista]) => {
+        if (filtersRef.current?.scope === "layer") return lista
+        const { selections, areaRange } = filtroDeCapa(key)
+        return lista.filter((c) => matchesFilters(c.properties, selections, areaRange))
+      })
 
     const lienzo = map.getCanvas()
     const limites = map.getBounds()
@@ -248,7 +258,7 @@ export const useMapLayersGL = (
         .addTo(map)
       ;(labelMarkersRef.current[candidato.key] ??= []).push(marker)
     })
-  }, [clearLabels, labelCandidatesRef, mapRef, stateRef])
+  }, [clearLabels, filtroDeCapa, labelCandidatesRef, mapRef, stateRef])
 
   /**
    * Vacía una capa sin destruirla: se queda declarada, pero sin nada que pintar.
@@ -508,7 +518,8 @@ export const useMapLayersGL = (
       map.setFilter(anmFillLayerId(key), expresion)
       map.setFilter(anmLineLayerId(key), expresion)
     })
-  }, [mapInstance, filters, mapRef])
+    redrawLabels()
+  }, [mapInstance, filters, mapRef, redrawLabels])
 
   // Las etiquetas son marcadores HTML, no capas del estilo, así que la
   // visibilidad de la capa no las apaga: hay que quitarlas a mano.
