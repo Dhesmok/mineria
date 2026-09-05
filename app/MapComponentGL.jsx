@@ -598,6 +598,14 @@ export default function MapComponentGL({
         <div ref={overlayContainerRef} className="h-full w-full" />
       </div>
 
+      {/* Desenfoque atmosférico del horizonte lejano en perspectiva 3D */}
+      {is3D && pitch > 8 && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-black/85 via-black/35 to-transparent backdrop-blur-[3px] transition-opacity duration-700 z-[2]"
+        />
+      )}
+
       {/* Los controles del mapa van todos a la derecha y el panel de consulta se
           queda con la izquierda entera. Estaban los dos a la izquierda y se
           estorbaban: al crecer el panel, su fila de botones acababa por debajo
@@ -625,31 +633,6 @@ export default function MapComponentGL({
         }`}
       >
         <div className="flex flex-col items-end gap-2">
-          {(is3D || hud3DOpen) && (
-            <Hud3DPopover
-              pitch={pitch}
-              exaggeration={exaggeration}
-              bearing={bearing}
-              isSpinning={isSpinning}
-              onToggleSpin={spin}
-              is3D={is3D}
-              onChangePitch={(val) => {
-                if (val > 0 && !is3D) {
-                  toggle3D().then(() => changePitch(val))
-                } else if (val === 0) {
-                  changePitch(0)
-                  if (is3D) toggle3D()
-                } else {
-                  changePitch(val)
-                }
-              }}
-              onChangeExaggeration={(val) => changeExaggeration(val)}
-              onChangeBearing={(val) => changeBearing(val)}
-              onResetNorth={resetNorth}
-              onClose={() => setHud3DOpen(false)}
-            />
-          )}
-
           {/* Las herramientas de dibujo. Panel flotante y no ventana anclada:
               se usan mientras se mira el mapa, y una ventana que se cierra al
               primer clic fuera obligaba a reabrirla para cambiar de herramienta
@@ -695,7 +678,7 @@ export default function MapComponentGL({
 
           {/* 250 px es mucho en un celular y poco en un monitor grande. */}
           {isCompassActive && (
-            <div className="rounded-md bg-white px-3 py-2 shadow-md">
+            <div className="rounded-xl border border-zinc-800 bg-[#09090b]/95 px-3 py-2 text-zinc-100 shadow-2xl backdrop-blur-2xl">
               <SliderRow
                 id="tamano-brujula"
                 label="Brújula"
@@ -816,23 +799,46 @@ export default function MapComponentGL({
             <Crosshair className={`h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
           </button>
 
-          {/* MapHUD: Norte, Zoom +, Zoom -, 3D */}
-          <MapHUD
-            bearing={bearing}
-            is3D={is3D}
-            hud3DOpen={hud3DOpen}
-            onResetNorth={resetNorth}
-            onZoomIn={() => mapRef.current?.zoomIn?.({ duration: 300 })}
-            onZoomOut={() => mapRef.current?.zoomOut?.({ duration: 300 })}
-            onToggle3D={() => {
-              if (!is3D) {
-                toggle3D()
-                setHud3DOpen(true)
-              } else {
-                setHud3DOpen((open) => !open)
-              }
-            }}
-          />
+          {/* MapHUD: Norte, Zoom +, Zoom -, 3D y Popover de opciones 3D */}
+          <div className="relative flex items-center">
+            {is3D && hud3DOpen && (
+              <div className="absolute right-full mr-3 top-0 z-30 animate-in fade-in zoom-in-95">
+                <Hud3DPopover
+                  pitch={pitch}
+                  exaggeration={exaggeration}
+                  bearing={bearing}
+                  isSpinning={isSpinning}
+                  onToggleSpin={spin}
+                  onSwitch2D={() => {
+                    toggle3D()
+                    setHud3DOpen(false)
+                  }}
+                  onChangePitch={changePitch}
+                  onChangeExaggeration={changeExaggeration}
+                  onChangeBearing={changeBearing}
+                  onResetNorth={resetNorth}
+                  onClose={() => setHud3DOpen(false)}
+                />
+              </div>
+            )}
+            <MapHUD
+              bearing={bearing}
+              is3D={is3D}
+              hud3DOpen={hud3DOpen}
+              onResetNorth={resetNorth}
+              onZoomIn={() => mapRef.current?.zoomIn?.({ duration: 300 })}
+              onZoomOut={() => mapRef.current?.zoomOut?.({ duration: 300 })}
+              onToggle3D={() => {
+                if (!is3D) {
+                  toggle3D()
+                  setHud3DOpen(true)
+                } else {
+                  toggle3D()
+                  setHud3DOpen(false)
+                }
+              }}
+            />
+          </div>
         </div>
         </div>
       </div>
@@ -943,65 +949,79 @@ export default function MapComponentGL({
           pointer-events: none;
         }
         .map-label div {
-          font-size: 14px;
-          font-weight: bold;
-          color: white;
-          text-shadow:
-            -1px -1px 0 #000,
-             1px -1px 0 #000,
-            -1px  1px 0 #000,
-             1px  1px 0 #000;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          color: #f4f4f5;
+          background: rgba(9, 9, 11, 0.88);
+          border: 1px solid rgba(63, 63, 70, 0.8);
+          border-radius: 6px;
+          padding: 2px 7px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
           white-space: nowrap;
         }
         .maplibregl-popup-content {
-          background: rgba(255, 255, 255, 0.95);
-          color: #333;
-          font-size: 13px;
-          line-height: 1.35;
-          border-radius: 4px;
+          background: rgba(9, 9, 11, 0.95) !important;
+          color: #f4f4f5 !important;
+          font-size: 12px !important;
+          line-height: 1.4 !important;
+          border-radius: 14px !important;
+          border: 1px solid rgba(39, 39, 42, 0.8) !important;
+          box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.8) !important;
+          backdrop-filter: blur(16px) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
           max-height: 400px;
           overflow-y: auto;
-          padding: 10px 12px;
+          padding: 12px 14px !important;
         }
         .maplibregl-popup-content h3 {
-          font-size: 15px;
-          font-weight: bold;
-          margin-bottom: 6px;
-          border-bottom: 1px solid #ccc;
-          padding-bottom: 4px;
+          font-size: 13px !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.02em;
+          color: #ffffff !important;
+          margin-bottom: 8px !important;
+          border-bottom: 1px solid rgba(39, 39, 42, 0.8) !important;
+          padding-bottom: 6px !important;
         }
-        /* Un filete tenue entre dato y dato. Sin él las trece filas se leían
-           como un bloque macizo y había que ir contando con el dedo para no
-           saltarse una; con él, cada renglón es una unidad y el ojo salta de una
-           a otra sin perderse. El aire va dentro de la fila y no entre filas,
-           para que la separación se note sin alargar la ficha. */
+        /* Un filete tenue entre dato y dato con alto contraste y legibilidad */
         .maplibregl-popup-content p {
           margin: 0;
-          padding: 4px 0;
-          border-bottom: 1px solid #eef2f6;
+          padding: 5px 0 !important;
+          border-bottom: 1px solid rgba(39, 39, 42, 0.5) !important;
+          color: #e4e4e7 !important;
         }
         .maplibregl-popup-content p:last-child {
-          border-bottom: none;
-          padding-bottom: 0;
+          border-bottom: none !important;
+          padding-bottom: 0 !important;
         }
-        /* La equis de cerrar, con tamaño de dedo.
-           MapLibre la dibuja pensada para un ratón, y en un teléfono la ficha
-           tapa media pantalla: la única forma de quitarla de en medio es
-           acertarle a ese cuadrito. Se agranda solo donde el puntero es grueso
-           —un dedo—, para no engordarla en el escritorio, donde ya se acierta. */
+        .maplibregl-popup-tip {
+          border-top-color: rgba(9, 9, 11, 0.95) !important;
+          border-bottom-color: rgba(9, 9, 11, 0.95) !important;
+        }
+        .maplibregl-popup-close-button {
+          color: #a1a1aa !important;
+          padding: 4px 8px !important;
+          font-size: 16px !important;
+          border-radius: 8px !important;
+          transition: color 0.15s, background 0.15s;
+        }
+        .maplibregl-popup-close-button:hover {
+          color: #ffffff !important;
+          background: rgba(255, 255, 255, 0.1) !important;
+        }
         @media (pointer: coarse) {
           .maplibregl-popup-close-button {
-            width: 44px;
-            height: 44px;
-            font-size: 22px;
-            line-height: 44px;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            line-height: 40px;
           }
         }
-        /* La etiqueta del dato, en gris, y el valor en negro: así se distinguen
-           de un vistazo sin necesidad de más líneas. */
         .maplibregl-popup-content p strong {
-          font-weight: 500;
-          color: #64748b;
+          font-weight: 600 !important;
+          color: #a1a1aa !important;
         }
         /* Esta regla estaba puesta sobre todos los globos y era la causa de que
            la ficha de un expediente saliera con un renglón en blanco entre cada

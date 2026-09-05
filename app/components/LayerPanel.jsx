@@ -71,7 +71,7 @@ const ColorSwatch = ({ layer, state, disabled, onOpen }) => (
       style={{
         backgroundColor: state.fillColor,
         border: `1.5px solid ${state.lineColor}`,
-        opacity: state.on ? Math.max(state.opacity, 0.4) : 0.25,
+        opacity: state.on ? Math.max(state.opacity, 0.4) : 0.45,
       }}
     />
   </button>
@@ -99,8 +99,8 @@ const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
     </span>
     <span
       className={`min-w-0 flex-1 truncate text-[11px] ${
-        estado === "nada" ? "text-zinc-500" : "text-zinc-200"
-      } ${fuerte ? "font-semibold text-zinc-100" : ""}`}
+        estado === "nada" ? "text-zinc-200" : "text-white font-semibold"
+      } ${fuerte ? "font-bold text-white" : ""}`}
     >
       {label}
     </span>
@@ -310,10 +310,10 @@ const LayerRow = ({
       title={[layer.label, layer.scale, layer.hint].filter(Boolean).join(" · ")}
       className={`min-w-0 flex-1 truncate text-left text-[12px] transition-colors ${
         state.on
-          ? "font-medium text-white"
+          ? "font-semibold text-white"
           : layer.pending
           ? "cursor-not-allowed text-zinc-600"
-          : "text-zinc-400 group-hover:text-zinc-200"
+          : "text-zinc-100 group-hover:text-white"
       }`}
     >
       {layer.label}
@@ -563,18 +563,20 @@ export const LayerPanel = ({
                     disabled={false}
                     onClick={(el) => onOpenFilters(area.id, el)}
                   />
-                  <HeaderButton
-                    icon={Search}
-                    label={
-                      area.searchable
-                        ? `Buscar en ${area.name}`
-                        : `Buscar en ${area.name}: falta conectar su servicio`
-                    }
-                    color={area.color}
-                    active={false}
-                    disabled={!area.searchable}
-                    onClick={(el) => onOpenSearch(area.id, el)}
-                  />
+                  {onOpenSearch && (
+                    <HeaderButton
+                      icon={Search}
+                      label={
+                        area.searchable
+                          ? `Buscar en ${area.name}`
+                          : `Buscar en ${area.name}: falta conectar su servicio`
+                      }
+                      color={area.color}
+                      active={false}
+                      disabled={!area.searchable}
+                      onClick={(el) => onOpenSearch(area.id, el)}
+                    />
+                  )}
                 </div>
 
                 {abierta &&

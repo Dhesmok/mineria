@@ -19,17 +19,15 @@ const suggestionResponse = (codes) => ({
 })
 
 /**
- * El buscador dejó de estar fijo en el panel: sale de la lupa del encabezado de
- * Minería, porque solo sirve para esa área. Abrirlo es parte de la prueba.
+ * El buscador funciona en modo isla en la parte inferior del visor.
  */
-const openSearch = async (user) => {
-  await user.click(screen.getByRole("button", { name: /Buscar en Minería/ }))
-  return screen.getByPlaceholderText("Ingrese el expediente")
+const openSearch = async (_user) => {
+  return screen.getByPlaceholderText("Buscar expediente...")
 }
 
 const typeInSearch = async (user, text) => {
   const input =
-    screen.queryByPlaceholderText("Ingrese el expediente") ?? (await openSearch(user))
+    screen.queryByPlaceholderText("Buscar expediente...") ?? (await openSearch(user))
   await user.click(input)
   await user.type(input, text)
   return input
@@ -195,14 +193,9 @@ describe("panel de capas por áreas", () => {
     expect(screen.getByRole("switch", { name: "Planchas 1:100.000" })).toBeInTheDocument()
   })
 
-  it("la lupa solo está habilitada en Minería", async () => {
-    // El buscador pregunta por campos de la ANM; en las demás áreas encontraría
-    // cero y parecería roto.
+  it("el buscador tipo bahía está disponible en la interfaz", async () => {
     render(<Component />)
-
-    expect(screen.getByRole("button", { name: /Buscar en Minería/ })).toBeEnabled()
-    expect(screen.getByRole("button", { name: /Buscar en Geología/ })).toBeDisabled()
-    expect(screen.getByRole("button", { name: /Buscar en Cartografía/ })).toBeDisabled()
+    expect(screen.getByPlaceholderText("Buscar expediente...")).toBeInTheDocument()
   })
 
   it("en Activas solo salen las capas encendidas, en orden", async () => {

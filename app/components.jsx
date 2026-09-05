@@ -350,58 +350,40 @@ export default function Component() {
       >
         {/* Rail de iconos (barra de tareas tipo dock, 56px) */}
         <div className="flex w-14 flex-col items-center justify-between border-r border-zinc-800/80 bg-[#000000]/95 py-3.5 backdrop-blur-2xl text-zinc-200 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.6)]">
-          {/* Logo / Marca */}
-          <div className="flex flex-col items-center gap-4">
+          {/* Iconos de navegación del rail */}
+          <div className="flex flex-col items-center gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setIsPinned((p) => !p)}
-              title="Litto Labs — Clic para alternar fijado"
-              className="group relative flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 border border-zinc-700/80 text-white transition-all hover:scale-105 hover:border-zinc-500 hover:shadow-[0_0_15px_rgba(255,255,255,0.15)]"
+              onClick={() => setDrawerTab("capas")}
+              title="Capas del proyecto"
+              aria-label="Pestaña Capas"
+              className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+                drawerTab === "capas" && isDrawerOpen
+                  ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
+                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+              }`}
             >
-              <div className="font-bold font-mono text-sm tracking-tighter">L</div>
+              <Layers className="h-5 w-5" />
+              {activeCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-1 text-[9px] font-bold text-black shadow">
+                  {activeCount}
+                </span>
+              )}
             </button>
 
-            {/* Iconos de navegación del rail */}
-            <div className="flex flex-col items-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setDrawerTab("capas")
-                  setIsPinned(true)
-                }}
-                title="Capas del proyecto"
-                aria-label="Pestaña Capas"
-                className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
-                  drawerTab === "capas" && isDrawerOpen
-                    ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
-                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                }`}
-              >
-                <Layers className="h-5 w-5" />
-                {activeCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-1 text-[9px] font-bold text-black shadow">
-                    {activeCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setDrawerTab("herramientas")
-                  setIsPinned(true)
-                }}
-                title="Herramientas y configuración"
-                aria-label="Pestaña Herramientas"
-                className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
-                  drawerTab === "herramientas" && isDrawerOpen
-                    ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
-                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                }`}
-              >
-                <Wrench className="h-5 w-5" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setDrawerTab("herramientas")}
+              title="Herramientas y configuración"
+              aria-label="Pestaña Herramientas"
+              className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+                drawerTab === "herramientas" && isDrawerOpen
+                  ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
+                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+              }`}
+            >
+              <Wrench className="h-5 w-5" />
+            </button>
           </div>
 
           {/* Botón inferior para fijar / liberar */}
@@ -430,52 +412,50 @@ export default function Component() {
               : "w-0 opacity-0 pointer-events-none"
           }`}
         >
-          {/* Cabecera del drawer con 2 pestañas: Capas y Herramientas */}
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800/80 px-3 bg-[#000000]/70">
-            <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950/90 p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setDrawerTab("capas")}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-colors ${
-                  drawerTab === "capas"
-                    ? "bg-zinc-800 text-white border border-zinc-700/80 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <Layers className="h-3.5 w-3.5" />
-                <span>Capas</span>
-                {activeCount > 0 && (
-                  <span className="ml-0.5 rounded-full bg-zinc-700 px-1 text-[10px] font-bold text-zinc-200">
-                    {activeCount}
-                  </span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDrawerTab("herramientas")}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-colors ${
-                  drawerTab === "herramientas"
-                    ? "bg-zinc-800 text-white border border-zinc-700/80 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                <Wrench className="h-3.5 w-3.5" />
-                <span>Herramientas</span>
-              </button>
+          {/* Cabecera del drawer con título de sección y controles */}
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4 bg-[#000000]/70">
+            <div className="flex items-center gap-2">
+              {drawerTab === "capas" ? (
+                <Layers className="h-4 w-4 text-zinc-300" />
+              ) : (
+                <Wrench className="h-4 w-4 text-zinc-300" />
+              )}
+              <span className="text-sm font-semibold tracking-tight text-white">
+                {drawerTab === "capas" ? "Capas del Proyecto" : "Herramientas"}
+              </span>
+              {drawerTab === "capas" && activeCount > 0 && (
+                <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300 border border-zinc-700">
+                  {activeCount}
+                </span>
+              )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsPinned((p) => !p)}
-              title={isPinned ? "Desfijar panel" : "Fijar panel abierto"}
-              className={`flex h-7 w-7 items-center justify-center rounded-md text-xs transition-colors ${
-                isPinned
-                  ? "bg-sky-500/20 text-sky-400 border border-sky-500/30"
-                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-              }`}
-            >
-              {isPinned ? <Pin className="h-3.5 w-3.5 fill-sky-400/40" /> : <PinOff className="h-3.5 w-3.5" />}
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setIsPinned((p) => !p)}
+                title={isPinned ? "Desfijar panel lateral" : "Fijar panel lateral"}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+                  isPinned
+                    ? "bg-zinc-800 text-white border border-zinc-700"
+                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                }`}
+              >
+                {isPinned ? <Pin className="h-3.5 w-3.5 fill-white" /> : <PinOff className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPinned(false)
+                  setIsHovered(false)
+                }}
+                title="Cerrar panel"
+                aria-label="Cerrar panel"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
 
           {/* Cuerpo con scroll interno del drawer */}
@@ -496,38 +476,36 @@ export default function Component() {
                   onOpenFilters={(areaId, el) =>
                     setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
                   }
-                  onOpenSearch={(areaId, el) =>
-                    setSearchPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
-                  }
                 />
 
                 {showToggle && (
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2">
+                  <div className="mt-4 pt-3 border-t border-zinc-800/80 space-y-2">
                     {coordinatesAvailable && (
-                      <Button
-                        variant="outline"
+                      <button
+                        type="button"
                         onClick={handleShowCoordinates}
-                        className="w-full border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-700/80 text-[13px] font-medium"
+                        className="w-full rounded-xl border border-zinc-700/80 bg-zinc-850/80 hover:bg-zinc-800 py-2 text-center text-xs font-semibold text-zinc-200 hover:text-white transition-colors shadow-sm"
                       >
                         Mostrar coordenadas
-                      </Button>
+                      </button>
                     )}
                     <div className="flex justify-between gap-2">
-                      <Button
-                        variant="outline"
+                      <button
+                        type="button"
                         onClick={handleReset}
-                        className="flex-1 border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-700/80 text-[12px]"
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 py-2 text-xs font-semibold text-zinc-300 hover:text-white transition-colors"
                       >
-                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                        <RefreshCw className="h-3.5 w-3.5" />
                         Borrar
-                      </Button>
-                      <Button
+                      </button>
+                      <button
+                        type="button"
                         onClick={handleExportSHP}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[12px]"
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 py-2 text-xs font-semibold text-white transition-colors shadow-sm"
                       >
-                        <Download className="mr-1.5 h-3.5 w-3.5" />
+                        <Download className="h-3.5 w-3.5" />
                         Exportar
-                      </Button>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -757,30 +735,32 @@ export default function Component() {
             className="absolute bottom-full mb-2.5 w-[92vw] sm:w-[420px] max-h-60 overflow-y-auto rounded-2xl border border-zinc-800 bg-[#09090b]/95 p-1.5 shadow-2xl backdrop-blur-2xl"
           >
             {islandSuggestions.map((item, index) => {
+              const code = typeof item === "string" ? item : (item?.code || "")
+              const layerName = typeof item === "object" ? item?.layerName : null
               const isSelected = index === islandSelectedIndex
               return (
                 <div
-                  key={item.code}
+                  key={code || index}
                   role="option"
                   aria-selected={isSelected}
-                  onClick={() => handleSelectIslandExpedient(item.code)}
+                  onClick={() => handleSelectIslandExpedient(code)}
                   className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs transition-colors ${
                     isSelected ? "bg-zinc-800 text-white font-medium" : "text-zinc-300 hover:bg-zinc-800/60"
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <Search className="h-3.5 w-3.5 text-zinc-400" />
-                    <span className="font-mono font-medium">{item.code}</span>
+                    <span className="font-mono font-medium text-zinc-100">{code}</span>
                   </div>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
-                      item.layerName?.toLowerCase().includes("trámite") ||
-                      item.layerName?.toLowerCase().includes("tramite")
+                      layerName?.toLowerCase().includes("trámite") ||
+                      layerName?.toLowerCase().includes("tramite")
                         ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
                         : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
                     }`}
                   >
-                    {item.layerName || "Expediente"}
+                    {layerName || "Expediente"}
                   </span>
                 </div>
               )
@@ -805,7 +785,9 @@ export default function Component() {
               } else if (e.key === "Enter") {
                 e.preventDefault()
                 if (islandSelectedIndex >= 0 && islandSuggestions[islandSelectedIndex]) {
-                  handleSelectIslandExpedient(islandSuggestions[islandSelectedIndex].code)
+                  const sel = islandSuggestions[islandSelectedIndex]
+                  const code = typeof sel === "string" ? sel : sel?.code
+                  if (code) handleSelectIslandExpedient(code)
                 } else if (islandSearchText.trim()) {
                   handleSelectIslandExpedient(islandSearchText.trim())
                 }
@@ -836,7 +818,9 @@ export default function Component() {
             type="button"
             onClick={() => {
               if (islandSelectedIndex >= 0 && islandSuggestions[islandSelectedIndex]) {
-                handleSelectIslandExpedient(islandSuggestions[islandSelectedIndex].code)
+                const sel = islandSuggestions[islandSelectedIndex]
+                const code = typeof sel === "string" ? sel : sel?.code
+                if (code) handleSelectIslandExpedient(code)
               } else if (islandSearchText.trim()) {
                 handleSelectIslandExpedient(islandSearchText.trim())
               }

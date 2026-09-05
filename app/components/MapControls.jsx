@@ -118,20 +118,20 @@ export const MapHUD = ({
 
     <div className="h-px w-5 bg-zinc-800" />
 
-    {/* 3D */}
+    {/* 3D / 2D Toggle */}
     <button
       type="button"
       onClick={onToggle3D}
-      title={is3D ? "Opciones de vista 3D" : "Activar perspectiva 3D"}
-      aria-label="Perspectiva 3D"
-      aria-pressed={is3D || hud3DOpen}
+      title={is3D ? "Volver a vista plana (2D)" : "Activar perspectiva 3D"}
+      aria-label={is3D ? "Volver a 2D" : "Perspectiva 3D"}
+      aria-pressed={is3D}
       className={`flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold transition-all ${
         is3D || hud3DOpen
           ? "bg-white text-black shadow-sm"
           : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
       }`}
     >
-      3D
+      {is3D ? "2D" : "3D"}
     </button>
   </div>
 )
@@ -236,6 +236,7 @@ export const Hud3DPopover = ({
   bearing = 0,
   isSpinning = false,
   onToggleSpin,
+  onSwitch2D,
   onChangePitch,
   onChangeExaggeration,
   onChangeBearing,
@@ -268,7 +269,17 @@ export const Hud3DPopover = ({
           <Box className="h-4 w-4 text-white" />
           <span className="tracking-wide">Perspectiva 3D</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {onSwitch2D && (
+            <button
+              type="button"
+              onClick={onSwitch2D}
+              title="Volver a vista 2D plana"
+              className="flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800/90 px-2 py-0.5 text-[10.5px] font-medium text-zinc-200 hover:bg-zinc-700 hover:text-white transition-all shadow-sm"
+            >
+              Volver a 2D
+            </button>
+          )}
           {/* Botón Girar Solo */}
           <button
             type="button"

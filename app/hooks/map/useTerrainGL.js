@@ -46,11 +46,11 @@ export const EXAGGERATION_MAX = 5
  * contra el fondo de la página y el relieve parece flotar en el vacío.
  */
 const SKY = {
-  "sky-color": "#8fc3f2",
-  "horizon-color": "#dfeaf5",
-  "fog-color": "#e8eef4",
-  "horizon-fog-blend": 0.6,
-  "fog-ground-blend": 0.1,
+  "sky-color": "#09090b",
+  "horizon-color": "#18181b",
+  "fog-color": "#09090b",
+  "horizon-fog-blend": 0.8,
+  "fog-ground-blend": 0.3,
 }
 
 /**

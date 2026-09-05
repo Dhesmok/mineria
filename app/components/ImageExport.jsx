@@ -321,17 +321,17 @@ export const ImageExport = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/30 p-0 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-xl border border-slate-200 bg-white shadow-2xl sm:rounded-xl">
-        <div className="flex items-center gap-2.5 border-b border-slate-200 px-4 py-3">
-          <ImageIcon className="h-4 w-4 text-slate-400" />
-          <h2 className="text-[15px] font-semibold text-slate-900">Exportar imagen</h2>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-md sm:items-center sm:p-4">
+      <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl sm:rounded-2xl">
+        <div className="flex items-center gap-2.5 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3">
+          <ImageIcon className="h-4 w-4 text-zinc-400" />
+          <h2 className="text-[15px] font-semibold text-white">Exportar imagen</h2>
           <span className="flex-1" />
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>
@@ -339,24 +339,24 @@ export const ImageExport = ({
 
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           <div>
-            <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
               Qué incluir
             </p>
             <div className="space-y-1">
               {PIECES.map(({ id, label, hint }) => (
                 <label
                   key={id}
-                  className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-lg px-2 transition-colors hover:bg-slate-50 md:min-h-0 md:py-1.5"
+                  className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl px-2.5 transition-colors hover:bg-zinc-850/60 md:min-h-0 md:py-1.5"
                 >
                   <input
                     type="checkbox"
                     checked={pieces[id]}
                     onChange={() => alternar(id)}
-                    className="h-4 w-4 shrink-0 accent-slate-900"
+                    className="h-4 w-4 shrink-0 accent-white rounded"
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] leading-tight text-slate-900">{label}</span>
-                    <span className="block text-[11px] leading-tight text-slate-500">{hint}</span>
+                    <span className="block text-[13px] font-medium leading-tight text-zinc-200">{label}</span>
+                    <span className="block text-[11px] leading-tight text-zinc-400">{hint}</span>
                   </span>
                 </label>
               ))}
@@ -364,10 +364,10 @@ export const ImageExport = ({
           </div>
 
           <div>
-            <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
               Tamaño
             </p>
-            <div className="flex rounded-lg bg-slate-100 p-0.5">
+            <div className="flex rounded-xl bg-zinc-900 border border-zinc-800 p-0.5">
               {EXPORT_SCALES.map((opcion) => (
                 <button
                   key={opcion.id}
@@ -375,30 +375,30 @@ export const ImageExport = ({
                   onClick={() => setScale(opcion.id)}
                   aria-pressed={scale === opcion.id}
                   title={opcion.hint}
-                  className={`flex-1 rounded-md px-2 py-1.5 text-[12px] font-medium transition-colors ${
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-[12px] font-medium transition-colors ${
                     scale === opcion.id
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
+                      ? "bg-zinc-800 text-white font-semibold border border-zinc-700 shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
                   {opcion.label}
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-[11px] tabular-nums text-slate-500">
+            <p className="mt-1.5 text-[11px] tabular-nums text-zinc-400">
               {ancho} × {alto} píxeles
             </p>
           </div>
 
-          {error && <p className="text-[12px] text-red-600">{error}</p>}
+          {error && <p className="text-[12px] text-rose-400">{error}</p>}
         </div>
 
-        <div className="border-t border-slate-200 p-3">
+        <div className="border-t border-zinc-800 bg-zinc-950/80 p-3">
           <button
             type="button"
             onClick={exportar}
             disabled={working}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-slate-900 text-[13px] font-medium text-white transition-colors hover:bg-slate-700 disabled:opacity-60"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-[13px] font-semibold text-white transition-colors disabled:opacity-50 shadow-sm"
           >
             {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {working ? "Generando…" : "Descargar PNG"}

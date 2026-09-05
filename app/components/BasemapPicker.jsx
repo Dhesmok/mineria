@@ -51,13 +51,13 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose, anchorRe
                 : "Pulsa otra vez para poner los nombres"
               : `Usar ${basemap.name}`
           }
-          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
-            elegido ? "bg-slate-100" : "hover:bg-slate-50"
+          className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors ${
+            elegido ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm" : "text-zinc-300 hover:bg-zinc-850 hover:text-white"
           }`}
         >
           <span
             className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
-              elegido ? "bg-slate-900 text-white" : "border border-slate-300"
+              elegido ? "bg-white text-zinc-950" : "border border-zinc-700 bg-zinc-900/50"
             }`}
           >
             {elegido && <Check className="h-3 w-3" />}
@@ -65,13 +65,13 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose, anchorRe
 
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline gap-1.5">
-              <span className="text-[13px] font-medium text-slate-900">{basemap.name}</span>
-              <span className="text-[10px] text-slate-400">{basemap.source}</span>
+              <span className="text-[13px] font-medium text-white">{basemap.name}</span>
+              <span className="text-[10px] text-zinc-500">{basemap.source}</span>
             </span>
             {/* Sin recortar: la pista es lo único que explica para qué sirve
                 cada fondo, y cortada por la mitad —«Hasta zo…»— no explica
                 nada. Que ocupe dos renglones sale más barato que eso. */}
-            <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">
+            <span className="mt-0.5 block text-[11px] leading-tight text-zinc-400">
               {basemap.hint}
             </span>
           </span>
@@ -81,7 +81,7 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose, anchorRe
           {elegido && alterna && (
             <span
               className={`flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold ${
-                conNombres ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500 line-through"
+                conNombres ? "bg-zinc-700 text-white border border-zinc-600" : "bg-zinc-900 text-zinc-500 border border-zinc-800 line-through"
               }`}
             >
               <Type className="h-3 w-3" />
@@ -91,7 +91,7 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose, anchorRe
           {/* «Nombres fijos» solo donde hay nombres. En el fondo vacío no los
               hay, y anunciarlos ahí era decir algo falso. */}
           {elegido && hasFixedLabels(basemap.id) && (
-            <span className="shrink-0 text-[10px] leading-tight text-slate-400">
+            <span className="shrink-0 text-[10px] leading-tight text-zinc-500">
               nombres
               <br />
               fijos

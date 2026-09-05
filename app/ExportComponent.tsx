@@ -139,10 +139,10 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
   }, [expedientCode, requireMapData]);
 
   return (
-    <div className="flex flex-col justify-center gap-4">
+    <div className="flex flex-col justify-center gap-3">
       <Button
         variant="default"
-        className="w-full bg-green-500 text-white"
+        className="w-full bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-xl py-2.5 px-4 text-xs font-semibold shadow-sm transition-colors"
         onClick={exportSHP}
         disabled={isExportingSHP || isExportingKML}
       >
@@ -150,7 +150,7 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
       </Button>
       <Button
         variant="default"
-        className="w-full bg-green-500 text-white"
+        className="w-full bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-xl py-2.5 px-4 text-xs font-semibold shadow-sm transition-colors"
         onClick={exportKML}
         disabled={isExportingSHP || isExportingKML}
       >
