@@ -37,6 +37,7 @@ import { PlanchaPanel } from "./components/PlanchaPanel"
 import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { Hud3DPopover, MapButton, MapHUD, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
+import { BasemapPicker } from "./components/BasemapPicker"
 import {
   ChevronLeft,
   Crosshair,
@@ -44,6 +45,7 @@ import {
   Loader2,
   Mountain,
   Layers,
+  Map as MapIcon,
   PencilRuler,
 } from "lucide-react"
 
@@ -105,7 +107,9 @@ export default function MapComponentGL({
   const [error, setError] = useState(null)
   const [showErrorBanner, setShowErrorBanner] = useState(false)
 
-  const { basemap, showLabels: _showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
+  const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
+  const [basemapOpen, setBasemapOpen] = useState(false)
+  const basemapBtnRef = useRef(null)
   const [dibujoAbierto, setDibujoAbierto] = useState(false)
   const [dibujoCompacto, setDibujoCompacto] = useState(false)
   const [exportandoImagen, setExportandoImagen] = useState(false)
@@ -778,19 +782,51 @@ export default function MapComponentGL({
 
         {/* Controles de navegación y HUD unificados del mapa */}
         <div className="flex flex-col items-end gap-2">
+          {/* Botón Mapa Base */}
+          <div className="relative">
+            <button
+              ref={basemapBtnRef}
+              type="button"
+              onClick={() => setBasemapOpen((v) => !v)}
+              title="Cambiar mapa base (6 estilos disponibles)"
+              aria-label="Mapa base"
+              aria-expanded={basemapOpen}
+              className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+                basemapOpen
+                  ? "border-white/40 bg-zinc-800 text-white"
+                  : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              }`}
+            >
+              <MapIcon className="h-4.5 w-4.5" />
+            </button>
+            {basemapOpen && (
+              <div className="absolute right-full mr-3 bottom-0 z-30 animate-in fade-in zoom-in-95">
+                <BasemapPicker
+                  current={basemap}
+                  showLabels={showLabels}
+                  onChoose={(id) => {
+                    chooseBasemap(id)
+                  }}
+                  onClose={() => setBasemapOpen(false)}
+                  anchorEl={basemapBtnRef.current}
+                />
+              </div>
+            )}
+          </div>
+
           {/* Botón GPS */}
           <button
             type="button"
             onClick={handleLocateUser}
             title={isLocating ? "Ubicando…" : hasLocated ? "Ubicación GPS activa" : "Activar GPS"}
             aria-label="Ubicación GPS"
-            className={`flex h-9 w-9 items-center justify-center rounded-2xl border border-zinc-800/90 bg-[#09090b]/90 shadow-2xl backdrop-blur-2xl transition-all ${
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-800/90 bg-[#09090b]/90 shadow-2xl backdrop-blur-2xl transition-all ${
               hasLocated
                 ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300"
                 : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
             }`}
           >
-            <Crosshair className={`h-4 w-4 ${isLocating ? "animate-spin" : ""}`} />
+            <Crosshair className={`h-4.5 w-4.5 ${isLocating ? "animate-spin" : ""}`} />
           </button>
 
           {/* MapHUD: Norte, Zoom +, Zoom -, 3D y Popover de opciones 3D */}
@@ -806,6 +842,15 @@ export default function MapComponentGL({
                   onChangePitch={changePitch}
                   onChangeExaggeration={changeExaggeration}
                   onChangeBearing={changeBearing}
+                  onRotateBy={(delta) => {
+                    if (!mapRef.current) return
+                    const current = mapRef.current.getBearing()
+                    mapRef.current.easeTo({
+                      bearing: current + delta,
+                      duration: 600,
+                      easing: (t) => t * (2 - t),
+                    })
+                  }}
                   onResetNorth={resetNorth}
                   onClose={() => setHud3DOpen(false)}
                 />

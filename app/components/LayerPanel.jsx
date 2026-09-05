@@ -64,10 +64,10 @@ const ColorSwatch = ({ layer, state, disabled, onOpen }) => (
     }}
     title={disabled ? undefined : `Cambiar el color de ${layer.label}`}
     aria-label={`Cambiar el color de ${layer.label}`}
-    className="-mx-1 flex h-6 w-6 shrink-0 items-center justify-center rounded transition-transform disabled:cursor-default enabled:hover:scale-125"
+    className="-mx-1 flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded transition-transform disabled:cursor-default enabled:hover:scale-125"
   >
     <span
-      className="block h-3.5 w-3.5 rounded-[3px] shadow-sm transition-all"
+      className="block h-4 w-4 rounded-[3.5px] shadow-sm transition-all"
       style={{
         backgroundColor: state.fillColor,
         border: `1.5px solid ${state.lineColor}`,
@@ -267,7 +267,7 @@ const LayerRow = ({
   <div
     ref={(node) => registerRow(layer.key, node)}
     onClick={() => !layer.pending && onToggle(layer.key)}
-    className={`group flex h-[34px] cursor-pointer items-center gap-2 border-b border-zinc-800/40 px-3 transition-all ${
+    className={`group flex h-[38px] cursor-pointer items-center gap-2 border-b border-zinc-800/40 px-3 transition-all ${
       dragging
         ? "bg-zinc-800/70 opacity-60"
         : state.on
@@ -309,7 +309,7 @@ const LayerRow = ({
         onToggle(layer.key)
       }}
       title={[layer.label, layer.scale, layer.hint].filter(Boolean).join(" · ")}
-      className={`min-w-0 flex-1 truncate text-left text-[12px] transition-colors ${
+      className={`min-w-0 flex-1 truncate text-left text-[13px] transition-colors ${
         state.on
           ? "font-semibold text-white tracking-tight"
           : layer.pending
@@ -322,7 +322,7 @@ const LayerRow = ({
 
     <div
       onClick={(e) => e.stopPropagation()}
-      className="w-[58px] shrink-0 flex items-center justify-end"
+      className="w-[64px] shrink-0 flex items-center justify-end"
     >
       {state.on ? (
         <OpacitySlider
@@ -385,9 +385,28 @@ export const LayerPanel = ({
   onToggleSubLayer,
 }) => {
   const [onlyActive, setOnlyActive] = useState(false)
-  // Qué área está desplegada. Solo una a la vez: con cuatro áreas abiertas el
-  // panel medía más que la pantalla y había que desplazarse para todo.
-  const [openArea, setOpenArea] = useState("mineria")
+  // Qué áreas están desplegadas. Permite múltiples a la vez o todas con Ctrl+clic.
+  const [openAreas, setOpenAreas] = useState(() => new Set(["mineria"]))
+
+  const toggleArea = (areaId, event) => {
+    if (event?.ctrlKey || event?.metaKey) {
+      setOpenAreas((prev) => {
+        const allOpen = AREAS.every((a) => prev.has(a.id))
+        return allOpen ? new Set() : new Set(AREAS.map((a) => a.id))
+      })
+    } else {
+      setOpenAreas((prev) => {
+        const next = new Set(prev)
+        if (next.has(areaId)) {
+          next.delete(areaId)
+        } else {
+          next.add(areaId)
+        }
+        return next
+      })
+    }
+  }
+
   const [colorTarget, setColorTarget] = useState(null)
   // Qué se está arrastrando y dónde caería si se soltara ahora.
   const [drag, setDrag] = useState(null)
@@ -509,40 +528,41 @@ export const LayerPanel = ({
             </>
           )
         ) : (
-          // ───────────── Todas: un área abierta a la vez ─────────────
+          // ───────────── Todas: áreas desplegables independientes ─────────────
           AREAS.map((area) => {
             const delArea = THEME_LAYERS.filter((layer) => layer.areaId === area.id)
             const encendidas = delArea.filter((layer) => layers[layer.key]?.on).length
-            const abierta = openArea === area.id
+            const abierta = openAreas.has(area.id)
             const filtrada = areaHasFilter(area.id)
 
             return (
               <div key={area.id} className="border-b border-zinc-800/50">
                 <div
-                  className={`sticky top-0 z-[2] flex items-center gap-2 px-3 py-1.5 transition-colors ${
+                  className={`sticky top-0 z-[2] flex items-center gap-2 px-3 py-2 transition-colors ${
                     abierta ? "bg-[#141416]" : "bg-[#09090b]/90 hover:bg-[#141416]/70"
                   }`}
                 >
                   <button
                     type="button"
-                    onClick={() => setOpenArea(abierta ? null : area.id)}
+                    onClick={(e) => toggleArea(area.id, e)}
                     aria-expanded={abierta}
                     aria-label={`Capas de ${area.name}`}
+                    title="Clic para desplegar/plegar · Ctrl+Clic para todas"
                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
                     <ChevronRight
-                      className={`h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform ${
+                      className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${
                         abierta ? "rotate-90 text-white" : ""
                       }`}
                     />
-                    <AreaIcon area={area} className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-                    <span className="truncate text-xs font-semibold tracking-wide text-zinc-100">
+                    <AreaIcon area={area} className="h-4 w-4 shrink-0 text-zinc-400" />
+                    <span className="truncate text-[13px] font-semibold tracking-wide text-zinc-100">
                       {area.name}
                     </span>
-                    <span className="shrink-0 text-[10px] font-mono text-zinc-500">{area.source}</span>
+                    <span className="shrink-0 text-[10.5px] font-mono text-zinc-500">{area.source}</span>
                   </button>
 
-                  <span className="shrink-0 font-mono text-[10px] text-zinc-400">
+                  <span className="shrink-0 font-mono text-[10.5px] text-zinc-400">
                     {encendidas}/{delArea.length}
                   </span>
 

@@ -180,16 +180,15 @@ describe("panel de capas por áreas", () => {
     expect(screen.getByRole("switch", { name: "Predios" })).toBeDisabled()
   })
 
-  it("solo deja un área desplegada a la vez", async () => {
-    // Con las cuatro abiertas el panel medía más que la pantalla y había que
-    // desplazarse para cualquier cosa.
+  it("permite múltiples áreas desplegadas a la vez", async () => {
+    // Permite que el usuario despliegue las áreas que quiera simultáneamente
     const user = userEvent.setup()
     render(<Component />)
 
     expect(screen.getByRole("switch", { name: "Títulos Vigentes" })).toBeInTheDocument()
 
     await openArea(user, "Geología")
-    expect(screen.queryByRole("switch", { name: "Títulos Vigentes" })).not.toBeInTheDocument()
+    expect(screen.getByRole("switch", { name: "Títulos Vigentes" })).toBeInTheDocument()
     expect(screen.getByRole("switch", { name: "Planchas 1:100.000" })).toBeInTheDocument()
   })
 

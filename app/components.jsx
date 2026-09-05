@@ -13,8 +13,8 @@ import {
   Search,
   X,
   Loader2,
-  RefreshCw,
   Download,
+  Table as TableIcon,
   Globe2,
   ChevronDown,
   Spline,
@@ -403,12 +403,12 @@ export default function Component() {
           </div>
         </div>
 
-        {/* Drawer desplegable en negro obsidiana glass (~340px) */}
+        {/* Drawer desplegable en negro obsidiana glass (~360px) */}
         <div
           ref={panelRef}
           className={`flex flex-col border-r border-zinc-800/80 bg-[#09090b]/95 text-zinc-100 backdrop-blur-2xl transition-all duration-300 ease-out overflow-hidden ${
             isDrawerOpen
-              ? "w-[340px] opacity-100 shadow-[20px_0_40px_rgba(0,0,0,0.6)]"
+              ? "w-[360px] opacity-100 shadow-[20px_0_40px_rgba(0,0,0,0.6)]"
               : "w-0 opacity-0 pointer-events-none"
           }`}
         >
@@ -477,38 +477,6 @@ export default function Component() {
                     setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
                   }
                 />
-
-                {showToggle && (
-                  <div className="mt-4 pt-3 border-t border-zinc-800/80 space-y-2">
-                    {coordinatesAvailable && (
-                      <button
-                        type="button"
-                        onClick={handleShowCoordinates}
-                        className="w-full rounded-xl border border-zinc-700/80 bg-zinc-850/80 hover:bg-zinc-800 py-2 text-center text-xs font-semibold text-zinc-200 hover:text-white transition-colors shadow-sm"
-                      >
-                        Mostrar coordenadas
-                      </button>
-                    )}
-                    <div className="flex justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={handleReset}
-                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 py-2 text-xs font-semibold text-zinc-300 hover:text-white transition-colors"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        Borrar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleExportSHP}
-                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 py-2 text-xs font-semibold text-white transition-colors shadow-sm"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        Exportar
-                      </button>
-                    </div>
-                  </div>
-                )}
               </>
             ) : (
               <div className="space-y-3.5">
@@ -610,61 +578,6 @@ export default function Component() {
                     </button>
                   </div>
                 </div>
-
-                {/* 4. Mapas Base (cards 2x2) */}
-                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
-                  <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block mb-2">
-                    Mapa Base
-                  </Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: "positron", label: "Claro", desc: "Cartográfico", bgClass: "from-zinc-700 to-zinc-900" },
-                      { id: "topo", label: "Relieve", desc: "Topográfico", bgClass: "from-emerald-950 to-zinc-900" },
-                      { id: "satellite", label: "Satélite", desc: "Satelital", bgClass: "from-blue-950 to-zinc-900" },
-                      { id: "osm", label: "Calles", desc: "OpenStreetMap", bgClass: "from-zinc-800 to-zinc-950" },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => mapRef.current?.chooseBasemap?.(item.id)}
-                        className="group relative flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60 p-2 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850 active:scale-[0.98]"
-                      >
-                        <div className={`h-9 w-full rounded-lg bg-gradient-to-br ${item.bgClass} mb-1.5 flex items-center justify-center font-mono text-[10px] font-semibold text-zinc-300 border border-zinc-800/80`}>
-                          {item.label}
-                        </div>
-                        <span className="text-[11.5px] font-medium text-zinc-200 group-hover:text-white">{item.label}</span>
-                        <span className="text-[9.5px] text-zinc-500 truncate">{item.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 5. Datos y Exportación */}
-                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl space-y-2">
-                  <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block">
-                    Datos y Exportación
-                  </Label>
-                  <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowAttributeTable(true)}
-                      className="flex h-9 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-xs font-medium text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all"
-                    >
-                      <span>Tabla de atributos</span>
-                      <span className="font-mono text-[10px] text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-md border border-zinc-700/50">
-                        {registrosVisibles.length} en pantalla
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExportSHP}
-                      className="flex h-9 w-full items-center justify-between rounded-xl border border-zinc-700/80 bg-zinc-800/90 px-3 text-xs font-semibold text-white hover:bg-zinc-700 transition-all shadow-sm"
-                    >
-                      <span>Exportar Shapefile / GeoJSON</span>
-                      <Download className="h-3.5 w-3.5 text-zinc-300" />
-                    </button>
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -693,8 +606,8 @@ export default function Component() {
       {/* Buscador modo isla centrado en la parte superior */}
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-auto">
         {/* Barra de búsqueda estilo cápsula flotante */}
-        <div className="relative flex items-center w-[92vw] sm:w-[420px] h-11 rounded-full border border-zinc-800 bg-[#09090b]/95 px-3.5 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-all focus-within:border-zinc-700 focus-within:ring-1 focus-within:ring-zinc-600">
-          <Search className="h-4 w-4 shrink-0 text-zinc-400 mr-2.5" />
+        <div className="relative flex items-center w-[92vw] sm:w-[460px] h-12 rounded-full border border-zinc-800 bg-[#09090b]/95 px-4 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-all focus-within:border-zinc-700 focus-within:ring-1 focus-within:ring-zinc-600">
+          <Search className="h-4.5 w-4.5 shrink-0 text-zinc-400 mr-3" />
           <input
             type="text"
             value={islandSearchText}
@@ -720,7 +633,7 @@ export default function Component() {
               }
             }}
             placeholder="Buscar expediente..."
-            className="h-full w-full bg-transparent text-[13px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+            className="h-full w-full bg-transparent text-[13.5px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
           />
           {islandLoading && <Loader2 className="h-4 w-4 shrink-0 text-zinc-400 animate-spin ml-2" />}
           {islandSearchText && !islandLoading && (
@@ -749,7 +662,7 @@ export default function Component() {
                 handleSelectIslandExpedient(islandSearchText.trim())
               }
             }}
-            className="ml-2 shrink-0 rounded-full bg-zinc-800 hover:bg-zinc-700 px-3 py-1 text-[11px] font-semibold text-zinc-100 transition-colors shadow-sm"
+            className="ml-2 shrink-0 rounded-full bg-zinc-800 hover:bg-zinc-700 px-3.5 py-1.5 text-xs font-semibold text-zinc-100 transition-colors shadow-sm"
           >
             Buscar
           </button>
@@ -798,40 +711,49 @@ export default function Component() {
 
         {/* Acciones de expediente activo si existe */}
         {showToggle && (
-          <div className="mt-2.5 flex items-center gap-2 rounded-full border border-zinc-800 bg-[#09090b]/95 px-3.5 py-1 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
+          <div className="mt-2.5 flex items-center gap-2.5 rounded-full border border-zinc-800/90 bg-[#09090b]/95 px-4 py-1.5 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
+            <span className="flex items-center gap-2 font-mono text-[12.5px] font-semibold text-emerald-400">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               {expedientCode || "Expediente activo"}
             </span>
-            {coordinatesAvailable && (
+
+            <div className="h-3.5 w-px bg-zinc-800" />
+
+            <div className="flex items-center gap-1.5">
+              {coordinatesAvailable && (
+                <button
+                  type="button"
+                  onClick={handleShowCoordinates}
+                  title="Ver tabla de coordenadas"
+                  aria-label="Ver coordenadas"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all shadow-sm active:scale-95"
+                >
+                  <TableIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
               <button
                 type="button"
-                onClick={handleShowCoordinates}
-                className="rounded-full bg-zinc-800/90 px-2.5 py-0.5 text-[11px] font-medium text-zinc-200 hover:bg-zinc-700 transition-colors"
+                onClick={handleExportSHP}
+                title="Exportar expediente"
+                aria-label="Exportar expediente"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all shadow-sm active:scale-95"
               >
-                Coordenadas
+                <Download className="h-3.5 w-3.5" />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={handleExportSHP}
-              className="rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-2.5 py-0.5 text-[11px] font-medium transition-colors"
-            >
-              Exportar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                handleReset()
-                setIslandSearchText("")
-                setIslandResultsOpen(false)
-              }}
-              className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
-              title="Cerrar ficha"
-              aria-label="Cerrar ficha"
-            >
-              <X className="h-3 w-3" />
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleReset()
+                  setIslandSearchText("")
+                  setIslandResultsOpen(false)
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-900 hover:text-zinc-200 transition-all active:scale-95"
+                title="Borrar expediente activo"
+                aria-label="Borrar expediente activo"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>
