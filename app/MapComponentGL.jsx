@@ -134,50 +134,6 @@ export default function MapComponentGL({
     })
   }, [])
 
-  // Captura de textura a resolución retina ultra nítida (2048x2048) del área seleccionada
-  const captureHighResTexture = useCallback((bbox) => {
-    const map = mapRef.current
-    if (!map || !bbox) return
-
-    const [minLng, minLat, maxLng, maxLat] = bbox
-    const doCapture = () => {
-      try {
-        const mapCanvas = map.getCanvas()
-        if (!mapCanvas) return
-
-        const p1 = map.project([minLng, maxLat])
-        const p2 = map.project([maxLng, minLat])
-
-        const x0 = Math.max(0, Math.min(p1.x, p2.x))
-        const y0 = Math.max(0, Math.min(p1.y, p2.y))
-        const w = Math.min(mapCanvas.width - x0, Math.abs(p2.x - p1.x))
-        const h = Math.min(mapCanvas.height - y0, Math.abs(p2.y - p1.y))
-
-        if (w > 10 && h > 10) {
-          const offCanvas = document.createElement("canvas")
-          offCanvas.width = 2048
-          offCanvas.height = 2048
-          const ctx = offCanvas.getContext("2d")
-          if (ctx) {
-            ctx.imageSmoothingEnabled = true
-            ctx.imageSmoothingQuality = "high"
-            ctx.drawImage(mapCanvas, x0, y0, w, h, 0, 0, 2048, 2048)
-            const textureDataUrl = offCanvas.toDataURL("image/jpeg", 0.95)
-            setSelectedRectangle((prev) => (prev ? { ...prev, textureDataUrl } : prev))
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    if (map.isLoaded() && !map.isMoving()) {
-      doCapture()
-    } else {
-      map.once("idle", doCapture)
-    }
-  }, [])
-
   const handleBoxPointerDown = useCallback((e) => {
     if (e.button !== 0) return // solo clic izquierdo
     e.preventDefault()
@@ -218,7 +174,7 @@ export default function MapComponentGL({
             const minLat = Math.min(start.lat, current.lat)
             const maxLat = Math.max(start.lat, current.lat)
 
-            // Vista previa inicial inmediata
+            // Vista previa inicial inmediata desde el lienzo
             let textureDataUrl = null
             try {
               const mapCanvas = mapRef.current?.getCanvas()
@@ -245,22 +201,6 @@ export default function MapComponentGL({
             })
             setIsDrawingBox(false)
             setBlockModelOpen(true)
-
-            // Acercar el mapa a la zona para disparar descarga de teselas de alta resolución (zoom 15-18)
-            // y al terminar el renderizado idle capturar la textura ultra nítida de 2048px
-            if (mapRef.current) {
-              mapRef.current.fitBounds(
-                [
-                  [minLng, minLat],
-                  [maxLng, maxLat],
-                ],
-                { padding: 40, duration: 300 },
-              )
-              mapRef.current.once("idle", () => {
-                captureHighResTexture([minLng, minLat, maxLng, maxLat])
-              })
-            }
-
             requestAnimationFrame(() => mapRef.current?.resize())
           }
         }
@@ -268,7 +208,7 @@ export default function MapComponentGL({
       })
       return null
     })
-  }, [captureHighResTexture])
+  }, [])
 
   const handleSplitPointerDown = useCallback((e) => {
     e.preventDefault()
@@ -305,17 +245,6 @@ export default function MapComponentGL({
   )
 
   const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
-
-  // Sincronizar automáticamente la textura del bloque 3D cuando el usuario cambia el mapa base
-  useEffect(() => {
-    if (blockModelOpen && selectedRectangle?.bbox) {
-      const timer = setTimeout(() => {
-        captureHighResTexture(selectedRectangle.bbox)
-      }, 500)
-      return () => clearTimeout(timer)
-    }
-  }, [basemap, showLabels, blockModelOpen, captureHighResTexture, selectedRectangle?.bbox])
-
   const [basemapOpen, setBasemapOpen] = useState(false)
   const basemapBtnRef = useRef(null)
   const basemapContainerRef = useRef(null)
@@ -1510,6 +1439,7 @@ export default function MapComponentGL({
             rectangle={selectedRectangle}
             elevationAt={elevationAt}
             map={mapRef.current}
+            basemap={basemap}
             onRedrawRectangle={handleStartDrawBox}
             expedientCode={expedientCode}
             isMaximized={splitRatio <= 0.05}

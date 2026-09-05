@@ -64,10 +64,9 @@ const SKY = {
 export const PITCH_MAX = 72
 
 /**
- * Velocidad del giro continuo, en grados por segundo. Una vuelta completa cada
- * 36 segundos: lo bastante lento para leer el terreno mientras pasa.
+ * Velocidad del giro continuo, en grados por segundo.
  */
-const SPIN_DEGREES_PER_SECOND = 10
+const SPIN_DEGREES_PER_SECOND = 24
 
 /**
  * Cuánto se espera, como mucho, a que el terreno tenga teselas antes de inclinar.
@@ -491,7 +490,7 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       previous = now
       // jumpTo y no easeTo: una animación por fotograma se pisaría con la
       // siguiente y el giro saldría a saltos.
-      const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * seconds
+      const bearing = mapInstance.getBearing() - SPIN_DEGREES_PER_SECOND * seconds
       mapInstance.jumpTo({ bearing })
 
       // El deslizador de giro sigue al mapa, pero no a 60 veces por segundo:
