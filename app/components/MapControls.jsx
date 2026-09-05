@@ -509,19 +509,6 @@ export const Hud3DPopover = ({
           >
             {isPinned ? <Pin className="h-3.5 w-3.5 fill-white" /> : <PinOff className="h-3.5 w-3.5" />}
           </button>
-
-          {/* Botón Cerrar / Ocultar panel */}
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              title="Ocultar panel 3D"
-              aria-label="Ocultar panel 3D"
-              className="flex h-6 w-6 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-400 transition-all hover:bg-zinc-800 hover:text-white"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
         </div>
       </div>
 

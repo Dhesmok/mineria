@@ -432,8 +432,52 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     let frame = 0
     let previous = performance.now()
     let lastPublished = 0
+    let isInteracting = false
+    let wheelTimeout = null
+
+    const canvas = mapInstance.getCanvas?.()
+
+    const onInteractionStart = () => {
+      isInteracting = true
+    }
+
+    const onInteractionEnd = () => {
+      isInteracting = false
+      previous = performance.now()
+    }
+
+    const onWheel = () => {
+      isInteracting = true
+      clearTimeout(wheelTimeout)
+      wheelTimeout = setTimeout(() => {
+        isInteracting = false
+        previous = performance.now()
+      }, 300)
+    }
+
+    if (canvas) {
+      canvas.addEventListener("pointerdown", onInteractionStart, { passive: true })
+      canvas.addEventListener("touchstart", onInteractionStart, { passive: true })
+      canvas.addEventListener("wheel", onWheel, { passive: true })
+    }
+    window.addEventListener("pointerup", onInteractionEnd, { passive: true })
+    window.addEventListener("pointercancel", onInteractionEnd, { passive: true })
+    window.addEventListener("touchend", onInteractionEnd, { passive: true })
+
+    mapInstance.on?.("dragstart", onInteractionStart)
+    mapInstance.on?.("dragend", onInteractionEnd)
+    mapInstance.on?.("rotatestart", onInteractionStart)
+    mapInstance.on?.("rotateend", onInteractionEnd)
+    mapInstance.on?.("pitchstart", onInteractionStart)
+    mapInstance.on?.("pitchend", onInteractionEnd)
 
     const step = (now) => {
+      if (isInteracting) {
+        previous = now
+        frame = requestAnimationFrame(step)
+        return
+      }
+
       const seconds = (now - previous) / 1000
       previous = now
       // jumpTo y no easeTo: una animación por fotograma se pisaría con la
@@ -457,6 +501,23 @@ export const useTerrainGL = (mapRef, mapInstance) => {
 
     return () => {
       cancelAnimationFrame(frame)
+      clearTimeout(wheelTimeout)
+      if (canvas) {
+        canvas.removeEventListener("pointerdown", onInteractionStart)
+        canvas.removeEventListener("touchstart", onInteractionStart)
+        canvas.removeEventListener("wheel", onWheel)
+      }
+      window.removeEventListener("pointerup", onInteractionEnd)
+      window.removeEventListener("pointercancel", onInteractionEnd)
+      window.removeEventListener("touchend", onInteractionEnd)
+
+      mapInstance.off?.("dragstart", onInteractionStart)
+      mapInstance.off?.("dragend", onInteractionEnd)
+      mapInstance.off?.("rotatestart", onInteractionStart)
+      mapInstance.off?.("rotateend", onInteractionEnd)
+      mapInstance.off?.("pitchstart", onInteractionStart)
+      mapInstance.off?.("pitchend", onInteractionEnd)
+
       // Al parar, el estado se pone al día con dónde quedó de verdad la cámara.
       setBearing(mapInstance.getBearing())
     }

@@ -38,6 +38,7 @@ import { TerrainProfile } from "./components/TerrainProfile"
 import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReadout"
 import { Hud3DPopover, MapButton, MapHUD, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import { BasemapPicker } from "./components/BasemapPicker"
+import { TerrainMenu } from "./components/TerrainMenu"
 import {
   ChevronLeft,
   Crosshair,
@@ -146,6 +147,44 @@ export default function MapComponentGL({
     }
   }, [basemapOpen])
 
+  const [terrainOpen, setTerrainOpen] = useState(false)
+  const terrainBtnRef = useRef(null)
+  const terrainContainerRef = useRef(null)
+  const terrainLeaveTimerRef = useRef(null)
+
+  const handleTerrainMouseEnter = useCallback(() => {
+    if (terrainLeaveTimerRef.current) {
+      clearTimeout(terrainLeaveTimerRef.current)
+      terrainLeaveTimerRef.current = null
+    }
+  }, [])
+
+  const handleTerrainMouseLeave = useCallback(() => {
+    if (!terrainOpen) return
+    if (terrainLeaveTimerRef.current) {
+      clearTimeout(terrainLeaveTimerRef.current)
+    }
+    terrainLeaveTimerRef.current = setTimeout(() => {
+      setTerrainOpen(false)
+    }, 800)
+  }, [terrainOpen])
+
+  useEffect(() => {
+    if (!terrainOpen) return
+    const handleClickOutside = (e) => {
+      if (terrainContainerRef.current && !terrainContainerRef.current.contains(e.target)) {
+        setTerrainOpen(false)
+      }
+    }
+    window.addEventListener("pointerdown", handleClickOutside)
+    return () => {
+      window.removeEventListener("pointerdown", handleClickOutside)
+      if (terrainLeaveTimerRef.current) {
+        clearTimeout(terrainLeaveTimerRef.current)
+      }
+    }
+  }, [terrainOpen])
+
   const [dibujoAbierto, setDibujoAbierto] = useState(false)
   const [dibujoCompacto, setDibujoCompacto] = useState(false)
   const [exportandoImagen, setExportandoImagen] = useState(false)
@@ -173,8 +212,8 @@ export default function MapComponentGL({
   const {
     is3D,
     toggle3D,
-    showHillshade: _showHillshade,
-    toggleHillshade: _toggleHillshade,
+    showHillshade,
+    toggleHillshade,
     exaggeration,
     changeExaggeration,
     bearing,
@@ -386,7 +425,7 @@ export default function MapComponentGL({
   // para consultarlo era trabajo pagado dos veces.
   const {
     terrainMode,
-    chooseTerrainMode: _chooseTerrainMode,
+    chooseTerrainMode,
     terrainRasterUnavailable,
     terrainRasterProgress,
     terrainRasterCellSize,
@@ -852,6 +891,55 @@ export default function MapComponentGL({
 
         {/* Controles de navegación y HUD unificados del mapa */}
         <div className="flex flex-col items-end gap-2">
+          {/* Botón Análisis de Terreno */}
+          <div
+            ref={terrainContainerRef}
+            onMouseEnter={handleTerrainMouseEnter}
+            onMouseLeave={handleTerrainMouseLeave}
+            className="relative"
+          >
+            <button
+              ref={terrainBtnRef}
+              type="button"
+              onClick={() => {
+                if (terrainLeaveTimerRef.current) {
+                  clearTimeout(terrainLeaveTimerRef.current)
+                  terrainLeaveTimerRef.current = null
+                }
+                setTerrainOpen((v) => !v)
+              }}
+              title="Análisis de terreno (pendiente, orientación, corte topográfico, cota)"
+              aria-label="Análisis de terreno"
+              aria-expanded={terrainOpen}
+              className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+                terrainOpen || Boolean(terrainMode) || showHillshade || profileActive || queryingTerrain
+                  ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
+                  : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+              }`}
+            >
+              <Mountain className="h-4.5 w-4.5" />
+            </button>
+            <div
+              className={`absolute right-full mr-3 bottom-0 z-30 origin-bottom-right transition-all duration-200 ease-out ${
+                terrainOpen
+                  ? "scale-100 opacity-100 translate-x-0 pointer-events-auto"
+                  : "scale-75 opacity-0 translate-x-4 pointer-events-none"
+              }`}
+            >
+              <TerrainMenu
+                terrainMode={terrainMode}
+                onChooseTerrainMode={chooseTerrainMode}
+                showHillshade={showHillshade}
+                onToggleHillshade={toggleHillshade}
+                profileActive={profileActive}
+                onToggleProfile={toggleProfile}
+                queryingTerrain={queryingTerrain}
+                onToggleQuery={toggleTerrainQuery}
+                onClose={() => setTerrainOpen(false)}
+              />
+            </div>
+          </div>
+
           {/* Botón Mapa Base */}
           <div
             ref={basemapContainerRef}
