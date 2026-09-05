@@ -39,10 +39,13 @@ import { CoordinateEntry, CursorCoordinates } from "./components/CoordinateReado
 import { Hud3DPopover, MapButton, MapHUD, MapNotice, RotateHint, SliderRow } from "./components/MapControls"
 import { BasemapPicker } from "./components/BasemapPicker"
 import { TerrainMenu } from "./components/TerrainMenu"
+import BlockModel3D from "./components/BlockModel3D"
 import {
+  Boxes,
   ChevronLeft,
   Crosshair,
   Download,
+  GripVertical,
   Loader2,
   Mountain,
   Layers,
@@ -107,6 +110,46 @@ export default function MapComponentGL({
   const [mapInstance, setMapInstance] = useState(null)
   const [error, setError] = useState(null)
   const [showErrorBanner, setShowErrorBanner] = useState(false)
+
+  // División de pantalla y Modelo de Bloque 3D (Forge3D)
+  const [blockModelOpen, setBlockModelOpen] = useState(false)
+  const [splitRatio, setSplitRatio] = useState(0.5)
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false)
+  const splitContainerRef = useRef(null)
+
+  const handleSplitPointerDown = useCallback((e) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setIsDraggingSplit(true)
+  }, [])
+
+  const handleSplitPointerMove = useCallback(
+    (e) => {
+      if (!isDraggingSplit || !splitContainerRef.current) return
+      const rect = splitContainerRef.current.getBoundingClientRect()
+      if (rect.width <= 0) return
+      const rawRatio = (e.clientX - rect.left) / rect.width
+      const clamped = Math.max(0.15, Math.min(0.85, rawRatio))
+      setSplitRatio(clamped)
+      mapRef.current?.resize()
+    },
+    [isDraggingSplit],
+  )
+
+  const handleSplitPointerUp = useCallback(
+    (e) => {
+      if (isDraggingSplit) {
+        setIsDraggingSplit(false)
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId)
+        } catch {
+          // ignore
+        }
+        mapRef.current?.resize()
+      }
+    },
+    [isDraggingSplit],
+  )
 
   const { basemap, showLabels, chooseBasemap } = useMapInitializationGL(mapRef, mapInstance)
   const [basemapOpen, setBasemapOpen] = useState(false)
@@ -212,8 +255,6 @@ export default function MapComponentGL({
   const {
     is3D,
     toggle3D,
-    showHillshade,
-    toggleHillshade,
     exaggeration,
     changeExaggeration,
     bearing,
@@ -669,47 +710,72 @@ export default function MapComponentGL({
   }, [])
 
   return (
-    <>
-      {/* h-full w-full además de absolute inset-0, y no es redundante: al
-          construir el mapa, MapLibre le pone al contenedor su clase
-          .maplibregl-map, cuyo CSS declara `position: relative`. Esa regla pisa
-          a la clase `absolute` de Tailwind —las dos tienen la misma
-          especificidad y gana la que se cargue después—, con lo que `inset-0`
-          deja de dimensionar nada y el mapa colapsaba a 0 px de alto. Con el
-          alto y el ancho explícitos el contenedor llena a su padre gane quien
-          gane. Leaflet no sufría esto porque su CSS no toca `position` en el
-          contenedor. */}
+    <div ref={splitContainerRef} className="relative h-full w-full overflow-hidden flex select-none">
+      {/* Vista Mapa Izquierda (MapLibre 2D/3D) */}
       <div
-        ref={containerRef}
-        className={`absolute inset-0 h-full w-full z-0 ${is3D ? "mode-3d" : "mode-2d"}`}
-      />
-
-      {/* El lienzo de arriba, donde van las capas que se funden con el relieve.
-          Son **dos divs y no uno**, y es por la misma regla del comentario de
-          arriba: `.maplibregl-map` declara `position: relative` y pisa al
-          `absolute` de Tailwind. Al primer mapa eso no le hacía daño —es el
-          primero del flujo, así que aterriza igual en la esquina—, pero el
-          segundo se colocaba **detrás del primero en el flujo normal**, es
-          decir 900 px más abajo: fuera de la pantalla entera. El síntoma era
-          que ni la geología del SGC, ni los hidrocarburos de la ANH, ni la
-          plancha se veían nunca, mientras todo lo medible decía que estaban
-          bien —capa visible, imagen cargada, opacidad 0,6—. Se vio mirando
-          dónde caía el lienzo, no qué contenía.
-          Con el envoltorio, quien coloca es un div que MapLibre no toca, y el
-          de dentro se queda con el `position: relative` que quiera. */}
-      <div
-        className="pointer-events-none absolute inset-0 z-[1] h-full w-full"
-        style={{
-          mixBlendMode: blendMode === "multiply" ? "multiply" : "normal",
-          // Escondido mientras no haya nada temático que enseñar: es un contexto
-          // WebGL y un juego de teselas de relieve de más, y en un teléfono eso
-          // se paga. Lo pone React al pintar y no un efecto a mano, para que el
-          // tamaño ya sea el bueno cuando los efectos vayan a medirlo.
-          display: hasActiveOverlayLayers ? "block" : "none",
-        }}
+        className="relative h-full overflow-hidden"
+        style={{ width: blockModelOpen ? `${splitRatio * 100}%` : "100%" }}
       >
-        <div ref={overlayContainerRef} className="h-full w-full" />
+        <div
+          ref={containerRef}
+          className={`absolute inset-0 h-full w-full z-0 ${is3D ? "mode-3d" : "mode-2d"}`}
+        />
+        <div
+          className="pointer-events-none absolute inset-0 z-[1] h-full w-full"
+          style={{
+            mixBlendMode: blendMode === "multiply" ? "multiply" : "normal",
+            display: hasActiveOverlayLayers ? "block" : "none",
+          }}
+        >
+          <div ref={overlayContainerRef} className="h-full w-full" />
+        </div>
       </div>
+
+      {/* Divisor Arrastrable (Split Divider) */}
+      {blockModelOpen && (
+        <div
+          onPointerDown={handleSplitPointerDown}
+          onPointerMove={handleSplitPointerMove}
+          onPointerUp={handleSplitPointerUp}
+          className="relative w-2 bg-zinc-950 border-x border-zinc-800 hover:border-emerald-500 cursor-col-resize flex items-center justify-center transition-colors z-30 select-none touch-none group shrink-0"
+          title="Arrastrar para ajustar la división de pantalla"
+        >
+          <div className="absolute w-5 h-10 rounded-full bg-zinc-800 border border-zinc-700 group-hover:border-emerald-500 flex items-center justify-center shadow-lg transition-colors">
+            <GripVertical className="h-3.5 w-3.5 text-zinc-400 group-hover:text-emerald-300" />
+          </div>
+        </div>
+      )}
+
+      {/* Vista Modelo Geológico 3D Derecha (Forge3D) */}
+      {blockModelOpen && (
+        <div
+          className="relative h-full overflow-hidden shrink-0"
+          style={{ width: `${(1 - splitRatio) * 100}%` }}
+        >
+          <BlockModel3D
+            isOpen={blockModelOpen}
+            onClose={() => {
+              setBlockModelOpen(false)
+              requestAnimationFrame(() => {
+                mapRef.current?.resize()
+                overlayMapRef.current?.resize()
+              })
+            }}
+            expedientCode={expedientCode}
+            isMaximized={splitRatio <= 0.05}
+            onToggleMaximize={() => {
+              setSplitRatio((r) => (r <= 0.05 ? 0.5 : 0.02))
+              requestAnimationFrame(() => {
+                mapRef.current?.resize()
+                overlayMapRef.current?.resize()
+              })
+            }}
+          />
+        </div>
+      )}
+
+      {/* CONTROLES Y PANELES FIJOS A LA VENTANA / VIEWPORT */}
+      <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
 
 
 
@@ -735,7 +801,7 @@ export default function MapComponentGL({
         //
         // Alineado abajo (`items-end`) para que el panel salga a la altura del
         // último botón y no flotando a media pantalla.
-        className={`absolute bottom-16 right-2 z-10 items-end gap-2 md:bottom-10 md:right-4 ${
+        className={`pointer-events-auto absolute bottom-16 right-2 z-10 items-end gap-2 md:bottom-10 md:right-4 ${
           panelOpen ? "hidden md:flex" : "flex"
         }`}
       >
@@ -891,6 +957,31 @@ export default function MapComponentGL({
 
         {/* Controles de navegación y HUD unificados del mapa */}
         <div className="flex flex-col items-end gap-2">
+          {/* Botón Modelo Geológico 3D (Forge3D) */}
+          <button
+            type="button"
+            onClick={() => {
+              setBlockModelOpen((v) => {
+                const next = !v
+                requestAnimationFrame(() => {
+                  mapRef.current?.resize()
+                  overlayMapRef.current?.resize()
+                })
+                return next
+              })
+            }}
+            title={blockModelOpen ? "Cerrar modelo geológico 3D" : "Modelo geológico 3D (Forge3D) - Estratigrafía y relieve"}
+            aria-label="Modelo geológico 3D"
+            aria-expanded={blockModelOpen}
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+              blockModelOpen
+                ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
+                : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            }`}
+          >
+            <Boxes className="h-4.5 w-4.5" />
+          </button>
+
           {/* Botón Análisis de Terreno */}
           <div
             ref={terrainContainerRef}
@@ -912,7 +1003,7 @@ export default function MapComponentGL({
               aria-label="Análisis de terreno"
               aria-expanded={terrainOpen}
               className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
-                terrainOpen || Boolean(terrainMode) || showHillshade || profileActive || queryingTerrain
+                terrainOpen || Boolean(terrainMode) || profileActive || queryingTerrain
                   ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
                   : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
               }`}
@@ -929,8 +1020,6 @@ export default function MapComponentGL({
               <TerrainMenu
                 terrainMode={terrainMode}
                 onChooseTerrainMode={chooseTerrainMode}
-                showHillshade={showHillshade}
-                onToggleHillshade={toggleHillshade}
                 profileActive={profileActive}
                 onToggleProfile={toggleProfile}
                 queryingTerrain={queryingTerrain}
@@ -1154,7 +1243,7 @@ export default function MapComponentGL({
       </div>
 
       {error && showErrorBanner && (
-        <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 z-10 flex items-center justify-between gap-2">
+        <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 z-10 flex items-center justify-between gap-2 pointer-events-auto">
           <span className="text-sm">{error}</span>
           <button
             type="button"
@@ -1165,6 +1254,7 @@ export default function MapComponentGL({
           </button>
         </div>
       )}
+      </div>
 
       <style jsx global>{`
         /* Mismas etiquetas que el visor Leaflet: texto blanco con contorno negro,
@@ -1432,6 +1522,6 @@ export default function MapComponentGL({
           }
         }
       `}</style>
-    </>
+    </div>
   )
 }

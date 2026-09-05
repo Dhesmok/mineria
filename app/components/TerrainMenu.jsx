@@ -22,8 +22,6 @@ import {
 export const TerrainMenu = ({
   terrainMode,
   onChooseTerrainMode,
-  showHillshade,
-  onToggleHillshade,
   profileActive,
   onToggleProfile,
   queryingTerrain,
@@ -31,11 +29,10 @@ export const TerrainMenu = ({
   _onClose,
 }) => {
   const anyActive =
-    Boolean(terrainMode) || showHillshade || profileActive || queryingTerrain
+    Boolean(terrainMode) || profileActive || queryingTerrain
 
   const handleResetAll = () => {
     if (terrainMode) onChooseTerrainMode(null)
-    if (showHillshade) onToggleHillshade()
     if (profileActive) onToggleProfile()
     if (queryingTerrain) onToggleQuery()
   }
@@ -69,15 +66,6 @@ export const TerrainMenu = ({
       active: profileActive,
       onClick: onToggleProfile,
       badge: "Perfil",
-    },
-    {
-      id: "hillshade",
-      title: "Relieve sombreado",
-      desc: "Realce visual del relieve sobre el mapa plano",
-      icon: Mountain,
-      active: showHillshade,
-      onClick: onToggleHillshade,
-      badge: "Hillshade",
     },
     {
       id: "query",
