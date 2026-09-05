@@ -21,12 +21,10 @@ import {
   Check,
 } from "lucide-react"
 
-import { loadMosaic } from "../utils/demTileLoader"
 import { TILE_SIZE } from "../utils/demTiles"
-import { TERRAIN_TILE_TEMPLATE } from "../utils/mapStyles"
 
 /**
- * Textura de tierra homogénea natural estilo corte de suelo / maqueta física
+ * Textura de tierra homogénea natural estilo corte geológico / maqueta física
  * (tonos cálidos terrosos naturales, inspirados en tierra fértil compacta).
  */
 function createHomogeneousEarthTexture() {
@@ -37,7 +35,7 @@ function createHomogeneousEarthTexture() {
   const ctx = canvas.getContext("2d")
   if (!ctx) return null
 
-  // 1. Degradado base de tierra natural cálida (estilo suelo vivo / corte geológico)
+  // 1. Degradado base de tierra natural cálida
   const grad = ctx.createLinearGradient(0, 0, 0, 512)
   grad.addColorStop(0, "#5a3a22")    // Capa superficial orgánica (humus)
   grad.addColorStop(0.15, "#784f30") // Suelo fértil cálido
@@ -77,7 +75,7 @@ function createHomogeneousEarthTexture() {
 }
 
 /**
- * Textura topográfica de relieve sombreado de alta definición si no hay satélite
+ * Textura topográfica hipsométrica suave de alta definición si no hay satélite o basemap === "relief"
  */
 function createReliefBasemapTexture(grid, segX, segZ) {
   if (typeof document === "undefined" || !grid || grid.length === 0) return null
@@ -159,89 +157,9 @@ function createReliefBasemapTexture(grid, segX, segZ) {
 }
 
 /**
- * Genera un Normal Map de Máxima Definición (Algoritmo Sobel / Horn 3x3)
- * directamente sobre el grid de elevación del DEM.
- * Convierte cada pendiente, cresta, cañón y relieve en micro-sombras y brillos nítidos.
+ * Calcula de forma determinista el zoom óptimo para teselas satelitales (hasta 100 teselas sin restricciones)
  */
-function createNormalMapFromDEM(grid, segX, segZ, metersPerThreeUnit, exag) {
-  if (typeof document === "undefined" || !grid || grid.length === 0) return null
-  const width = segX + 1
-  const height = segZ + 1
-  const outW = 1024
-  const outH = 1024
-  const canvas = document.createElement("canvas")
-  canvas.width = outW
-  canvas.height = outH
-  const ctx = canvas.getContext("2d")
-  if (!ctx || typeof ctx.createImageData !== "function") return null
-
-  const imgData = ctx.createImageData(outW, outH)
-  const data = imgData.data
-
-  const getH = (x, y) => grid[y * width + x] || 0
-
-  // Factor de escala normalizado para acentuar el relieve físico de forma orgánica
-  const scale = (Math.max(exag, 0.5) / Math.max(metersPerThreeUnit, 1)) * 36.0
-
-  for (let py = 0; py < outH; py++) {
-    const gy = (py / (outH - 1)) * (height - 1)
-    const y0 = Math.max(0, Math.floor(gy) - 1)
-    const yC = Math.floor(gy)
-    const y1 = Math.min(height - 1, Math.floor(gy) + 1)
-
-    for (let px = 0; px < outW; px++) {
-      const gx = (px / (outW - 1)) * (width - 1)
-      const x0 = Math.max(0, Math.floor(gx) - 1)
-      const xC = Math.floor(gx)
-      const x1 = Math.min(width - 1, Math.floor(gx) + 1)
-
-      // Operador Sobel 3x3 para derivada continua suave libre de artefactos
-      const z00 = getH(x0, y0)
-      const z10 = getH(xC, y0)
-      const z20 = getH(x1, y0)
-      const z01 = getH(x0, yC)
-      const z21 = getH(x1, yC)
-      const z02 = getH(x0, y1)
-      const z12 = getH(xC, y1)
-      const z22 = getH(x1, y1)
-
-      const dx = (z20 + 2 * z21 + z22) - (z00 + 2 * z01 + z02)
-      const dy = (z02 + 2 * z12 + z22) - (z00 + 2 * z10 + z20)
-
-      // Vector normal en el espacio tangente
-      let nx = -dx * scale
-      let ny = dy * scale
-      let nz = 8.0
-
-      const len = Math.hypot(nx, ny, nz)
-      nx /= len
-      ny /= len
-      nz /= len
-
-      const idx = (py * outW + px) * 4
-      data[idx] = Math.round((nx * 0.5 + 0.5) * 255)
-      data[idx + 1] = Math.round((ny * 0.5 + 0.5) * 255)
-      data[idx + 2] = Math.round((nz * 0.5 + 0.5) * 255)
-      data[idx + 3] = 255
-    }
-  }
-
-  ctx.putImageData(imgData, 0, 0)
-  const tex = new THREE.CanvasTexture(canvas)
-  tex.wrapS = THREE.ClampToEdgeWrapping
-  tex.wrapT = THREE.ClampToEdgeWrapping
-  tex.generateMipmaps = true
-  tex.minFilter = THREE.LinearMipmapLinearFilter
-  tex.magFilter = THREE.LinearFilter
-  tex.needsUpdate = true
-  return tex
-}
-
-/**
- * Calcula de forma determinista el zoom óptimo para teselas satelitales
- * permitiendo hasta 49 teselas para garantizar nitidez nativa fotorealista (2048x2048)
- */
-function getOptimalSatelliteTileZoom(minLng, minLat, maxLng, maxLat, maxTiles = 49) {
+function getOptimalSatelliteTileRange(minLng, minLat, maxLng, maxLat, maxTiles = 100) {
   for (let z = 18; z >= 12; z--) {
     const n = 2 ** z
     const lng2t = (lon) => Math.floor(((lon + 180) / 360) * n)
@@ -266,10 +184,10 @@ function getOptimalSatelliteTileZoom(minLng, minLat, maxLng, maxLat, maxTiles = 
 }
 
 /**
- * Calcula el zoom óptimo para el DEM permitiendo hasta nivel 15 (AWS Terrarium nativo)
+ * Calcula el zoom óptimo para el DEM (nivel 14 o 15 para áreas locales, nivel 13 para áreas grandes)
  */
-function getOptimalDemZoom(minLng, minLat, maxLng, maxLat, maxTiles = 25) {
-  for (let z = 15; z >= 11; z--) {
+function getOptimalDemTileRange(minLng, minLat, maxLng, maxLat, maxTiles = 64) {
+  for (let z = 15; z >= 12; z--) {
     const n = 2 ** z
     const lng2t = (lon) => Math.floor(((lon + 180) / 360) * n)
     const lat2normY = (lat) => {
@@ -286,25 +204,25 @@ function getOptimalDemZoom(minLng, minLat, maxLng, maxLat, maxTiles = 25) {
     const tx = Math.max(1, maxX - minX + 1)
     const ty = Math.max(1, maxY - minY + 1)
     if (tx * ty <= maxTiles) {
-      return { zoom: z, minX, maxX, minY, maxY, tilesX: tx, tilesY: ty, cols: tx * TILE_SIZE, rows: ty * TILE_SIZE }
+      return { zoom: z, minX, maxX, minY, maxY, tilesX: tx, tilesY: ty }
     }
   }
-  return { zoom: 11, minX: 0, maxX: 1, minY: 0, maxY: 1, tilesX: 2, tilesY: 2, cols: 512, rows: 512 }
+  return { zoom: 12, minX: 0, maxX: 1, minY: 0, maxY: 1, tilesX: 2, tilesY: 2 }
 }
 
 /**
- * Descarga y compone directamente las teselas de satélite a resolución nativa
- * para el recuadro especificado con máxima nitidez (2048x2048) y soporte de todos los mapas base.
+ * Descarga y compone directamente las teselas de satélite a resolución 4K nativa (4096x4096)
+ * sin restricciones para cualquier mapa base activo.
  */
 async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
   if (typeof document === "undefined" || !bbox) return null
   const [minLng, minLat, maxLng, maxLat] = bbox
 
-  const opt = getOptimalSatelliteTileZoom(minLng, minLat, maxLng, maxLat, 49)
+  const opt = getOptimalSatelliteTileRange(minLng, minLat, maxLng, maxLat, 100)
   const { zoom, minX, maxX, minY, maxY, tilesX, tilesY } = opt
   const nTiles = 2 ** zoom
 
-  // Plantilla de URL según mapa base
+  // Plantilla de URL limpia según mapa base
   const getTileUrl = (x, y, z) => {
     if (basemap === "osm") {
       return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
@@ -318,7 +236,7 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
     if (basemap === "positron") {
       return `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`
     }
-    // Google Satellite por defecto con subdominio balanceado
+    // Google Satellite por defecto con subdominio balanceado limpio
     const s = Math.abs((x + y) % 4)
     return `https://mt${s}.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${z}`
   }
@@ -338,8 +256,7 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
     for (let tx = 0; tx < tilesX; tx++) {
       const tileX = minX + tx
       const tileY = minY + ty
-      // Añadir parámetro para forzar lectura CORS limpia sin riesgo de caché contaminada
-      const url = getTileUrl(tileX, tileY, zoom) + (getTileUrl(tileX, tileY, zoom).includes("?") ? "&" : "?") + "_cb=1"
+      const url = getTileUrl(tileX, tileY, zoom)
 
       const p = new Promise((resolve) => {
         const img = new Image()
@@ -359,7 +276,7 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
     }
   }
 
-  await Promise.all(tilePromises)
+  await Promise.allSettled(tilePromises)
 
   // Recorte georreferenciado exacto del bbox dentro del mosaico descargado
   const tile2lng = (x) => (x / nTiles) * 360 - 180
@@ -391,18 +308,142 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
 
   if (cropW <= 0 || cropH <= 0) return null
 
-  // Salida a 2048x2048 de ultra alta nitidez con filtrado bilineal de alta precisión
+  // Lienzo 4K de máxima definición con suavizado de alta calidad
   const finalCanvas = document.createElement("canvas")
-  finalCanvas.width = 2048
-  finalCanvas.height = 2048
+  finalCanvas.width = 4096
+  finalCanvas.height = 4096
   const finalCtx = finalCanvas.getContext("2d")
   if (!finalCtx) return null
 
   finalCtx.imageSmoothingEnabled = true
   finalCtx.imageSmoothingQuality = "high"
-  finalCtx.drawImage(fullCanvas, cropX, cropY, cropW, cropH, 0, 0, 2048, 2048)
+  finalCtx.drawImage(fullCanvas, cropX, cropY, cropW, cropH, 0, 0, 4096, 4096)
 
   return finalCanvas
+}
+
+/**
+ * Descarga y decodifica directamente el mosaico DEM con elevación real continua libre de concurrencias rotas
+ */
+async function loadDemElevationGrid(bbox, segX, segZ) {
+  if (typeof document === "undefined" || !bbox) return null
+  const [minLng, minLat, maxLng, maxLat] = bbox
+
+  const opt = getOptimalDemTileRange(minLng, minLat, maxLng, maxLat, 64)
+  const { zoom, minX, minY, tilesX, tilesY } = opt
+
+  const mosaicW = tilesX * TILE_SIZE
+  const mosaicH = tilesY * TILE_SIZE
+  const mosaicCanvas = document.createElement("canvas")
+  mosaicCanvas.width = mosaicW
+  mosaicCanvas.height = mosaicH
+  const mosaicCtx = mosaicCanvas.getContext("2d", { willReadFrequently: true })
+  if (!mosaicCtx) return null
+
+  const tilePromises = []
+  for (let ty = 0; ty < tilesY; ty++) {
+    for (let tx = 0; tx < tilesX; tx++) {
+      const tileX = minX + tx
+      const tileY = minY + ty
+      const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zoom}/${tileX}/${tileY}.png`
+
+      const p = new Promise((resolve) => {
+        const img = new Image()
+        img.crossOrigin = "anonymous"
+        img.onload = () => {
+          try {
+            mosaicCtx.drawImage(img, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+            resolve(true)
+          } catch {
+            resolve(false)
+          }
+        }
+        img.onerror = () => resolve(false)
+        img.src = url
+      })
+      tilePromises.push(p)
+    }
+  }
+
+  await Promise.allSettled(tilePromises)
+
+  // Leemos en una sola pasada atómica todos los píxeles de elevación
+  let data = null
+  try {
+    const imgData = mosaicCtx.getImageData(0, 0, mosaicW, mosaicH)
+    data = imgData.data
+  } catch {
+    return null
+  }
+
+  if (!data || data.length === 0) return null
+
+  const getElevationAtPixel = (px, py) => {
+    const x = Math.max(0, Math.min(mosaicW - 1, px))
+    const y = Math.max(0, Math.min(mosaicH - 1, py))
+    const idx = (y * mosaicW + x) * 4
+    const r = data[idx]
+    const g = data[idx + 1]
+    const b = data[idx + 2]
+    // Fórmula oficial Terrarium: r * 256 + g + b / 256 - 32768
+    const val = r * 256 + g + b / 256 - 32768
+    return Number.isFinite(val) && val > -500 && val < 9000 ? val : null
+  }
+
+  const nTiles = 2 ** zoom
+  const lat2normY = (lat) => {
+    const sin = Math.sin((lat * Math.PI) / 180)
+    const clampedSin = Math.max(-0.9999, Math.min(0.9999, sin))
+    return (1 - Math.log((1 + clampedSin) / (1 - clampedSin)) / (2 * Math.PI)) / 2
+  }
+
+  const grid = []
+  let minElev = Infinity
+  let maxElev = -Infinity
+
+  for (let j = 0; j <= segZ; j++) {
+    const v = j / segZ
+    const lat = maxLat - v * (maxLat - minLat)
+    const normY = lat2normY(lat)
+    const exactY = normY * nTiles * TILE_SIZE - minY * TILE_SIZE
+
+    const y0 = Math.floor(exactY)
+    const y1 = y0 + 1
+    const fy = exactY - y0
+
+    for (let i = 0; i <= segX; i++) {
+      const u = i / segX
+      const lng = minLng + u * (maxLng - minLng)
+      const normX = (lng + 180) / 360
+      const exactX = normX * nTiles * TILE_SIZE - minX * TILE_SIZE
+
+      const x0 = Math.floor(exactX)
+      const x1 = x0 + 1
+      const fx = exactX - x0
+
+      // Interpolación bilineal suave y continua de 4 píxeles contiguos
+      const h00 = getElevationAtPixel(x0, y0)
+      const h10 = getElevationAtPixel(x1, y0)
+      const h01 = getElevationAtPixel(x0, y1)
+      const h11 = getElevationAtPixel(x1, y1)
+
+      let h = 1800
+      if (h00 !== null && h10 !== null && h01 !== null && h11 !== null) {
+        h = (1 - fx) * (1 - fy) * h00 + fx * (1 - fy) * h10 + (1 - fx) * fy * h01 + fx * fy * h11
+      } else if (h00 !== null) {
+        h = h00
+      }
+
+      grid.push(h)
+      if (h < minElev) minElev = h
+      if (h > maxElev) maxElev = h
+    }
+  }
+
+  if (!isFinite(minElev)) minElev = 0
+  if (!isFinite(maxElev)) maxElev = 100
+
+  return { grid, minElev, maxElev }
 }
 
 /**
@@ -451,7 +492,6 @@ function createPinSprite(text, color = "#10b981") {
   texture.minFilter = THREE.LinearFilter
   const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false })
   const sprite = new THREE.Sprite(spriteMat)
-  // Micro-escala delicada (no invasiva)
   sprite.scale.set(0.32, 0.096, 1)
   return sprite
 }
@@ -477,7 +517,7 @@ function buildPinMesh(pin) {
   dot.position.y = 0.008
   group.add(dot)
 
-  // 2. Mástil / aguja metálica fina (fina y arquitectónica)
+  // 2. Mástil / aguja metálica fina
   const needleHeight = 0.24
   const needleGeom = new THREE.CylinderGeometry(0.004, 0.004, needleHeight, 8)
   const needleMat = new THREE.MeshStandardMaterial({
@@ -501,7 +541,7 @@ function buildPinMesh(pin) {
 }
 
 /**
- * Componente de Bloque 3D del Terreno (Máxima Definición Topográfica y Fotorrealismo)
+ * Componente de Bloque 3D del Terreno (Máxima Definición 4K y Topografía Nítida sin Restricciones)
  */
 export default function BlockModel3D({
   isOpen,
@@ -583,9 +623,9 @@ export default function BlockModel3D({
     [metersPerThreeUnit],
   )
 
-  // Resolución de malla densa (200x200 = 40,000 vértices para capturar cada arista y cañón)
-  const segX = 200
-  const segZ = 200
+  // Resolución de malla densa (256x256 = 65,536 vértices para modelado topográfico ultra-nítido)
+  const segX = 256
+  const segZ = 256
 
   // 1. Inicialización de Escena Three.js
   useEffect(() => {
@@ -641,7 +681,7 @@ export default function BlockModel3D({
     scene.add(hemiLight)
     hemiLightRef.current = hemiLight
 
-    // Luz solar rasante (altura 13 en lugar de cenital) para que valles y crestas proyecten relieve real
+    // Luz solar rasante (altura 13) para que valles y crestas proyecten relieve real
     const dirLight = new THREE.DirectionalLight(0xfffaed, 3.4)
     dirLight.position.set(13, 13, 13)
     dirLight.castShadow = true
@@ -715,7 +755,7 @@ export default function BlockModel3D({
 
     const topMat = new THREE.MeshStandardMaterial({
       map: fallbackTex,
-      roughness: 0.75,
+      roughness: 0.82,
       metalness: 0.04,
       flatShading: false,
     })
@@ -843,7 +883,7 @@ export default function BlockModel3D({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, aspect, maxLat, minLat, maxLng, minLng, studioTheme, computeHeight, exaggeration, W, D])
 
-  // --- Carga de Teselas de Satélite en Ultra Alta Resolución Nativa (2048x2048) ---
+  // --- Carga de Teselas de Satélite en Ultra Alta Resolución 4K Nativa (4096x4096) ---
   useEffect(() => {
     if (!isOpen || !rectangle?.bbox) return
     let canceled = false
@@ -883,88 +923,23 @@ export default function BlockModel3D({
     }
   }, [isOpen, rectangle?.bbox, basemap])
 
-  // --- Carga Asíncrona del DEM Real de Alta Definición (Nivel nativo hasta 15 con interpolación bilineal) ---
+  // --- Carga Asíncrona del DEM Real de Alta Definición (Mosaico Directo Libre de Concurrencias Rotas) ---
   useEffect(() => {
     if (!isOpen || !rectangle?.bbox) return
 
     let canceled = false
-    const [minLng, minLat, maxLng, maxLat] = rectangle.bbox
 
-    // Selección de zoom óptimo de DEM (hasta nivel 15 = celdas de ~3 metros)
-    const range = getOptimalDemZoom(minLng, minLat, maxLng, maxLat, 25)
-
-    const tiles = []
-    for (let y = range.minY; y <= range.maxY; y++) {
-      for (let x = range.minX; x <= range.maxX; x++) {
-        tiles.push({
-          z: range.zoom,
-          x,
-          y,
-          colOffset: (x - range.minX) * TILE_SIZE,
-          rowOffset: (y - range.minY) * TILE_SIZE,
-        })
-      }
-    }
-
-    loadMosaic(TERRAIN_TILE_TEMPLATE, tiles, range)
-      .then(({ heights, missing }) => {
-        if (canceled || missing === tiles.length) return
-
-        const realGrid = []
-        let rMin = Infinity
-        let rMax = -Infinity
-
-        const celdas = TILE_SIZE * (2 ** range.zoom)
-        const lat2normY = (lat) => {
-          const sin = Math.sin((lat * Math.PI) / 180)
-          const clampedSin = Math.max(-0.9999, Math.min(0.9999, sin))
-          return (1 - Math.log((1 + clampedSin) / (1 - clampedSin)) / (2 * Math.PI)) / 2
-        }
-
-        // Muestreo con INTERPOLACIÓN BILINEAL SUAVE Y CONTINUA
-        for (let j = 0; j <= segZ; j++) {
-          const v = j / segZ
-          const lat = maxLat - v * (maxLat - minLat)
-          const exactRow = lat2normY(lat) * celdas - range.minY * TILE_SIZE
-          const r0 = Math.max(0, Math.min(range.rows - 1, Math.floor(exactRow)))
-          const r1 = Math.max(0, Math.min(range.rows - 1, r0 + 1))
-          const fy = Math.max(0, Math.min(1, exactRow - r0))
-
-          for (let i = 0; i <= segX; i++) {
-            const u = i / segX
-            const lng = minLng + u * (maxLng - minLng)
-            const exactCol = ((lng + 180) / 360) * celdas - range.minX * TILE_SIZE
-            const c0 = Math.max(0, Math.min(range.cols - 1, Math.floor(exactCol)))
-            const c1 = Math.max(0, Math.min(range.cols - 1, c0 + 1))
-            const fx = Math.max(0, Math.min(1, exactCol - c0))
-
-            const h00 = heights[r0 * range.cols + c0]
-            const h10 = heights[r0 * range.cols + c1]
-            const h01 = heights[r1 * range.cols + c0]
-            const h11 = heights[r1 * range.cols + c1]
-
-            let elev = 1800
-            if (Number.isFinite(h00) && Number.isFinite(h10) && Number.isFinite(h01) && Number.isFinite(h11)) {
-              elev = (1 - fx) * (1 - fy) * h00 + fx * (1 - fy) * h10 + (1 - fx) * fy * h01 + fx * fy * h11
-            } else if (Number.isFinite(h00)) {
-              elev = h00
-            }
-
-            realGrid.push(elev)
-            if (elev < rMin) rMin = elev
-            if (elev > rMax) rMax = elev
-          }
-        }
-
-        if (!isFinite(rMin)) rMin = 0
-        if (!isFinite(rMax)) rMax = 100
+    loadDemElevationGrid(rectangle.bbox, segX, segZ)
+      .then((demRes) => {
+        if (canceled || !demRes) return
+        const { grid: realGrid, minElev: rMin, maxElev: rMax } = demRes
 
         elevationMinRef.current = rMin
         elevationMaxRef.current = rMax
         elevationGridRef.current = realGrid
         setDemLoaded(true)
 
-        // Deformar la geometría con la topografía real SRTM de alta definición
+        // Deformar la geometría con la topografía real de alta definición
         if (topMeshRef.current && wallsMeshRef.current) {
           const topPos = topMeshRef.current.geometry.attributes.position
           for (let k = 0; k < topPos.count; k++) {
@@ -974,15 +949,7 @@ export default function BlockModel3D({
           topPos.needsUpdate = true
           topMeshRef.current.geometry.computeVertexNormals()
 
-          // Generar Normal Map fotorealista Horn 3x3 para resaltar crestas, cañones y laderas
-          const normalTex = createNormalMapFromDEM(realGrid, segX, segZ, metersPerThreeUnit, exaggeration)
-          if (normalTex && topMeshRef.current.material) {
-            topMeshRef.current.material.normalMap = normalTex
-            topMeshRef.current.material.normalScale.set(2.2, 2.2)
-            topMeshRef.current.material.needsUpdate = true
-          }
-
-          // Si el mapa base es relieve, actualizar la textura de relieve
+          // Si el mapa base es relieve, actualizar la textura de relieve con la elevación real
           if (basemap === "relief") {
             const reliefTex = createReliefBasemapTexture(realGrid, segX, segZ)
             if (reliefTex) {
@@ -1043,14 +1010,6 @@ export default function BlockModel3D({
     }
     topPos.needsUpdate = true
     topMeshRef.current.geometry.computeVertexNormals()
-
-    // Actualizar normal map con la nueva exageración
-    const normalTex = createNormalMapFromDEM(grid, segX, segZ, metersPerThreeUnit, exaggeration)
-    if (normalTex && topMeshRef.current.material) {
-      topMeshRef.current.material.normalMap = normalTex
-      topMeshRef.current.material.normalScale.set(2.2, 2.2)
-      topMeshRef.current.material.needsUpdate = true
-    }
 
     // Paredes
     const wallPos = wallsMeshRef.current.geometry.attributes.position
