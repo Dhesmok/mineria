@@ -247,4 +247,16 @@ describe("panel de capas por áreas", () => {
     await openArea(user, "Cartografía")
     expect(screen.getByRole("button", { name: "Cambiar el color de Predios" })).toBeDisabled()
   })
+
+  it("preserva los contenedores de escritorio y aísla los controles móviles", () => {
+    const { container } = render(<Component />)
+    const aside = container.querySelector("aside")
+    expect(aside).toHaveClass("hidden")
+    expect(aside).toHaveClass("md:flex")
+
+    const mobileNav = screen.getByRole("navigation", { name: "Controles principales para móvil" })
+    expect(mobileNav).toHaveClass("flex")
+    expect(mobileNav).toHaveClass("md:hidden")
+  })
 })
+
