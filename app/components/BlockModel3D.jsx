@@ -1635,7 +1635,7 @@ export default function BlockModel3D({
     <div className="relative w-full h-full flex flex-col bg-zinc-950 select-none overflow-hidden font-sans">
       {/* Cabecera Obsidian Glass */}
       <div className="h-12 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800/80 px-3 sm:px-4 flex items-center justify-between z-20 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
           <div className="p-1.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-400 shrink-0">
             <Box size={16} />
           </div>
@@ -1707,117 +1707,123 @@ export default function BlockModel3D({
       </div>
 
       {/* HUD de Controles Flotante Inferior */}
-      <div className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom,12px))] md:bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-zinc-900/95 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl max-w-[96vw] overflow-x-auto no-scrollbar touch-pan-x">
-        {/* Control de Exageración Vertical */}
-        <div className="flex items-center gap-2 pr-3 border-r border-zinc-800">
-          <Mountain size={14} className="text-zinc-400 shrink-0" />
-          <div className="flex flex-col">
-            <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
-              Exageración:
+      <div className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom,12px))] md:bottom-4 left-1/2 -translate-x-1/2 z-30 flex flex-col md:flex-row items-center gap-2 bg-zinc-900/95 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl max-w-[96vw] w-fit">
+        {/* Fila 1 en móvil / izquierda en desktop: Sliders de Exageración y Ángulo Sol */}
+        <div className="flex items-center justify-center gap-2 sm:gap-3 w-full md:w-auto">
+          {/* Control de Exageración Vertical */}
+          <div className="flex items-center gap-1.5 sm:gap-2 pr-2 sm:pr-3 border-r border-zinc-800 shrink-0">
+            <Mountain size={14} className="text-zinc-400 shrink-0" />
+            <div className="flex flex-col">
+              <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
+                Exageración:
+              </span>
+              <input
+                type="range"
+                min="0.5"
+                max="5.0"
+                step="0.1"
+                aria-label="Exageración vertical"
+                value={exaggeration}
+                onChange={(e) => setExaggeration(parseFloat(e.target.value))}
+                className="w-16 sm:w-20 accent-sky-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
+              />
+            </div>
+            <span className="text-xs font-mono font-bold text-sky-400 w-7 sm:w-8 text-right">
+              {exaggeration.toFixed(1)}×
             </span>
-            <input
-              type="range"
-              min="0.5"
-              max="5.0"
-              step="0.1"
-              aria-label="Exageración vertical"
-              value={exaggeration}
-              onChange={(e) => setExaggeration(parseFloat(e.target.value))}
-              className="w-20 accent-sky-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
-            />
           </div>
-          <span className="text-xs font-mono font-bold text-sky-400 w-8 text-right">
-            {exaggeration.toFixed(1)}×
-          </span>
-        </div>
 
-        {/* Control del Sol e Iluminación */}
-        <div className="flex items-center gap-2 pr-3 border-r border-zinc-800">
-          <Sun size={14} className="text-amber-400 shrink-0" />
-          <div className="flex flex-col">
-            <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
-              Ángulo Sol
+          {/* Control del Sol e Iluminación */}
+          <div className="flex items-center gap-1.5 sm:gap-2 md:pr-3 md:border-r md:border-zinc-800 shrink-0">
+            <Sun size={14} className="text-amber-400 shrink-0" />
+            <div className="flex flex-col">
+              <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
+                Ángulo Sol
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="360"
+                step="5"
+                title="Girar posición del sol para ver sombras dinámicas"
+                aria-label="Girar posición del sol para ver sombras dinámicas"
+                value={sunAngle}
+                onChange={(e) => setSunAngle(parseInt(e.target.value))}
+                className="w-16 sm:w-20 accent-amber-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
+              />
+            </div>
+            <span className="text-xs font-mono font-bold text-amber-300 w-8 sm:w-9 text-right">
+              {sunAngle}°
             </span>
-            <input
-              type="range"
-              min="0"
-              max="360"
-              step="5"
-              title="Girar posición del sol para ver sombras dinámicas"
-              aria-label="Girar posición del sol para ver sombras dinámicas"
-              value={sunAngle}
-              onChange={(e) => setSunAngle(parseInt(e.target.value))}
-              className="w-20 accent-amber-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
-            />
           </div>
-          <span className="text-xs font-mono font-bold text-amber-300 w-9 text-right">
-            {sunAngle}°
-          </span>
         </div>
 
-        {/* Herramienta de Pines Personalizados */}
-        <div className="flex items-center gap-1 pr-3 border-r border-zinc-800">
-          <button
-            onClick={() => setIsAddingPin(!isAddingPin)}
-            className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
-              isAddingPin
-                ? "bg-rose-500 text-white border-rose-400 shadow-md shadow-rose-500/30 animate-pulse"
-                : "text-zinc-300 hover:text-white bg-zinc-800/60 border-zinc-700/60 hover:bg-zinc-800"
-            }`}
-            title={isAddingPin ? "Haz clic en el terreno para colocar el pin" : "Añadir pin sobre el terreno"}
-          >
-            <MapPin size={13} />
-            <span>{isAddingPin ? "Colocar Pin..." : "+ Pin"}</span>
-          </button>
-        </div>
+        {/* Fila 2 en móvil / continuación en desktop: Herramientas y Acciones */}
+        <div className="flex items-center justify-center gap-1.5 sm:gap-2 w-full md:w-auto pt-1.5 border-t border-zinc-800/60 md:border-t-0 md:pt-0">
+          {/* Herramienta de Pines Personalizados */}
+          <div className="flex items-center gap-1 pr-2 sm:pr-3 border-r border-zinc-800 shrink-0">
+            <button
+              onClick={() => setIsAddingPin(!isAddingPin)}
+              className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
+                isAddingPin
+                  ? "bg-rose-500 text-white border-rose-400 shadow-md shadow-rose-500/30 animate-pulse"
+                  : "text-zinc-300 hover:text-white bg-zinc-800/60 border-zinc-700/60 hover:bg-zinc-800"
+              }`}
+              title={isAddingPin ? "Haz clic en el terreno para colocar el pin" : "Añadir pin sobre el terreno"}
+            >
+              <MapPin size={13} />
+              <span>{isAddingPin ? "Colocar Pin..." : "+ Pin"}</span>
+            </button>
+          </div>
 
-        {/* Botones de Función */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setAutoRotate(!autoRotate)}
-            className={`p-1.5 rounded-lg border transition-all ${
-              autoRotate
-                ? "bg-sky-500/20 text-sky-400 border-sky-500/40"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
-            }`}
-            title={autoRotate ? "Detener giro continuo" : "Iniciar giro automático"}
-          >
-            <RotateCw size={15} />
-          </button>
+          {/* Botones de Función */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setAutoRotate(!autoRotate)}
+              className={`p-1.5 rounded-lg border transition-all ${
+                autoRotate
+                  ? "bg-sky-500/20 text-sky-400 border-sky-500/40"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
+              }`}
+              title={autoRotate ? "Detener giro continuo" : "Iniciar giro automático"}
+            >
+              <RotateCw size={15} />
+            </button>
 
-          <button
-            onClick={() => setWireframe(!wireframe)}
-            className={`p-1.5 rounded-lg border transition-all ${
-              wireframe
-                ? "bg-sky-500/20 text-sky-400 border-sky-500/40"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
-            }`}
-            title="Alternar vista de malla de alambre"
-          >
-            <Grid size={15} />
-          </button>
+            <button
+              onClick={() => setWireframe(!wireframe)}
+              className={`p-1.5 rounded-lg border transition-all ${
+                wireframe
+                  ? "bg-sky-500/20 text-sky-400 border-sky-500/40"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
+              }`}
+              title="Alternar vista de malla de alambre"
+            >
+              <Grid size={15} />
+            </button>
 
-          <button
-            onClick={() => setStudioTheme(studioTheme === "dark" ? "light" : "dark")}
-            className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
-            title={`Cambiar a fondo ${studioTheme === "dark" ? "claro" : "oscuro"}`}
-          >
-            <Activity size={15} />
-          </button>
+            <button
+              onClick={() => setStudioTheme(studioTheme === "dark" ? "light" : "dark")}
+              className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
+              title={`Cambiar a fondo ${studioTheme === "dark" ? "claro" : "oscuro"}`}
+            >
+              <Activity size={15} />
+            </button>
 
-          <button
-            onClick={handleScreenshot}
-            className="p-1.5 text-zinc-400 hover:text-sky-400 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
-            title="Exportar imagen PNG del bloque 3D"
-          >
-            <Camera size={15} />
-          </button>
+            <button
+              onClick={handleScreenshot}
+              className="p-1.5 text-zinc-400 hover:text-sky-400 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
+              title="Exportar imagen PNG del bloque 3D"
+            >
+              <Camera size={15} />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Editor flotante de Pin Seleccionado */}
       {selectedPinId && (
-        <div className="absolute top-14 left-4 z-30 bg-zinc-900/95 backdrop-blur-md p-3 rounded-xl border border-sky-500/40 shadow-2xl flex flex-col gap-2 w-64 animate-in fade-in zoom-in duration-150">
+        <div className="absolute top-14 left-4 z-30 bg-zinc-900/95 backdrop-blur-md p-3 rounded-xl border border-sky-500/40 shadow-2xl flex flex-col gap-2 w-64 max-w-[calc(100vw-2rem)] animate-in fade-in zoom-in duration-150">
           <div className="flex items-center justify-between text-xs font-semibold text-zinc-200">
             <span className="flex items-center gap-1.5 text-sky-400">
               <MapPin size={14} /> Editar Marcador
