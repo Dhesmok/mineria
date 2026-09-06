@@ -112,7 +112,7 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/70 backdrop-blur-md">
-      <div className="flex h-[70vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl">
+      <div className="flex h-[75dvh] sm:h-[70vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl">
         <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3">
           <h2 className="text-[15px] font-semibold text-white">Resultados</h2>
           <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[11px] font-semibold text-zinc-300 border border-zinc-700">
@@ -126,13 +126,13 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
             type="button"
             onClick={onClose}
             aria-label="Cerrar la tabla"
-            className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+            className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white min-h-[36px] min-w-[36px] flex items-center justify-center"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto overscroll-x-contain touch-pan-x touch-pan-y">
           {features.length === 0 ? (
             <p className="px-4 py-10 text-center text-[13px] text-zinc-400">
               El filtro no dejó pasar ningún registro.
@@ -216,7 +216,7 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
         </div>
 
         {features.length > PAGE_SIZE && (
-          <div className="flex items-center justify-between border-t border-zinc-800 bg-zinc-950/90 px-4 py-2 text-xs text-zinc-400">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-zinc-800 bg-zinc-950/90 px-4 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] text-xs text-zinc-400">
             <span>
               Mostrando{" "}
               <strong className="font-semibold text-zinc-200">
@@ -232,13 +232,13 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
               </strong>{" "}
               registros
             </span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center justify-between sm:justify-end gap-1.5">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
                 aria-label="Página anterior"
-                className="flex items-center gap-1 rounded-xl border border-zinc-700 bg-zinc-850 px-2.5 py-1 font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex items-center gap-1 rounded-xl border border-zinc-700 bg-zinc-850 px-3 py-1.5 min-h-[36px] font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
                 <span>Anterior</span>
@@ -251,7 +251,7 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
                 aria-label="Página siguiente"
-                className="flex items-center gap-1 rounded-xl border border-zinc-700 bg-zinc-850 px-2.5 py-1 font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex items-center gap-1 rounded-xl border border-zinc-700 bg-zinc-850 px-3 py-1.5 min-h-[36px] font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <span>Siguiente</span>
                 <ChevronRight className="h-3.5 w-3.5" />
