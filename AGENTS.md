@@ -22,38 +22,37 @@ Este archivo es leído automáticamente por Antigravity en cada nueva sesión pa
 
 ---
 
-## 2. Ciclo Obligatorio de Desarrollo (4 Fases)
+## 2. TAREA PENDIENTE PRIORIDAD 1: Correcciones de Astra en demTiles y measure
 
-Cualquier cambio de interfaz, visualización o lógica debe seguir estrictamente este ciclo:
+En la auditoría de GitHub Codespaces, Astra diagnosticó los siguientes casos límite críticos que quedaron pendientes de guardar e implementar:
+
+### A. `app/utils/demTiles.js`:
+1. **Desbordamiento de índices en bordes:** En `tileRangeFor`, coordenadas límite de 180° o latitudes extremas de Mercator producen índices `minX = 2 ** zoom` o desbordamientos fuera de rango. Deben acotarse estrictamente a `[0, 2^zoom - 1]`.
+2. **Píxeles transparentes en elevación:** En `pasteTile`, si el proveedor entrega transparencia (canal alfa = 0) como "sin dato", no debe interpretarse como elevación 0 falsa, sino manejarse como sin dato / nulo.
+3. **Sensibilidad a infinitos en `maxAround`:** Un único `Infinity` no debe forzar el resultado a `null` si existen alturas finitas y válidas alrededor.
+
+### B. `app/utils/measure.js`:
+1. **Contornos y huecos en polígonos:** En `polygonArea`, asegurar la identificación rigurosa del anillo exterior frente a los huecos interiores para evitar que un hueco se cuente accidentalmente como superficie exterior.
+2. **Retorno seguro:** Mantener retorno numérico seguro (`0`) en geometrías inválidas o nulas para no romper las acumulaciones de los hooks de dibujo (`useDrawControlGL`).
+
+### C. Pruebas unitarias:
+- Añadir y actualizar los casos de prueba en `app/utils/demTiles.test.js` y `app/utils/measure.test.js`.
+- Verificar que el 100% de las 54 suites de prueba pasen (`npm test`).
+
+---
+
+## 3. Ciclo Obligatorio de Desarrollo (4 Fases)
 
 ```text
 [Astra] Contrato & Alcance  ──▶  [Gemini] Código & Tests Locales  ──▶  [Astra] Auditoría de Diff  ──▶  [Fabio] Prueba en Celular & OK
 ```
 
-### Fase 1: Contrato (Astra)
-- Antes de escribir código, se consulta a Astra con el requerimiento de Fabio.
-- Astra define el contrato: objetivo, archivos permitidos y criterios de aceptación (casos normales y casos límite).
-
-### Fase 2: Implementación y Pruebas (Gemini)
-- Gemini escribe el código en los archivos locales sin improvisar fuera del alcance definido por Astra.
-- Se ejecutan las pruebas locales (`npm test`) y la compilación (`npm run build`). Todo debe dar código de salida 0.
-
-### Fase 3: Auditoría Ligera (Astra)
-- Para ahorrar tokens (límite de 100k/hora), Gemini **NUNCA envía archivos enteros** a Astra.
-- Gemini envía a Astra un paquete ultracompacto (~400 tokens):
-  1. Resumen de 2 líneas.
-  2. Resultado de `npm test` (salida limpia sin logs masivos).
-  3. `git diff` exacto de las líneas modificadas.
-- Astra dictamina: **APROBADO** o **CAMBIOS NECESARIOS**.
-
-### Fase 4: Despliegue en Vercel y Aprobación Visual (Fabio)
-- Gemini hace `git push origin <rama_de_trabajo>`.
-- Vercel genera automáticamente el enlace de Vista Previa (Preview URL).
-- Fabio prueba la aplicación en su teléfono móvil (Android/iOS) o navegador.
-- **Regla de oro:** No se hace merge a `main` hasta que Fabio confirme que visual y funcionalmente está perfecto.
+1. **Fase 1 (Contrato Astra):** Se consulta a Astra con el requerimiento. Astra define alcance y criterios de aceptación.
+2. **Fase 2 (Implementación Gemini):** Gemini escribe el código local y corre las 54 suites de prueba (`npm test`).
+3. **Fase 3 (Auditoría Astra):** Gemini envía a Astra un paquete compacto (~400 tokens) con el `git diff` exacto y resultado de tests para recibir su dictamen (APROBADO / CAMBIOS NECESARIOS).
+4. **Fase 4 (Entrega y Validación Fabio):** `git push origin <rama_de_trabajo>`. Vercel genera la Vista Previa para que Fabio pruebe en su celular. No hacer merge a main sin el OK de Fabio.
 
 ---
 
-## 3. Reglas Antialucinación y Calidad
-- **Cero afirmaciones sin evidencia:** Gemini tiene prohibido afirmar que algo está "solucionado" o "funciona perfecto" sin mostrar el resultado de los tests y el `git diff`.
-- **Preservación de tests:** Las 54 suites de pruebas unitarias existentes (735+ tests) deben permanecer pasando al 100%.
+## 4. Reglas Antialucinación
+- Cero afirmaciones de "solucionado" sin adjuntar evidencia técnica real (`npm test` en verde y `git diff`).
