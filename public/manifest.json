@@ -1,0 +1,17 @@
+{
+  "name": "Visor Geológico y Minero - Colombia",
+  "short_name": "Visor Minero",
+  "description": "Visor de información geoespacial minera y territorial de Colombia",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

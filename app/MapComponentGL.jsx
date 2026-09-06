@@ -743,6 +743,10 @@ export default function MapComponentGL({
         // lo busca. Suelto se ignora sin decir nada, y la exportación seguía
         // saliendo bien aquí solo por casualidad —se lee el lienzo en el mismo
         // fotograma en que se pinta, antes de que el navegador lo descarte—.
+        // Optimización de gestos táctiles para móviles (pinch-to-zoom, inclinación 3D y rotación táctil)
+        touchZoomRotate: true,
+        touchPitch: true,
+        dragRotate: true,
         canvasContextAttributes: { preserveDrawingBuffer: true },
         // La atribución propia de MapLibre se queda, en versión compacta: las
         // condiciones de uso de OSM la exigen. `false` la quitaría del todo.
