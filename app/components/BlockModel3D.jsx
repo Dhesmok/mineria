@@ -18,8 +18,92 @@ import {
   Compass,
   Mountain,
   Grid,
+  Cloud,
+  Wind,
 } from "lucide-react"
 import { TILE_SIZE } from "../utils/demTiles"
+
+/**
+ * Genera una textura procedural de nubes orgánicas fractales (fBm con bordes suaves algodonosos)
+ */
+function createRealisticCloudTexture() {
+  if (typeof document === "undefined") return null
+  const canvas = document.createElement("canvas")
+  canvas.width = 1024
+  canvas.height = 1024
+  const ctx = canvas.getContext("2d")
+  if (!ctx || typeof ctx.createImageData !== "function") return null
+
+  const imgData = ctx.createImageData(1024, 1024)
+  const data = imgData.data
+
+  function hash(x, y) {
+    const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453
+    return s - Math.floor(s)
+  }
+
+  function smoothNoise(x, y) {
+    const i = Math.floor(x)
+    const j = Math.floor(y)
+    const fx = x - i
+    const fy = y - j
+
+    const sx = fx * fx * (3 - 2 * fx)
+    const sy = fy * fy * (3 - 2 * fy)
+
+    const n00 = hash(i, j)
+    const n10 = hash(i + 1, j)
+    const n01 = hash(i, j + 1)
+    const n11 = hash(i + 1, j + 1)
+
+    const ix0 = n00 + sx * (n10 - n00)
+    const ix1 = n01 + sx * (n11 - n01)
+    return ix0 + sy * (ix1 - ix0)
+  }
+
+  function fbm(x, y) {
+    let v = 0
+    let a = 0.52
+    let scale = 1.0
+    for (let o = 0; o < 5; o++) {
+      v += a * smoothNoise(x * scale, y * scale)
+      scale *= 2.05
+      a *= 0.48
+    }
+    return v
+  }
+
+  for (let y = 0; y < 1024; y++) {
+    const ny = (y / 1024) * 5
+    for (let x = 0; x < 1024; x++) {
+      const nx = (x / 1024) * 5
+      const idx = (y * 1024 + x) * 4
+
+      const qx = fbm(nx, ny)
+      const qy = fbm(nx + 3.1, ny + 1.7)
+      let d = fbm(nx + qx * 1.2, ny + qy * 1.2)
+
+      d = (d - 0.42) / 0.46
+      d = Math.max(0, Math.min(1, d))
+      const alpha = Math.round(d * d * (3 - 2 * d) * 255)
+      const shade = Math.round(238 + d * 17)
+
+      data[idx] = shade
+      data[idx + 1] = shade
+      data[idx + 2] = Math.min(255, shade + 4)
+      data[idx + 3] = alpha
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(2, 2)
+  texture.generateMipmaps = true
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
+}
 
 /**
  * Textura procedural de tierra homogénea cálida (Minecraft-style earth / estrato natural)
@@ -765,6 +849,10 @@ export default function BlockModel3D({
   const topMeshRef = useRef(null)
   const wallsMeshRef = useRef(null)
   const floorMeshRef = useRef(null)
+  const cloudsGroupRef = useRef(null)
+  const cloudsMat1Ref = useRef(null)
+  const cloudsMat2Ref = useRef(null)
+  const cloudsTextureRef = useRef(null)
   const sunLightRef = useRef(null)
   const hemiLightRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -780,13 +868,21 @@ export default function BlockModel3D({
     exaggerationRef.current = exaggeration
   }, [exaggeration])
 
-  const [sunPreset, setSunPreset] = useState("noon")
   const [sunAngle, setSunAngle] = useState(180)
   const [autoRotate, setAutoRotate] = useState(false)
   const autoRotateRef = useRef(autoRotate)
   useEffect(() => {
     autoRotateRef.current = autoRotate
   }, [autoRotate])
+
+  // Configuración de Nubes Realistas
+  const [cloudsEnabled, setCloudsEnabled] = useState(false)
+  const [cloudDensity, setCloudDensity] = useState(0.7)
+  const [cloudHeightRatio, setCloudHeightRatio] = useState(1.2)
+  const cloudsEnabledRef = useRef(false)
+  useEffect(() => {
+    cloudsEnabledRef.current = cloudsEnabled
+  }, [cloudsEnabled])
 
   const [wireframe, setWireframe] = useState(false)
   const [studioTheme, setStudioTheme] = useState("dark")
@@ -824,17 +920,6 @@ export default function BlockModel3D({
     },
     [metersPerThreeUnit],
   )
-
-  const applySunPreset = (preset) => {
-    setSunPreset(preset)
-    if (preset === "morning") {
-      setSunAngle(65)
-    } else if (preset === "noon") {
-      setSunAngle(180)
-    } else if (preset === "sunset") {
-      setSunAngle(285)
-    }
-  }
 
   // Malla densa de 280x280 (78,400 celdas para fidelidad topográfica idéntica al visor)
   const segX = 280
@@ -1048,11 +1133,59 @@ export default function BlockModel3D({
     blockGroup.add(pinsGroup)
     pinsGroupRef.current = pinsGroup
 
+    // --- F. Capa de Nubes Realistas ---
+    const cloudsGroup = new THREE.Group()
+    cloudsGroup.visible = false
+    blockGroup.add(cloudsGroup)
+    cloudsGroupRef.current = cloudsGroup
+
+    const cloudTex = createRealisticCloudTexture()
+    cloudsTextureRef.current = cloudTex
+
+    if (cloudTex) {
+      const cloudGeom1 = new THREE.PlaneGeometry(W * 1.5, D * 1.5)
+      cloudGeom1.rotateX(-Math.PI / 2)
+      const cloudMat1 = new THREE.MeshStandardMaterial({
+        map: cloudTex,
+        transparent: true,
+        opacity: 0.6,
+        roughness: 0.95,
+        metalness: 0.0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      const cloudMesh1 = new THREE.Mesh(cloudGeom1, cloudMat1)
+      cloudsGroup.add(cloudMesh1)
+      cloudsMat1Ref.current = cloudMat1
+
+      // Capa de nubes secundaria con desfase para relieve volumétrico
+      const cloudGeom2 = new THREE.PlaneGeometry(W * 1.65, D * 1.65)
+      cloudGeom2.rotateX(-Math.PI / 2)
+      const cloudMat2 = new THREE.MeshStandardMaterial({
+        map: cloudTex,
+        transparent: true,
+        opacity: 0.3,
+        roughness: 0.98,
+        metalness: 0.0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      const cloudMesh2 = new THREE.Mesh(cloudGeom2, cloudMat2)
+      cloudMesh2.position.y = 0.16
+      cloudMesh2.rotation.y = Math.PI / 6
+      cloudsGroup.add(cloudMesh2)
+      cloudsMat2Ref.current = cloudMat2
+    }
+
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate)
       controls.update()
       if (autoRotateRef.current && blockGroupRef.current) {
         blockGroupRef.current.rotation.y += 0.0035
+      }
+      if (cloudsEnabledRef.current && cloudsTextureRef.current) {
+        cloudsTextureRef.current.offset.x += 0.00018
+        cloudsTextureRef.current.offset.y += 0.00008
       }
       renderer.render(scene, camera)
     }
@@ -1085,6 +1218,10 @@ export default function BlockModel3D({
       }
       renderer.dispose()
       floorMeshRef.current = null
+      cloudsGroupRef.current = null
+      cloudsMat1Ref.current = null
+      cloudsMat2Ref.current = null
+      cloudsTextureRef.current = null
       topMeshRef.current = null
       wallsMeshRef.current = null
       sunLightRef.current = null
@@ -1305,46 +1442,62 @@ export default function BlockModel3D({
     }
   }, [wireframe])
 
-  // Ángulo de Iluminación Solar y Presets con sombras dinámicas realistas
+  // Actualización reactiva de visibilidad, altura y densidad de nubes
+  useEffect(() => {
+    if (!cloudsGroupRef.current) return
+    cloudsGroupRef.current.visible = cloudsEnabled
+
+    if (cloudsMat1Ref.current) {
+      cloudsMat1Ref.current.opacity = Math.max(0.08, Math.min(0.95, cloudDensity * 0.85))
+    }
+    if (cloudsMat2Ref.current) {
+      cloudsMat2Ref.current.opacity = Math.max(0.04, Math.min(0.6, cloudDensity * 0.45))
+    }
+
+    const minElev = elevationMinRef.current
+    const maxElev = elevationMaxRef.current
+    const summitY = computeHeight(maxElev, minElev, exaggeration)
+    const baseRelief = Math.max(0.6, summitY)
+
+    // Posicionamiento de altura de las nubes en función del relieve y el slider
+    cloudsGroupRef.current.position.y = baseRelief * cloudHeightRatio
+  }, [cloudsEnabled, cloudDensity, cloudHeightRatio, exaggeration, computeHeight])
+
+  // Ángulo de Iluminación Solar continuo con sombras dinámicas realistas
   useEffect(() => {
     if (!sunLightRef.current || !hemiLightRef.current) return
     const rad = (sunAngle * Math.PI) / 180
     const dist = 18
 
-    if (sunPreset === "morning") {
-      const sunHeight = 7.5
-      sunLightRef.current.position.set(Math.cos(rad) * dist, sunHeight, Math.sin(rad) * dist)
-      sunLightRef.current.color.setHex(0xffecd2)
-      sunLightRef.current.intensity = 1.45
-      hemiLightRef.current.color.setHex(0xdbeafe)
-      hemiLightRef.current.groundColor.setHex(0x3f3f46)
-      hemiLightRef.current.intensity = 0.65
-    } else if (sunPreset === "noon") {
-      const sunHeight = 18
-      sunLightRef.current.position.set(Math.cos(rad) * dist * 0.5, sunHeight, Math.sin(rad) * dist * 0.5)
-      sunLightRef.current.color.setHex(0xffffff)
-      sunLightRef.current.intensity = 1.55
-      hemiLightRef.current.color.setHex(0xf0f9ff)
-      hemiLightRef.current.groundColor.setHex(0x52525b)
-      hemiLightRef.current.intensity = 0.85
-    } else if (sunPreset === "sunset") {
-      const sunHeight = 5.5
-      sunLightRef.current.position.set(Math.cos(rad) * dist, sunHeight, Math.sin(rad) * dist)
+    const sinAngle = Math.sin(rad)
+    const cosAngle = Math.cos(rad)
+    const sunHeight = Math.max(5.0, 14 + sinAngle * 4.5)
+
+    sunLightRef.current.position.set(cosAngle * dist, sunHeight, sinAngle * dist)
+
+    if (sinAngle < -0.3) {
+      // Tarde / atardecer
       sunLightRef.current.color.setHex(0xffa756)
       sunLightRef.current.intensity = 1.5
       hemiLightRef.current.color.setHex(0xfed7aa)
       hemiLightRef.current.groundColor.setHex(0x27272a)
       hemiLightRef.current.intensity = 0.55
-    } else {
-      const sunHeight = 13
-      sunLightRef.current.position.set(Math.cos(rad) * dist, sunHeight, Math.sin(rad) * dist)
-      sunLightRef.current.color.setHex(0xfffaed)
-      sunLightRef.current.intensity = 1.4
+    } else if (sinAngle > 0.3) {
+      // Mañana dorada
+      sunLightRef.current.color.setHex(0xffecd2)
+      sunLightRef.current.intensity = 1.45
       hemiLightRef.current.color.setHex(0xdbeafe)
       hemiLightRef.current.groundColor.setHex(0x3f3f46)
-      hemiLightRef.current.intensity = 0.75
+      hemiLightRef.current.intensity = 0.65
+    } else {
+      // Luz solar cenital brillante
+      sunLightRef.current.color.setHex(0xffffff)
+      sunLightRef.current.intensity = 1.55
+      hemiLightRef.current.color.setHex(0xf0f9ff)
+      hemiLightRef.current.groundColor.setHex(0x52525b)
+      hemiLightRef.current.intensity = 0.85
     }
-  }, [sunAngle, sunPreset])
+  }, [sunAngle])
 
   // Renderizado dinámico de pines
   useEffect(() => {
@@ -1524,6 +1677,57 @@ export default function BlockModel3D({
         <span className="text-[9px] font-bold text-rose-400 tracking-wider mt-0.5">N</span>
       </div>
 
+      {/* Panel flotante de Configuración de Nubes */}
+      {cloudsEnabled && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4 bg-zinc-900/95 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-sky-500/30 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center gap-2">
+            <Cloud size={14} className="text-sky-400 shrink-0" />
+            <div className="flex flex-col">
+              <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
+                Densidad Nubes
+              </span>
+              <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                aria-label="Densidad de nubes"
+                value={cloudDensity}
+                onChange={(e) => setCloudDensity(parseFloat(e.target.value))}
+                className="w-24 accent-sky-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
+              />
+            </div>
+            <span className="text-xs font-mono font-bold text-sky-400 w-10 text-right">
+              {Math.round(cloudDensity * 100)}%
+            </span>
+          </div>
+
+          <div className="h-6 w-[1px] bg-zinc-800" />
+
+          <div className="flex items-center gap-2">
+            <Wind size={14} className="text-sky-400 shrink-0" />
+            <div className="flex flex-col">
+              <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
+                Altura Nubes
+              </span>
+              <input
+                type="range"
+                min="0.3"
+                max="2.5"
+                step="0.1"
+                aria-label="Altura de nubes"
+                value={cloudHeightRatio}
+                onChange={(e) => setCloudHeightRatio(parseFloat(e.target.value))}
+                className="w-24 accent-sky-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
+              />
+            </div>
+            <span className="text-xs font-mono font-bold text-sky-400 w-10 text-right">
+              {cloudHeightRatio.toFixed(1)}×
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* HUD de Controles Flotante Inferior */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl">
         {/* Control de Exageración Vertical */}
@@ -1564,10 +1768,7 @@ export default function BlockModel3D({
               title="Girar posición del sol para ver sombras dinámicas"
               aria-label="Girar posición del sol para ver sombras dinámicas"
               value={sunAngle}
-              onChange={(e) => {
-                setSunAngle(parseInt(e.target.value))
-                setSunPreset("custom")
-              }}
+              onChange={(e) => setSunAngle(parseInt(e.target.value))}
               className="w-20 accent-amber-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
             />
           </div>
@@ -1576,37 +1777,19 @@ export default function BlockModel3D({
           </span>
         </div>
 
-        {/* Presets Solares Rápidos */}
+        {/* Control de Nubes Realistas */}
         <div className="flex items-center gap-1 pr-3 border-r border-zinc-800">
           <button
-            onClick={() => applySunPreset("morning")}
-            className={`px-2 py-1 text-[10px] font-medium rounded-md border transition-all ${
-              sunPreset === "morning"
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                : "text-zinc-400 hover:text-zinc-200 border-transparent"
+            onClick={() => setCloudsEnabled(!cloudsEnabled)}
+            className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
+              cloudsEnabled
+                ? "bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-sm"
+                : "text-zinc-400 hover:text-zinc-200 bg-zinc-800/40 border-transparent hover:bg-zinc-800/80"
             }`}
+            title={cloudsEnabled ? "Desactivar capa de nubes" : "Activar capa de nubes realistas"}
           >
-            Mañana
-          </button>
-          <button
-            onClick={() => applySunPreset("noon")}
-            className={`px-2 py-1 text-[10px] font-medium rounded-md border transition-all ${
-              sunPreset === "noon"
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                : "text-zinc-400 hover:text-zinc-200 border-transparent"
-            }`}
-          >
-            Mediodía
-          </button>
-          <button
-            onClick={() => applySunPreset("sunset")}
-            className={`px-2 py-1 text-[10px] font-medium rounded-md border transition-all ${
-              sunPreset === "sunset"
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                : "text-zinc-400 hover:text-zinc-200 border-transparent"
-            }`}
-          >
-            Tarde
+            <Cloud size={14} className={cloudsEnabled ? "text-sky-300" : "text-zinc-400"} />
+            <span>Nubes</span>
           </button>
         </div>
 

@@ -61,7 +61,8 @@ describe("BlockModel3D", () => {
     expect(screen.getByText("Bloque 3D del Terreno")).toBeInTheDocument()
     expect(screen.getByText("Relieve Real")).toBeInTheDocument()
     expect(screen.getByText("Exageración:")).toBeInTheDocument()
-    expect(screen.getByText("Mediodía")).toBeInTheDocument()
+    expect(screen.getByText("Ángulo Sol")).toBeInTheDocument()
+    expect(screen.getByText("Nubes")).toBeInTheDocument()
   })
 
   it("llama a onClose al presionar la equis de cerrar", () => {
@@ -93,7 +94,7 @@ describe("BlockModel3D", () => {
     expect(screen.getByText("3.5×")).toBeInTheDocument()
   })
 
-  it("permite alternar entre presets solares Mañana, Mediodía y Tarde", () => {
+  it("permite cambiar el ángulo solar con el slider", () => {
     render(
       <BlockModel3D
         isOpen={true}
@@ -102,17 +103,33 @@ describe("BlockModel3D", () => {
       />
     )
 
-    const mananaBtn = screen.getByText("Mañana")
-    fireEvent.click(mananaBtn)
-    expect(screen.getByText("65°")).toBeInTheDocument()
+    const sunSlider = screen.getByLabelText("Girar posición del sol para ver sombras dinámicas")
+    fireEvent.change(sunSlider, { target: { value: "225" } })
+    expect(screen.getByText("225°")).toBeInTheDocument()
+  })
 
-    const tardeBtn = screen.getByText("Tarde")
-    fireEvent.click(tardeBtn)
-    expect(screen.getByText("285°")).toBeInTheDocument()
+  it("permite activar la capa de nubes y configurar densidad y altura", () => {
+    render(
+      <BlockModel3D
+        isOpen={true}
+        onClose={jest.fn()}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
+      />
+    )
 
-    const mediodiaBtn = screen.getByText("Mediodía")
-    fireEvent.click(mediodiaBtn)
-    expect(screen.getByText("180°")).toBeInTheDocument()
+    const nubesBtn = screen.getByTitle("Activar capa de nubes realistas")
+    fireEvent.click(nubesBtn)
+
+    expect(screen.getByText("Densidad Nubes")).toBeInTheDocument()
+    expect(screen.getByText("Altura Nubes")).toBeInTheDocument()
+
+    const densitySlider = screen.getByLabelText("Densidad de nubes")
+    fireEvent.change(densitySlider, { target: { value: "0.85" } })
+    expect(screen.getByText("85%")).toBeInTheDocument()
+
+    const heightSlider = screen.getByLabelText("Altura de nubes")
+    fireEvent.change(heightSlider, { target: { value: "1.8" } })
+    expect(screen.getByText("1.8×")).toBeInTheDocument()
   })
 
   it("permite alternar el tema de estudio sin fallar", () => {

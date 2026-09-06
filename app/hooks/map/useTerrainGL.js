@@ -66,7 +66,7 @@ export const PITCH_MAX = 72
 /**
  * Velocidad del giro continuo, en grados por segundo.
  */
-const SPIN_DEGREES_PER_SECOND = 24
+const SPIN_DEGREES_PER_SECOND = 16
 
 /**
  * Cuánto se espera, como mucho, a que el terreno tenga teselas antes de inclinar.
@@ -431,73 +431,47 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     let frame = 0
     let previous = performance.now()
     let lastPublished = 0
-    let isInteracting = false
-    let wheelTimeout = null
+    let isUserDragging = false
 
     const canvas = mapInstance.getCanvas?.()
 
-    const onInteractionStart = () => {
-      isInteracting = true
-    }
-
-    const onInteractionEnd = () => {
-      isInteracting = false
-      previous = performance.now()
-    }
-
-    const onWheel = () => {
-      isInteracting = true
-      clearTimeout(wheelTimeout)
-      wheelTimeout = setTimeout(() => {
-        isInteracting = false
-        previous = performance.now()
-      }, 300)
-    }
-
-    const onPointerMove = (e) => {
-      if (e.buttons === 0 && isInteracting) {
-        isInteracting = false
-        previous = performance.now()
+    const onPointerDown = (e) => {
+      // Si el usuario pulsa para arrastrar el mapa manualmente, pausamos el giro temporalmente
+      if (e.buttons > 0) {
+        isUserDragging = true
       }
     }
 
-    if (canvas) {
-      canvas.addEventListener("pointerdown", onInteractionStart, { passive: true })
-      canvas.addEventListener("touchstart", onInteractionStart, { passive: true })
-      canvas.addEventListener("wheel", onWheel, { passive: true })
-      canvas.addEventListener("pointermove", onPointerMove, { passive: true })
+    const onPointerUp = () => {
+      isUserDragging = false
+      previous = performance.now()
     }
-    window.addEventListener("pointerup", onInteractionEnd, { passive: true })
-    window.addEventListener("mouseup", onInteractionEnd, { passive: true })
-    window.addEventListener("pointercancel", onInteractionEnd, { passive: true })
-    window.addEventListener("touchend", onInteractionEnd, { passive: true })
 
-    mapInstance.on?.("dragstart", onInteractionStart)
-    mapInstance.on?.("dragend", onInteractionEnd)
-    mapInstance.on?.("rotatestart", onInteractionStart)
-    mapInstance.on?.("rotateend", onInteractionEnd)
-    mapInstance.on?.("pitchstart", onInteractionStart)
-    mapInstance.on?.("pitchend", onInteractionEnd)
+    if (canvas) {
+      canvas.addEventListener("pointerdown", onPointerDown, { passive: true })
+      canvas.addEventListener("touchstart", onPointerDown, { passive: true })
+    }
+    window.addEventListener("pointerup", onPointerUp, { passive: true })
+    window.addEventListener("mouseup", onPointerUp, { passive: true })
+    window.addEventListener("touchend", onPointerUp, { passive: true })
+    window.addEventListener("pointercancel", onPointerUp, { passive: true })
 
     const step = (now) => {
-      if (isInteracting) {
+      if (isUserDragging) {
         previous = now
         frame = requestAnimationFrame(step)
         return
       }
 
-      const seconds = (now - previous) / 1000
+      // Evita saltos si el navegador se ralentiza temporalmente (máximo 50ms por paso)
+      const elapsed = Math.min((now - previous) / 1000, 0.05)
       previous = now
-      // jumpTo y no easeTo: una animación por fotograma se pisaría con la
-      // siguiente y el giro saldría a saltos.
-      const bearing = mapInstance.getBearing() - SPIN_DEGREES_PER_SECOND * seconds
+
+      // Giro suave y continuo
+      const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * elapsed
       mapInstance.jumpTo({ bearing })
 
-      // El deslizador de giro sigue al mapa, pero no a 60 veces por segundo:
-      // cada jumpTo dispara un `moveend`, y publicar eso al estado repintaría el
-      // visor entero en cada fotograma. Cuatro veces por segundo basta para que
-      // el control se vea vivo y no cuesta nada.
-      if (now - lastPublished > 250) {
+      if (now - lastPublished > 200) {
         lastPublished = now
         setBearing(mapInstance.getBearing())
       }
@@ -509,26 +483,15 @@ export const useTerrainGL = (mapRef, mapInstance) => {
 
     return () => {
       cancelAnimationFrame(frame)
-      clearTimeout(wheelTimeout)
       if (canvas) {
-        canvas.removeEventListener("pointerdown", onInteractionStart)
-        canvas.removeEventListener("touchstart", onInteractionStart)
-        canvas.removeEventListener("wheel", onWheel)
-        canvas.removeEventListener("pointermove", onPointerMove)
+        canvas.removeEventListener("pointerdown", onPointerDown)
+        canvas.removeEventListener("touchstart", onPointerDown)
       }
-      window.removeEventListener("pointerup", onInteractionEnd)
-      window.removeEventListener("mouseup", onInteractionEnd)
-      window.removeEventListener("pointercancel", onInteractionEnd)
-      window.removeEventListener("touchend", onInteractionEnd)
+      window.removeEventListener("pointerup", onPointerUp)
+      window.removeEventListener("mouseup", onPointerUp)
+      window.removeEventListener("touchend", onPointerUp)
+      window.removeEventListener("pointercancel", onPointerUp)
 
-      mapInstance.off?.("dragstart", onInteractionStart)
-      mapInstance.off?.("dragend", onInteractionEnd)
-      mapInstance.off?.("rotatestart", onInteractionStart)
-      mapInstance.off?.("rotateend", onInteractionEnd)
-      mapInstance.off?.("pitchstart", onInteractionStart)
-      mapInstance.off?.("pitchend", onInteractionEnd)
-
-      // Al parar, el estado se pone al día con dónde quedó de verdad la cámara.
       setBearing(mapInstance.getBearing())
     }
   }, [isSpinning, mapInstance])
