@@ -82,6 +82,26 @@ describe("areaInSquareMeters", () => {
     expect(areaInSquareMeters(polygon([contorno, huecoEnorme]))).toBe(0)
   })
 
+  it("no promueve un hueco a exterior si el contorno está incompleto o ausente", () => {
+    const hueco = square(-72.995, 4.605, 0.005)[0]
+    // Contorno degenerado con solo 2 puntos seguido de un hueco válido: no debe devolver el área del hueco
+    expect(areaInSquareMeters(polygon([[[-73, 4.6], [-73, 4.61]], hueco]))).toBe(0)
+    // Contorno vacío
+    expect(areaInSquareMeters(polygon([[], hueco]))).toBe(0)
+  })
+
+  it("soporta exterior con múltiples huecos y el orden de los huecos no altera el área", () => {
+    const contorno = square(-73, 4.6, 0.03)[0]
+    const hueco1 = square(-72.995, 4.605, 0.005)[0]
+    const hueco2 = square(-72.985, 4.615, 0.005)[0]
+
+    const areaNormal = areaInSquareMeters(polygon([contorno, hueco1, hueco2]))
+    const areaPermutada = areaInSquareMeters(polygon([contorno, hueco2, hueco1]))
+
+    expect(areaNormal).toBeGreaterThan(0)
+    expect(areaPermutada).toBeCloseTo(areaNormal, 6)
+  })
+
   it("suma las partes de un multipolígono", () => {
     const a = square(-73, 4.6, 0.01)
     const b = square(-72.9, 4.6, 0.01)
@@ -93,10 +113,56 @@ describe("areaInSquareMeters", () => {
     )
   })
 
+  it("aplica la identificación de exterior y huecos a cada polígono por separado en MultiPolygon", () => {
+    const contorno1 = square(-73, 4.6, 0.02)[0]
+    const hueco1 = square(-72.995, 4.605, 0.005)[0]
+
+    const contorno2 = square(-72.8, 4.6, 0.02)[0]
+    const hueco2 = square(-72.795, 4.605, 0.005)[0]
+
+    const multi = {
+      type: "MultiPolygon",
+      coordinates: [
+        [contorno1, hueco1],
+        [contorno2, hueco2],
+      ],
+    }
+    const poly1 = areaInSquareMeters(polygon([contorno1, hueco1]))
+    const poly2 = areaInSquareMeters(polygon([contorno2, hueco2]))
+
+    expect(areaInSquareMeters(multi)).toBeCloseTo(poly1 + poly2, 6)
+  })
+
   it("devuelve cero para geometrías sin área", () => {
     expect(areaInSquareMeters({ type: "LineString", coordinates: [[-73, 4], [-72, 4]] })).toBe(0)
     expect(areaInSquareMeters(null)).toBe(0)
     expect(areaInSquareMeters(polygon([[[-73, 4], [-72, 4]]]))).toBe(0)
+  })
+
+  it("devuelve 0 de forma segura ante geometrías nulas, malformadas o con coordenadas corruptas sin lanzar excepciones", () => {
+    expect(areaInSquareMeters(undefined)).toBe(0)
+    expect(areaInSquareMeters({})).toBe(0)
+    expect(areaInSquareMeters({ type: "Polygon" })).toBe(0)
+    expect(areaInSquareMeters({ type: "Polygon", coordinates: "no-array" })).toBe(0)
+    expect(areaInSquareMeters(polygon([]))).toBe(0)
+    expect(areaInSquareMeters(polygon([[]]))).toBe(0)
+    expect(areaInSquareMeters(polygon([[[-73, 4]]]))).toBe(0) // 1 vértice
+    expect(areaInSquareMeters(polygon([[[-73, 4], [-72, 4]]]))).toBe(0) // 2 vértices
+
+    // Coordenadas corruptas con NaN, Infinity o no numéricas
+    const anilloNaN = [[NaN, 4.6], [-73, 4.6], [-73, 4.61], [NaN, 4.6]]
+    const anilloInf = [[Infinity, 4.6], [-73, 4.6], [-73, 4.61], [Infinity, 4.6]]
+    const anilloNull = [[null, 4.6], [-73, 4.6], [-73, 4.61], [null, 4.6]]
+    const anilloInvalido = [["abc", "def"], [-73, 4.6], [-73, 4.61]]
+
+    expect(areaInSquareMeters(polygon([anilloNaN]))).toBe(0)
+    expect(areaInSquareMeters(polygon([anilloInf]))).toBe(0)
+    expect(areaInSquareMeters(polygon([anilloNull]))).toBe(0)
+    expect(areaInSquareMeters(polygon([anilloInvalido]))).toBe(0)
+
+    // Un contorno válido con un hueco corrupto no debe devolver un área parcial engañosa
+    const contornoValido = square(-73, 4.6, 0.02)[0]
+    expect(areaInSquareMeters(polygon([contornoValido, anilloNaN]))).toBe(0)
   })
 })
 
@@ -145,5 +211,17 @@ describe("lengthInMeters", () => {
   it("devuelve cero para geometrías que no son lineales", () => {
     expect(lengthInMeters(polygon(square(-73, 4.6, 0.01)))).toBe(0)
     expect(lengthInMeters(null)).toBe(0)
+  })
+
+  it("devuelve cero para coordenadas corruptas o líneas malformadas sin lanzar excepciones", () => {
+    expect(lengthInMeters(undefined)).toBe(0)
+    expect(lengthInMeters({})).toBe(0)
+    expect(lengthInMeters({ type: "LineString" })).toBe(0)
+    expect(lengthInMeters({ type: "LineString", coordinates: null })).toBe(0)
+    expect(lengthInMeters({ type: "LineString", coordinates: [[-73, 4.6]] })).toBe(0) // 1 punto
+    expect(lengthInMeters({ type: "LineString", coordinates: [[NaN, 4.6], [-73, 4.6]] })).toBe(0)
+    expect(lengthInMeters({ type: "LineString", coordinates: [[-73, 4.6], [Infinity, 4.6]] })).toBe(0)
+    expect(lengthInMeters({ type: "LineString", coordinates: [["x", "y"], [-73, 4.6]] })).toBe(0)
+    expect(lengthInMeters({ type: "MultiLineString", coordinates: null })).toBe(0)
   })
 })

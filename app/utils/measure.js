@@ -46,7 +46,27 @@ const CTM12 = crsById("9377").proj
  * la herramienta de medir para esa misma línea no coincidirían, y esa
  * discrepancia se lee como un error del visor —con razón—.
  */
-export const toCtm12 = ([lon, lat]) => proj4(MAGNA, CTM12, [lon, lat])
+export const toCtm12 = ([lon, lat] = []) => {
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return [NaN, NaN]
+  try {
+    return proj4(MAGNA, CTM12, [lon, lat])
+  } catch {
+    return [NaN, NaN]
+  }
+}
+
+/**
+ * Valida que un anillo tenga al menos 3 posiciones y que todas sean números finitos.
+ */
+const isRingValid = (ring) => {
+  if (!Array.isArray(ring) || ring.length < 3) return false
+  for (let i = 0; i < ring.length; i += 1) {
+    const pt = ring[i]
+    if (!Array.isArray(pt) || pt.length < 2) return false
+    if (!Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) return false
+  }
+  return true
+}
 
 /**
  * Área de un anillo por la fórmula del agrimensor (shoelace).
@@ -55,62 +75,109 @@ export const toCtm12 = ([lon, lat]) => proj4(MAGNA, CTM12, [lon, lat])
  * cerrado (con el primer vértice repetido al final) o abierto: GeoJSON los cierra
  * y lo que dibuja el usuario a veces no.
  *
- * Devuelve área con signo: positiva o negativa según el sentido de giro. Quien
- * llama decide qué hacer con el signo; aquí es lo que permite restar los huecos.
+ * Devuelve área con signo: positiva o negativa según el sentido de giro, o null
+ * si el anillo contiene coordenadas corruptas o inválidas.
  */
 const signedRingArea = (ring) => {
-  const points = ring.map(toCtm12)
-  const n = points.length
-  if (n < 3) return 0
+  if (!isRingValid(ring)) return null
 
+  const points = ring.map(toCtm12)
+  for (let i = 0; i < points.length; i += 1) {
+    if (!Number.isFinite(points[i][0]) || !Number.isFinite(points[i][1])) {
+      return null
+    }
+  }
+
+  const n = points.length
   let sum = 0
   for (let i = 0; i < n; i += 1) {
     const [x1, y1] = points[i]
     const [x2, y2] = points[(i + 1) % n]
     sum += x1 * y2 - x2 * y1
   }
-  return sum / 2
+  const area = sum / 2
+  return Number.isFinite(area) ? area : null
 }
 
 /**
- * Área de un polígono: el contorno menos sus huecos.
+ * Área de un polígono: el contorno exterior menos sus huecos interiores.
  *
- * Se usan valores absolutos y una resta explícita en vez de fiarse del sentido
- * de giro de cada anillo. GeoJSON dice que los huecos van en sentido contrario
- * al contorno, pero no todo el mundo lo respeta, y un hueco con el giro
- * equivocado sumaría en lugar de restar: un título con un hueco saldría con más
- * área de la que tiene.
+ * El anillo exterior es estrictamente el primer anillo (rings[0]). Si el primer
+ * anillo no es válido o está corrupto, se devuelve 0 para evitar que un hueco
+ * interior sea promovido accidentalmente como superficie exterior.
+ *
+ * Devuelve 0 seguro ante cualquier anillo corrupto o geometría degenerada donde
+ * los huecos superen al contorno exterior.
  */
 const polygonArea = (rings) => {
-  const usable = (Array.isArray(rings) ? rings : []).filter(
-    (ring) => Array.isArray(ring) && ring.length >= 3,
-  )
-  if (usable.length === 0) return 0
+  if (!Array.isArray(rings) || rings.length === 0) return 0
 
-  const [exterior, ...holes] = usable
-  const holesArea = holes.reduce((total, hole) => total + Math.abs(signedRingArea(hole)), 0)
+  const [exteriorRing, ...holeRings] = rings
+  if (!isRingValid(exteriorRing)) return 0
 
-  // Nunca negativa: unos huecos mal formados que sumaran más que el contorno
-  // darían un área negativa, que no significa nada.
-  return Math.max(Math.abs(signedRingArea(exterior)) - holesArea, 0)
+  const exteriorSigned = signedRingArea(exteriorRing)
+  if (exteriorSigned === null) return 0
+  const exteriorArea = Math.abs(exteriorSigned)
+  if (!Number.isFinite(exteriorArea) || exteriorArea <= 0) return 0
+
+  let holesArea = 0
+  for (const hole of holeRings) {
+    if (!isRingValid(hole)) return 0
+    const holeSigned = signedRingArea(hole)
+    if (holeSigned === null) return 0
+    holesArea += Math.abs(holeSigned)
+  }
+
+  const netArea = exteriorArea - holesArea
+  return Number.isFinite(netArea) && netArea > 0 ? netArea : 0
 }
 
-/** Área en metros cuadrados de una geometría GeoJSON. 0 si no es de área. */
+/** Área en metros cuadrados de una geometría GeoJSON. 0 si no es de área o es inválida. */
 export const areaInSquareMeters = (geometry) => {
-  if (geometry?.type === "Polygon") {
-    return polygonArea(geometry.coordinates)
-  }
-  if (geometry?.type === "MultiPolygon") {
-    return (geometry.coordinates || []).reduce((total, rings) => total + polygonArea(rings), 0)
+  if (!geometry || typeof geometry !== "object") return 0
+  try {
+    if (geometry.type === "Polygon") {
+      return polygonArea(geometry.coordinates)
+    }
+    if (geometry.type === "MultiPolygon") {
+      if (!Array.isArray(geometry.coordinates)) return 0
+      let total = 0
+      for (const rings of geometry.coordinates) {
+        total += polygonArea(rings)
+      }
+      return Number.isFinite(total) && total > 0 ? total : 0
+    }
+  } catch {
+    return 0
   }
   return 0
 }
 
 /** Hectáreas, que es la unidad en que se habla de títulos mineros. */
-export const areaInHectares = (geometry) => areaInSquareMeters(geometry) / 10000
+export const areaInHectares = (geometry) => {
+  const m2 = areaInSquareMeters(geometry)
+  return Number.isFinite(m2) && m2 > 0 ? m2 / 10000 : 0
+}
+
+const isLineValid = (coordinates) => {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return false
+  for (let i = 0; i < coordinates.length; i += 1) {
+    const pt = coordinates[i]
+    if (!Array.isArray(pt) || pt.length < 2) return false
+    if (!Number.isFinite(pt[0]) || !Number.isFinite(pt[1])) return false
+  }
+  return true
+}
 
 const lineLength = (coordinates) => {
-  const points = (Array.isArray(coordinates) ? coordinates : []).map(toCtm12)
+  if (!isLineValid(coordinates)) return 0
+
+  const points = coordinates.map(toCtm12)
+  for (let i = 0; i < points.length; i += 1) {
+    if (!Number.isFinite(points[i][0]) || !Number.isFinite(points[i][1])) {
+      return 0
+    }
+  }
 
   let total = 0
   for (let i = 1; i < points.length; i += 1) {
@@ -118,16 +185,26 @@ const lineLength = (coordinates) => {
     const [x2, y2] = points[i]
     total += Math.hypot(x2 - x1, y2 - y1)
   }
-  return total
+  return Number.isFinite(total) && total > 0 ? total : 0
 }
 
-/** Longitud en metros de una geometría GeoJSON. 0 si no es lineal. */
+/** Longitud en metros de una geometría GeoJSON. 0 si no es lineal o es inválida. */
 export const lengthInMeters = (geometry) => {
-  if (geometry?.type === "LineString") {
-    return lineLength(geometry.coordinates)
-  }
-  if (geometry?.type === "MultiLineString") {
-    return (geometry.coordinates || []).reduce((total, line) => total + lineLength(line), 0)
+  if (!geometry || typeof geometry !== "object") return 0
+  try {
+    if (geometry.type === "LineString") {
+      return lineLength(geometry.coordinates)
+    }
+    if (geometry.type === "MultiLineString") {
+      if (!Array.isArray(geometry.coordinates)) return 0
+      let total = 0
+      for (const line of geometry.coordinates) {
+        total += lineLength(line)
+      }
+      return Number.isFinite(total) && total > 0 ? total : 0
+    }
+  } catch {
+    return 0
   }
   return 0
 }

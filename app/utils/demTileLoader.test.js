@@ -201,6 +201,7 @@ describe("reliefAround", () => {
           rgba[i] = (total >> 16) & 255
           rgba[i + 1] = (total >> 8) & 255
           rgba[i + 2] = total & 255
+          rgba[i + 3] = 255
         }
       }
       return Promise.resolve({ ok: true, blob: () => Promise.resolve({ pixeles: rgba }) })
