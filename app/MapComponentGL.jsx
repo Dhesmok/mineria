@@ -1405,6 +1405,8 @@ export default function MapComponentGL({
             elevationAt={elevationAt}
             map={mapRef.current}
             basemap={basemap}
+            layerState={layerState}
+            loadedFeatures={loadedFeatures}
             onRedrawRectangle={handleStartDrawBox}
             expedientCode={expedientCode}
             isMaximized={splitRatio <= 0.05}

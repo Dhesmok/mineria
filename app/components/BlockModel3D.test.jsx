@@ -93,7 +93,7 @@ describe("BlockModel3D", () => {
     expect(screen.getByText("3.5×")).toBeInTheDocument()
   })
 
-  it("permite cambiar el ángulo de iluminación solar", () => {
+  it("permite alternar entre presets solares Mañana, Mediodía y Tarde", () => {
     render(
       <BlockModel3D
         isOpen={true}
@@ -102,8 +102,48 @@ describe("BlockModel3D", () => {
       />
     )
 
-    const sunSlider = screen.getByTitle("Girar posición del sol para ver sombras dinámicas")
-    fireEvent.change(sunSlider, { target: { value: "180" } })
+    const mananaBtn = screen.getByText("Mañana")
+    fireEvent.click(mananaBtn)
+    expect(screen.getByText("65°")).toBeInTheDocument()
+
+    const tardeBtn = screen.getByText("Tarde")
+    fireEvent.click(tardeBtn)
+    expect(screen.getByText("285°")).toBeInTheDocument()
+
+    const mediodiaBtn = screen.getByText("Mediodía")
+    fireEvent.click(mediodiaBtn)
     expect(screen.getByText("180°")).toBeInTheDocument()
+  })
+
+  it("permite alternar el tema de estudio sin fallar", () => {
+    render(
+      <BlockModel3D
+        isOpen={true}
+        onClose={jest.fn()}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
+      />
+    )
+
+    const themeBtn = screen.getByTitle("Cambiar a fondo claro")
+    fireEvent.click(themeBtn)
+    expect(screen.getByTitle("Cambiar a fondo oscuro")).toBeInTheDocument()
+  })
+
+  it("acepta layerState y loadedFeatures sin errores", () => {
+    const layerState = {
+      titles: { on: true, color: "#eab308", opacity: 0.7 },
+      geology: { on: false, color: "#10b981", opacity: 0.5 },
+    }
+    const { container } = render(
+      <BlockModel3D
+        isOpen={true}
+        onClose={jest.fn()}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
+        layerState={layerState}
+        loadedFeatures={[]}
+      />
+    )
+
+    expect(container).toBeInTheDocument()
   })
 })

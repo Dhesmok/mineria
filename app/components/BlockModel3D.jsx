@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useRef, useState, useCallback } from "react"
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import * as THREE from "three"
 import { OrbitControls } from "three/addons/controls/OrbitControls.js"
 import {
@@ -69,15 +69,189 @@ function createHomogeneousEarthTexture() {
 /**
  * Textura procedural de relieve hipsométrico suave
  */
-function createReliefBasemapTexture(grid, segX, segZ) {
+function hexToRgba(hex, alpha = 1) {
+  if (!hex || typeof hex !== "string") return `rgba(234, 179, 8, ${alpha})`
+  let clean = hex.replace("#", "")
+  if (clean.length === 3) {
+    clean = clean.split("").map((c) => c + c).join("")
+  }
+  const num = parseInt(clean, 16)
+  if (isNaN(num)) return `rgba(234, 179, 8, ${alpha})`
+  const r = (num >> 16) & 255
+  const g = (num >> 8) & 255
+  const b = num & 255
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function drawPolygon(ctx, rings, projectPoint) {
+  if (!rings || rings.length === 0) return
+  ctx.beginPath()
+  for (let r = 0; r < rings.length; r++) {
+    const ring = rings[r]
+    for (let i = 0; i < ring.length; i++) {
+      const [px, py] = projectPoint(ring[i][0], ring[i][1])
+      if (i === 0) {
+        ctx.moveTo(px, py)
+      } else {
+        ctx.lineTo(px, py)
+      }
+    }
+    ctx.closePath()
+  }
+  ctx.fill()
+  ctx.stroke()
+}
+
+function drawLineString(ctx, coords, projectPoint) {
+  if (!coords || coords.length === 0) return
+  ctx.beginPath()
+  for (let i = 0; i < coords.length; i++) {
+    const [px, py] = projectPoint(coords[i][0], coords[i][1])
+    if (i === 0) {
+      ctx.moveTo(px, py)
+    } else {
+      ctx.lineTo(px, py)
+    }
+  }
+  ctx.stroke()
+}
+
+function drawVectorLayersOnCanvas(ctx, canvasW, canvasH, bbox, activeVectors) {
+  if (!ctx || !activeVectors || activeVectors.length === 0 || !bbox) return
+  const [minLng, minLat, maxLng, maxLat] = bbox
+
+  const lat2normY = (lat) => {
+    const sin = Math.sin((lat * Math.PI) / 180)
+    const clampedSin = Math.max(-0.9999, Math.min(0.9999, sin))
+    return (1 - Math.log((1 + clampedSin) / (1 - clampedSin)) / (2 * Math.PI)) / 2
+  }
+
+  const bNorthY = lat2normY(maxLat)
+  const bSouthY = lat2normY(minLat)
+  const normYHeight = bSouthY - bNorthY
+  const lngWidth = maxLng - minLng
+  if (normYHeight <= 0 || lngWidth <= 0) return
+
+  const projectPoint = (lng, lat) => {
+    const px = ((lng - minLng) / lngWidth) * canvasW
+    const py = ((lat2normY(lat) - bNorthY) / normYHeight) * canvasH
+    return [px, py]
+  }
+
+  for (const layer of activeVectors) {
+    const strokeColor = layer.color || "#eab308"
+    const opacity = typeof layer.opacity === "number" ? layer.opacity : 0.65
+    const fillColor = hexToRgba(strokeColor, Math.max(0.18, Math.min(0.85, opacity * 0.55)))
+    ctx.fillStyle = fillColor
+    ctx.strokeStyle = strokeColor
+    ctx.lineWidth = 2.5
+    ctx.lineJoin = "round"
+    ctx.lineCap = "round"
+
+    for (const feature of layer.features || []) {
+      const geom = feature.geometry
+      if (!geom) continue
+
+      if (geom.type === "Polygon") {
+        drawPolygon(ctx, geom.coordinates, projectPoint)
+      } else if (geom.type === "MultiPolygon") {
+        for (const polyCoords of geom.coordinates) {
+          drawPolygon(ctx, polyCoords, projectPoint)
+        }
+      } else if (geom.type === "LineString") {
+        drawLineString(ctx, geom.coordinates, projectPoint)
+      } else if (geom.type === "MultiLineString") {
+        for (const lineCoords of geom.coordinates) {
+          drawLineString(ctx, lineCoords, projectPoint)
+        }
+      }
+    }
+  }
+}
+
+function getActiveVectorLayers(map, layerState, loadedFeatures = []) {
+  const activeVectors = []
+  const recordedKeys = new Set()
+
+  if (layerState) {
+    for (const [key, conf] of Object.entries(layerState)) {
+      if (!conf?.on) continue
+      recordedKeys.add(key)
+      let fc = null
+      if (map && typeof map.getSource === "function") {
+        const possibleSourceIds = [`anm-${key}`, `sgc-${key}`, `anh-${key}`, key]
+        for (const sid of possibleSourceIds) {
+          try {
+            const src = map.getSource(sid)
+            if (src && src._data && src._data.features && src._data.features.length > 0) {
+              fc = src._data
+              break
+            }
+          } catch {}
+        }
+      }
+
+      if (fc && fc.features && fc.features.length > 0) {
+        activeVectors.push({
+          key,
+          color: conf.color || "#eab308",
+          opacity: conf.opacity !== undefined ? conf.opacity : 0.65,
+          features: fc.features,
+        })
+      }
+    }
+  }
+
+  // Si hay loadedFeatures con geometría
+  if (Array.isArray(loadedFeatures) && loadedFeatures.length > 0) {
+    const byKey = {}
+    for (const f of loadedFeatures) {
+      if (f?.geometry && f.layerKey && !recordedKeys.has(f.layerKey)) {
+        if (!byKey[f.layerKey]) byKey[f.layerKey] = []
+        byKey[f.layerKey].push(f)
+      }
+    }
+    for (const [k, feats] of Object.entries(byKey)) {
+      const conf = layerState?.[k]
+      activeVectors.push({
+        key: k,
+        color: conf?.color || "#38bdf8",
+        opacity: conf?.opacity !== undefined ? conf.opacity : 0.65,
+        features: feats,
+      })
+    }
+  }
+
+  // Resaltado de búsqueda si existe
+  if (map && typeof map.getSource === "function") {
+    try {
+      const searchSrc = map.getSource("search-highlight") || map.getSource("expedient-highlight")
+      if (searchSrc && searchSrc._data && searchSrc._data.features && searchSrc._data.features.length > 0) {
+        activeVectors.push({
+          key: "search-highlight",
+          color: "#f43f5e",
+          opacity: 0.85,
+          features: searchSrc._data.features,
+        })
+      }
+    } catch {}
+  }
+
+  return activeVectors
+}
+
+/**
+ * Textura procedural de relieve hipsométrico suave
+ */
+function createReliefBasemapTexture(grid, segX, segZ, bbox = null, activeVectors = []) {
   if (typeof document === "undefined" || !grid || grid.length === 0) return null
   const canvas = document.createElement("canvas")
-  canvas.width = segX + 1
-  canvas.height = segZ + 1
+  canvas.width = Math.max(512, segX + 1)
+  canvas.height = Math.max(512, segZ + 1)
   const ctx = canvas.getContext("2d")
   if (!ctx || typeof ctx.createImageData !== "function") return null
 
-  const imgData = ctx.createImageData(canvas.width, canvas.height)
+  const imgData = ctx.createImageData(segX + 1, segZ + 1)
   const data = imgData.data
 
   let min = Infinity
@@ -130,7 +304,21 @@ function createReliefBasemapTexture(grid, segX, segZ) {
     }
   }
 
-  ctx.putImageData(imgData, 0, 0)
+  const rawCanvas = document.createElement("canvas")
+  rawCanvas.width = segX + 1
+  rawCanvas.height = segZ + 1
+  const rawCtx = rawCanvas.getContext("2d")
+  if (rawCtx) {
+    rawCtx.putImageData(imgData, 0, 0)
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = "high"
+    ctx.drawImage(rawCanvas, 0, 0, canvas.width, canvas.height)
+  }
+
+  if (activeVectors && activeVectors.length > 0 && bbox) {
+    drawVectorLayersOnCanvas(ctx, canvas.width, canvas.height, bbox, activeVectors)
+  }
+
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   texture.generateMipmaps = true
@@ -194,10 +382,10 @@ function getOptimalDemTileRange(minLng, minLat, maxLng, maxLat, maxTiles = 144) 
 }
 
 /**
- * Descarga y compone directamente las teselas de satélite a resolución nativa ultra-nítida
- * usando fetch() con CORS seguro y createImageBitmap para evitar problemas de canvas tainted.
+ * Descarga y compone directamente las teselas de mapa base a resolución nativa ultra-nítida
+ * y superpone vectorialmente todas las capas mineras y geológicas activas.
  */
-async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
+async function loadHighResSatelliteCanvas(bbox, basemap = "satellite", activeVectors = []) {
   if (typeof document === "undefined" || !bbox) return null
   const [minLng, minLat, maxLng, maxLat] = bbox
 
@@ -210,17 +398,22 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
       return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
     }
     if (basemap === "topo") {
-      return `https://a.tile.opentopomap.org/${z}/${x}/${y}.png`
+      const s = ["a", "b", "c"][Math.abs((x + y) % 3)]
+      return `https://${s}.tile.opentopomap.org/${z}/${x}/${y}.png`
     }
     if (basemap === "esri" || basemap === "esriImagery") {
       return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`
     }
-    if (basemap === "positron") {
+    if (basemap === "positron" || basemap === "grayBase") {
       return `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`
     }
-    // Google Satellite nativo (idéntico al visor)
+    if (basemap === "googlePlain") {
+      const s = Math.abs((x + y) % 4)
+      return `https://mt${s}.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${z}`
+    }
+    // googleHybrid / satellite por defecto
     const s = Math.abs((x + y) % 4)
-    return `https://mt${s}.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${z}`
+    return `https://mt${s}.google.com/vt/lyrs=s,h&x=${x}&y=${y}&z=${z}`
   }
 
   const TILE_PX = 256
@@ -315,6 +508,11 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite") {
   finalCtx.imageSmoothingEnabled = true
   finalCtx.imageSmoothingQuality = "high"
   finalCtx.drawImage(fullCanvas, cropX, cropY, cropW, cropH, 0, 0, outW, outH)
+
+  // Dibuja las capas vectoriales activas recortadas al perímetro del bloque 3D
+  if (activeVectors && activeVectors.length > 0) {
+    drawVectorLayersOnCanvas(finalCtx, outW, outH, bbox, activeVectors)
+  }
 
   return finalCanvas
 }
@@ -550,8 +748,10 @@ export default function BlockModel3D({
   onClose,
   rectangle,
   elevationAt,
-  map: _map,
+  map,
   basemap = "satellite",
+  layerState,
+  loadedFeatures,
   onRedrawRectangle,
   isMaximized,
   onToggleMaximize,
@@ -564,6 +764,7 @@ export default function BlockModel3D({
   const blockGroupRef = useRef(null)
   const topMeshRef = useRef(null)
   const wallsMeshRef = useRef(null)
+  const floorMeshRef = useRef(null)
   const sunLightRef = useRef(null)
   const hemiLightRef = useRef(null)
   const animFrameRef = useRef(null)
@@ -580,7 +781,7 @@ export default function BlockModel3D({
   }, [exaggeration])
 
   const [sunPreset, setSunPreset] = useState("noon")
-  const [sunAngle, setSunAngle] = useState(45)
+  const [sunAngle, setSunAngle] = useState(180)
   const [autoRotate, setAutoRotate] = useState(false)
   const autoRotateRef = useRef(autoRotate)
   useEffect(() => {
@@ -624,6 +825,17 @@ export default function BlockModel3D({
     [metersPerThreeUnit],
   )
 
+  const applySunPreset = (preset) => {
+    setSunPreset(preset)
+    if (preset === "morning") {
+      setSunAngle(65)
+    } else if (preset === "noon") {
+      setSunAngle(180)
+    } else if (preset === "sunset") {
+      setSunAngle(285)
+    }
+  }
+
   // Malla densa de 280x280 (78,400 celdas para fidelidad topográfica idéntica al visor)
   const segX = 280
   const segZ = 280
@@ -653,9 +865,11 @@ export default function BlockModel3D({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    // Colorimetría 1:1 fiel al visor (sRGB exacto sin desaturar ni quemar)
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.NoToneMapping
+    renderer.domElement.style.width = "100%"
+    renderer.domElement.style.height = "100%"
+    renderer.domElement.style.display = "block"
 
     container.innerHTML = ""
     container.appendChild(renderer.domElement)
@@ -670,16 +884,26 @@ export default function BlockModel3D({
     controls.target.set(0, 0, 0)
     controlsRef.current = controls
 
-    // Iluminación natural sin quemar la fotografía satelital
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xa0a0a0, 1.15)
+    // Iluminación hemisférica natural con relleno para valles
+    const hemiLight = new THREE.HemisphereLight(0xf0f9ff, 0x52525b, 0.85)
     hemiLight.position.set(0, 50, 0)
     scene.add(hemiLight)
     hemiLightRef.current = hemiLight
 
-    // Luz solar suave para dar relieve 3D sin generar agujeros negros
-    const dirLight = new THREE.DirectionalLight(0xfffaed, 0.35)
-    dirLight.position.set(13, 16, 13)
-    dirLight.castShadow = false // No proyectar sombras duras artificiales sobre la foto satelital
+    // Luz solar direccional potente con sombras suaves de alta definición
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.55)
+    dirLight.position.set(0, 18, 0)
+    dirLight.castShadow = true
+    dirLight.shadow.mapSize.width = 2048
+    dirLight.shadow.mapSize.height = 2048
+    dirLight.shadow.camera.near = 0.5
+    dirLight.shadow.camera.far = 60
+    dirLight.shadow.camera.left = -12
+    dirLight.shadow.camera.right = 12
+    dirLight.shadow.camera.top = 12
+    dirLight.shadow.camera.bottom = -12
+    dirLight.shadow.bias = -0.0004
+    dirLight.shadow.normalBias = 0.04
     scene.add(dirLight)
     sunLightRef.current = dirLight
 
@@ -734,14 +958,13 @@ export default function BlockModel3D({
     const fallbackTex = createReliefBasemapTexture(grid, segX, segZ)
     const topMat = new THREE.MeshStandardMaterial({
       map: fallbackTex,
-      roughness: 0.95,
-      metalness: 0.0,
+      roughness: 0.8,
+      metalness: 0.05,
       flatShading: false,
     })
     const topMesh = new THREE.Mesh(topGeom, topMat)
-    // El terreno NO proyecta sombras duras sobre sí mismo para preservar la foto satelital original
-    topMesh.castShadow = false
-    topMesh.receiveShadow = false
+    topMesh.castShadow = true
+    topMesh.receiveShadow = true
     blockGroup.add(topMesh)
     topMeshRef.current = topMesh
 
@@ -818,6 +1041,7 @@ export default function BlockModel3D({
     const floorMesh = new THREE.Mesh(floorGeom, floorMat)
     floorMesh.receiveShadow = true
     scene.add(floorMesh)
+    floorMeshRef.current = floorMesh
 
     // --- E. Grupo de Pines ---
     const pinsGroup = new THREE.Group()
@@ -835,36 +1059,84 @@ export default function BlockModel3D({
     animate()
 
     const handleResize = () => {
-      if (!containerRef.current || !renderer || !camera) return
+      if (!containerRef.current || !rendererRef.current || !cameraRef.current) return
       const w = containerRef.current.clientWidth || 600
       const h = containerRef.current.clientHeight || 600
-      camera.aspect = w / h
-      camera.updateProjectionMatrix()
-      renderer.setSize(w, h)
+      if (w === 0 || h === 0) return
+      cameraRef.current.aspect = w / h
+      cameraRef.current.updateProjectionMatrix()
+      rendererRef.current.setSize(w, h, true)
     }
+
+    const ro = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => {
+          handleResize()
+        })
+      : null
+    if (ro) ro.observe(container)
     window.addEventListener("resize", handleResize)
 
     return () => {
       cancelAnimationFrame(animFrameRef.current)
       window.removeEventListener("resize", handleResize)
+      if (ro) ro.disconnect()
       if (renderer.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement)
       }
       renderer.dispose()
+      floorMeshRef.current = null
+      topMeshRef.current = null
+      wallsMeshRef.current = null
+      sunLightRef.current = null
+      hemiLightRef.current = null
+      sceneRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, bboxKey, studioTheme])
+  }, [isOpen, bboxKey])
 
-  // 2. Carga Asíncrona de Textura Satelital Ultra-HD
+  // Cambio de tema sin re-crear la escena ni aplanar el terreno
+  useEffect(() => {
+    if (!sceneRef.current) return
+    const isLight = studioTheme === "light"
+    sceneRef.current.background = new THREE.Color(isLight ? 0xdfe6dc : 0x09090b)
+    if (floorMeshRef.current) {
+      floorMeshRef.current.material.opacity = isLight ? 0.22 : 0.45
+    }
+  }, [studioTheme])
+
+  // Ajuste reactivo inmediato al maximizar o restaurar tamaño
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!containerRef.current || !rendererRef.current || !cameraRef.current) return
+      const w = containerRef.current.clientWidth || 600
+      const h = containerRef.current.clientHeight || 600
+      if (w === 0 || h === 0) return
+      cameraRef.current.aspect = w / h
+      cameraRef.current.updateProjectionMatrix()
+      rendererRef.current.setSize(w, h, true)
+    }, 40)
+    return () => clearTimeout(timer)
+  }, [isMaximized])
+
+  const layerStateKey = useMemo(() => {
+    if (!layerState) return ""
+    return Object.entries(layerState)
+      .map(([k, v]) => `${k}:${v?.on ? 1 : 0}:${v?.opacity}:${v?.color}`)
+      .join("|")
+  }, [layerState])
+
+  // 2. Carga Asíncrona de Textura Satelital / Basemap + Capas Activas
   useEffect(() => {
     if (!isOpen || !rectangle?.bbox) return
     let canceled = false
 
+    const activeVectors = getActiveVectorLayers(map, layerState, loadedFeatures)
+
     if (basemap === "relief") {
       const grid = elevationGridRef.current
       if (grid && grid.length > 0 && topMeshRef.current?.material) {
-        const reliefTex = createReliefBasemapTexture(grid, segX, segZ)
-        if (reliefTex) {
+        const reliefTex = createReliefBasemapTexture(grid, segX, segZ, rectangle.bbox, activeVectors)
+        if (reliefTex && !canceled) {
           topMeshRef.current.material.map = reliefTex
           topMeshRef.current.material.needsUpdate = true
         }
@@ -872,11 +1144,10 @@ export default function BlockModel3D({
       return
     }
 
-    loadHighResSatelliteCanvas(rectangle.bbox, basemap).then((canvas) => {
+    loadHighResSatelliteCanvas(rectangle.bbox, basemap, activeVectors).then((canvas) => {
       if (canceled || !canvas || !topMeshRef.current?.material) return
 
       const tex = new THREE.CanvasTexture(canvas)
-      // Colorimetría nativa sRGB para colores vivos idénticos al visor
       tex.colorSpace = THREE.SRGBColorSpace
       tex.generateMipmaps = true
       tex.minFilter = THREE.LinearMipmapLinearFilter
@@ -888,8 +1159,8 @@ export default function BlockModel3D({
 
       if (topMeshRef.current?.material) {
         topMeshRef.current.material.map = tex
-        topMeshRef.current.material.roughness = 0.95
-        topMeshRef.current.material.metalness = 0.0
+        topMeshRef.current.material.roughness = 0.8
+        topMeshRef.current.material.metalness = 0.05
         topMeshRef.current.material.color.setHex(0xffffff)
         topMeshRef.current.material.needsUpdate = true
       }
@@ -898,8 +1169,7 @@ export default function BlockModel3D({
     return () => {
       canceled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, bboxKey, basemap, segX, segZ])
+  }, [isOpen, bboxKey, basemap, layerState, layerStateKey, map, loadedFeatures, segX, segZ, rectangle])
 
   // 3. Carga Asíncrona del DEM Real de Máxima Resolución
   useEffect(() => {
@@ -929,7 +1199,8 @@ export default function BlockModel3D({
           topMeshRef.current.geometry.computeVertexNormals()
 
           if (basemap === "relief") {
-            const reliefTex = createReliefBasemapTexture(realGrid, segX, segZ)
+            const activeVectors = getActiveVectorLayers(map, layerState, loadedFeatures)
+            const reliefTex = createReliefBasemapTexture(realGrid, segX, segZ, rectangle.bbox, activeVectors)
             if (reliefTex) {
               topMeshRef.current.material.map = reliefTex
               topMeshRef.current.material.needsUpdate = true
@@ -970,8 +1241,7 @@ export default function BlockModel3D({
     return () => {
       canceled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, bboxKey, computeHeight, basemap, segX, segZ, baseDepth])
+  }, [isOpen, bboxKey, computeHeight, basemap, segX, segZ, baseDepth, map, layerState, loadedFeatures, rectangle])
 
   // 4. Actualización Instantánea de Exageración Vertical (0.5 ms sin tocar la escena)
   useEffect(() => {
@@ -1035,20 +1305,45 @@ export default function BlockModel3D({
     }
   }, [wireframe])
 
-  // Ángulo de Iluminación Solar
+  // Ángulo de Iluminación Solar y Presets con sombras dinámicas realistas
   useEffect(() => {
-    if (!sunLightRef.current) return
+    if (!sunLightRef.current || !hemiLightRef.current) return
     const rad = (sunAngle * Math.PI) / 180
     const dist = 18
-    let sunHeight = 14
 
-    if (sunPreset === "morning") sunHeight = 8
-    if (sunPreset === "noon") sunHeight = 18
-    if (sunPreset === "sunset") sunHeight = 5
-
-    const sx = Math.cos(rad) * dist
-    const sz = Math.sin(rad) * dist
-    sunLightRef.current.position.set(sx, sunHeight, sz)
+    if (sunPreset === "morning") {
+      const sunHeight = 7.5
+      sunLightRef.current.position.set(Math.cos(rad) * dist, sunHeight, Math.sin(rad) * dist)
+      sunLightRef.current.color.setHex(0xffecd2)
+      sunLightRef.current.intensity = 1.45
+      hemiLightRef.current.color.setHex(0xdbeafe)
+      hemiLightRef.current.groundColor.setHex(0x3f3f46)
+      hemiLightRef.current.intensity = 0.65
+    } else if (sunPreset === "noon") {
+      const sunHeight = 18
+      sunLightRef.current.position.set(Math.cos(rad) * dist * 0.5, sunHeight, Math.sin(rad) * dist * 0.5)
+      sunLightRef.current.color.setHex(0xffffff)
+      sunLightRef.current.intensity = 1.55
+      hemiLightRef.current.color.setHex(0xf0f9ff)
+      hemiLightRef.current.groundColor.setHex(0x52525b)
+      hemiLightRef.current.intensity = 0.85
+    } else if (sunPreset === "sunset") {
+      const sunHeight = 5.5
+      sunLightRef.current.position.set(Math.cos(rad) * dist, sunHeight, Math.sin(rad) * dist)
+      sunLightRef.current.color.setHex(0xffa756)
+      sunLightRef.current.intensity = 1.5
+      hemiLightRef.current.color.setHex(0xfed7aa)
+      hemiLightRef.current.groundColor.setHex(0x27272a)
+      hemiLightRef.current.intensity = 0.55
+    } else {
+      const sunHeight = 13
+      sunLightRef.current.position.set(Math.cos(rad) * dist, sunHeight, Math.sin(rad) * dist)
+      sunLightRef.current.color.setHex(0xfffaed)
+      sunLightRef.current.intensity = 1.4
+      hemiLightRef.current.color.setHex(0xdbeafe)
+      hemiLightRef.current.groundColor.setHex(0x3f3f46)
+      hemiLightRef.current.intensity = 0.75
+    }
   }, [sunAngle, sunPreset])
 
   // Renderizado dinámico de pines
@@ -1269,7 +1564,10 @@ export default function BlockModel3D({
               title="Girar posición del sol para ver sombras dinámicas"
               aria-label="Girar posición del sol para ver sombras dinámicas"
               value={sunAngle}
-              onChange={(e) => setSunAngle(parseInt(e.target.value))}
+              onChange={(e) => {
+                setSunAngle(parseInt(e.target.value))
+                setSunPreset("custom")
+              }}
               className="w-20 accent-amber-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
             />
           </div>
@@ -1281,7 +1579,7 @@ export default function BlockModel3D({
         {/* Presets Solares Rápidos */}
         <div className="flex items-center gap-1 pr-3 border-r border-zinc-800">
           <button
-            onClick={() => setSunPreset("morning")}
+            onClick={() => applySunPreset("morning")}
             className={`px-2 py-1 text-[10px] font-medium rounded-md border transition-all ${
               sunPreset === "morning"
                 ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
@@ -1291,7 +1589,7 @@ export default function BlockModel3D({
             Mañana
           </button>
           <button
-            onClick={() => setSunPreset("noon")}
+            onClick={() => applySunPreset("noon")}
             className={`px-2 py-1 text-[10px] font-medium rounded-md border transition-all ${
               sunPreset === "noon"
                 ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
@@ -1301,7 +1599,7 @@ export default function BlockModel3D({
             Mediodía
           </button>
           <button
-            onClick={() => setSunPreset("sunset")}
+            onClick={() => applySunPreset("sunset")}
             className={`px-2 py-1 text-[10px] font-medium rounded-md border transition-all ${
               sunPreset === "sunset"
                 ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
