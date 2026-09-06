@@ -30,6 +30,7 @@ import { AreaFilters } from "./components/AreaFilters"
 import { AttributeTable } from "./components/AttributeTable"
 import { CrsPicker } from "./components/CrsPicker"
 import { ExpedientSearch, queryExpedientSuggestions } from "./components/ExpedientSearch"
+import { OfflineIndicator } from "./components/OfflineIndicator"
 import { matchesFilters } from "./utils/layerFilters"
 import { readPreferences, writePreferences } from "./utils/preferences"
 import { debounce } from "@/lib/utils"
@@ -352,6 +353,7 @@ export default function Component() {
 
   return (
     <div className="relative flex w-full h-screen bg-[#000000] overflow-hidden">
+      <OfflineIndicator />
       {/* Dock lateral pegado al borde izquierdo con rail colapsable y drawer fluido */}
       <aside
         aria-label="Panel lateral"

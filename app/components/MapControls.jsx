@@ -80,7 +80,7 @@ export const MapHUD = ({
       onClick={onResetNorth}
       title="Orientar al Norte (0°)"
       aria-label="Orientar al Norte"
-      className="flex h-9 w-9 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+      className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
     >
       <div
         style={{ transform: `rotate(${-bearing}deg)` }}
@@ -101,7 +101,7 @@ export const MapHUD = ({
       onClick={onZoomIn}
       title="Acercar mapa (+)"
       aria-label="Acercar mapa"
-      className="flex h-9 w-9 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-lg font-semibold"
+      className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-lg font-semibold"
     >
       +
     </button>
@@ -112,7 +112,7 @@ export const MapHUD = ({
       onClick={onZoomOut}
       title="Alejar mapa (−)"
       aria-label="Alejar mapa"
-      className="flex h-9 w-9 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-lg font-semibold"
+      className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-lg font-semibold"
     >
       −
     </button>
@@ -133,7 +133,7 @@ export const MapHUD = ({
       }
       aria-label={is3D ? "Volver a 2D" : "Perspectiva 3D"}
       aria-pressed={is3D}
-      className={`flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold transition-all ${
+      className={`flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-xl text-xs font-bold transition-all ${
         is3D || hud3DOpen
           ? "bg-white text-black shadow-sm"
           : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
