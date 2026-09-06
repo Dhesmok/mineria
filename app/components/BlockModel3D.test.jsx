@@ -123,16 +123,47 @@ describe("BlockModel3D", () => {
 
   it("acepta layerState y loadedFeatures sin errores", () => {
     const layerState = {
-      titles: { on: true, color: "#eab308", opacity: 0.7 },
-      geology: { on: false, color: "#10b981", opacity: 0.5 },
+      title: { on: true, color: "#894444", opacity: 0.7 },
+      request: { on: true, color: "#F0C567", opacity: 0.5 },
+      geologiaNacional: { on: true, opacity: 0.65 },
     }
+    const loadedFeatures = [
+      {
+        layerKey: "title",
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [-75.58, 6.22],
+              [-75.52, 6.22],
+              [-75.52, 6.28],
+              [-75.58, 6.28],
+              [-75.58, 6.22],
+            ],
+          ],
+        },
+      },
+    ]
+    const mockPlancha = {
+      canvas: document.createElement("canvas"),
+      corners: [
+        [-75.59, 6.29],
+        [-75.51, 6.29],
+        [-75.51, 6.21],
+        [-75.59, 6.21],
+      ],
+    }
+
     const { container } = render(
       <BlockModel3D
         isOpen={true}
         onClose={jest.fn()}
         rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
         layerState={layerState}
-        loadedFeatures={[]}
+        loadedFeatures={loadedFeatures}
+        showLabels={false}
+        plancha={mockPlancha}
+        planchaOpacity={0.8}
       />
     )
 

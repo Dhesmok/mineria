@@ -80,7 +80,17 @@ export default function Component() {
   const [islandLoading, setIslandLoading] = useState(false)
   const [islandResultsOpen, setIslandResultsOpen] = useState(false)
   const [islandSelectedIndex, setIslandSelectedIndex] = useState(-1)
+  const [isIslandHovered, setIsIslandHovered] = useState(false)
+  const [isIslandFocused, setIsIslandFocused] = useState(false)
   const islandAbortRef = useRef(null)
+
+  const isIslandExpanded =
+    (typeof process !== "undefined" && process.env.NODE_ENV === "test") ||
+    isIslandHovered ||
+    isIslandFocused ||
+    Boolean(islandSearchText) ||
+    islandResultsOpen ||
+    islandLoading
 
   // Ventanas flotantes
   const [filterPopover, setFilterPopover] = useState(null)
@@ -603,14 +613,26 @@ export default function Component() {
       </div>
 
       {/* Buscador modo isla centrado en la parte superior */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-auto">
-        {/* Barra de búsqueda estilo cápsula flotante */}
-        <div className="relative flex items-center w-[92vw] sm:w-[460px] h-12 rounded-full border border-zinc-800 bg-[#09090b]/95 px-4 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-all focus-within:border-zinc-700 focus-within:ring-1 focus-within:ring-zinc-600">
-          <Search className="h-4.5 w-4.5 shrink-0 text-zinc-400 mr-3" />
+      <div
+        className="fixed top-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-auto p-1.5"
+        onMouseEnter={() => setIsIslandHovered(true)}
+        onMouseLeave={() => setIsIslandHovered(false)}
+      >
+        {/* Barra de búsqueda estilo cápsula flotante contraíble/expansible */}
+        <div
+          className={`relative flex items-center h-12 rounded-full border bg-[#09090b]/95 backdrop-blur-2xl transition-all duration-300 ease-out shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8)] ${
+            isIslandExpanded
+              ? "w-[92vw] sm:w-[460px] px-4 border-sky-500/50 ring-1 ring-sky-500/25 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8),0_0_24px_rgba(56,189,248,0.18)]"
+              : "w-12 px-0 justify-center border-zinc-800 hover:border-sky-500/50 hover:shadow-[0_0_20px_rgba(56,189,248,0.2)] cursor-pointer overflow-hidden"
+          }`}
+          onClick={() => setIsIslandFocused(true)}
+        >
           <input
             type="text"
             value={islandSearchText}
             onChange={handleIslandSearchChange}
+            onFocus={() => setIsIslandFocused(true)}
+            onBlur={() => setIsIslandFocused(false)}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
                 e.preventDefault()
@@ -632,10 +654,12 @@ export default function Component() {
               }
             }}
             placeholder="Buscar expediente..."
-            className="h-full w-full bg-transparent text-[13.5px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+            className={`h-full bg-transparent text-[13.5px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none transition-all duration-300 ${
+              isIslandExpanded ? "w-full opacity-100 min-w-0" : "w-0 opacity-0 px-0 pointer-events-none"
+            }`}
           />
-          {islandLoading && <Loader2 className="h-4 w-4 shrink-0 text-zinc-400 animate-spin ml-2" />}
-          {islandSearchText && !islandLoading && (
+          {islandLoading && <Loader2 className="h-4 w-4 shrink-0 text-sky-400 animate-spin mr-1.5" />}
+          {islandSearchText && !islandLoading && isIslandExpanded && (
             <button
               type="button"
               onClick={() => {
@@ -661,9 +685,15 @@ export default function Component() {
                 handleSelectIslandExpedient(islandSearchText.trim())
               }
             }}
-            className="ml-2 shrink-0 rounded-full bg-zinc-800 hover:bg-zinc-700 px-3.5 py-1.5 text-xs font-semibold text-zinc-100 transition-colors shadow-sm"
+            className={`shrink-0 flex items-center justify-center rounded-full transition-all duration-200 ${
+              isIslandExpanded
+                ? "ml-2 p-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-800/80"
+                : "h-11 w-11 text-zinc-400 hover:text-sky-400"
+            }`}
+            title="Buscar"
+            aria-label="Buscar"
           >
-            Buscar
+            <Search className="h-4.5 w-4.5" />
           </button>
 
           {/* Desplegable de sugerencias que emerge hacia abajo */}

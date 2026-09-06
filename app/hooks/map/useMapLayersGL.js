@@ -401,6 +401,7 @@ export const useMapLayersGL = (
             layerKey: key,
             properties: f.properties ?? {},
             bbox: bboxOfGeometry(f.geometry),
+            geometry: f.geometry,
           }))
 
           if (result.truncated) truncated.push(label)
