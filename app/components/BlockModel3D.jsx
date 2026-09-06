@@ -1688,7 +1688,7 @@ export default function BlockModel3D({
       <div
         ref={containerRef}
         onClick={handleCanvasClick}
-        className="relative flex-1 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden"
+        className="relative flex-1 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden touch-none"
       />
 
       {/* Badge de estado de carga DEM */}
@@ -1706,7 +1706,7 @@ export default function BlockModel3D({
       </div>
 
       {/* HUD de Controles Flotante Inferior */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl">
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl max-w-[95vw] overflow-x-auto no-scrollbar pb-[calc(0.5rem+env(safe-area-inset-bottom))] touch-pan-x">
         {/* Control de Exageración Vertical */}
         <div className="flex items-center gap-2 pr-3 border-r border-zinc-800">
           <Mountain size={14} className="text-zinc-400 shrink-0" />

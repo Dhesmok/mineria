@@ -333,13 +333,13 @@ export const FloatingPanel = ({
           role="dialog"
           aria-label={title}
           style={estilo}
-          className={`z-30 flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl ${
+          className={`z-30 flex max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl ${
             compact ? "w-fit" : "w-[min(16rem,calc(100vw-1.5rem))]"
           }`}
         >
           <div
             {...asa}
-            className={`${asa.className} flex shrink-0 items-center gap-1.5 border-b border-zinc-800/80 bg-zinc-950/80 px-2.5 py-2`}
+            className={`${asa.className} flex shrink-0 items-center gap-1.5 border-b border-zinc-800/80 bg-zinc-950/80 px-2.5 py-2 touch-none`}
           >
             <GripHorizontal className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
             {!compact && (
@@ -356,7 +356,7 @@ export const FloatingPanel = ({
               }}
               aria-label={closeLabel ?? (collapsible ? `Guardar ${title}` : `Cerrar ${title}`)}
               title={collapsible ? "Guardar en un botón" : "Cerrar"}
-              className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+              className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 min-h-[32px] min-w-[32px] flex items-center justify-center"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -365,7 +365,7 @@ export const FloatingPanel = ({
               vez de empujar el panel hacia arriba. Es lo que permite que la
               paleta de colores se despliegue hacia abajo aunque el panel viva
               pegado al borde inferior. */}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-3 py-2">
             {children}
           </div>
         </div>
