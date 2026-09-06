@@ -21,6 +21,8 @@ import {
   Square,
   Trash2,
   Linkedin,
+  Compass,
+  Crosshair,
 } from "lucide-react"
 import ExportComponent from "./ExportComponent"
 import { axisLabels, crsById, formatCoordinate, fromGeographic, SOURCE_CRS } from "./utils/crs"
@@ -31,6 +33,9 @@ import { AttributeTable } from "./components/AttributeTable"
 import { CrsPicker } from "./components/CrsPicker"
 import { ExpedientSearch, queryExpedientSuggestions } from "./components/ExpedientSearch"
 import { OfflineIndicator } from "./components/OfflineIndicator"
+import { MobileBottomBar } from "./components/MobileBottomBar"
+import { MobileBottomSheet } from "./components/MobileBottomSheet"
+import { MobileStorageManager } from "./components/MobileStorageManager"
 import { matchesFilters } from "./utils/layerFilters"
 import { readPreferences, writePreferences } from "./utils/preferences"
 import { debounce } from "@/lib/utils"
@@ -98,6 +103,7 @@ export default function Component() {
   const [searchPopover, setSearchPopover] = useState(null)
   const [crsPopover, setCrsPopover] = useState(null)
   const [showAttributeTable, setShowAttributeTable] = useState(false)
+  const [mobilePanel, setMobilePanel] = useState(null)
 
   const [blendMode, setBlendMode] = useState("multiply")
   const [prefsCargadas, setPrefsCargadas] = useState(false)
@@ -120,6 +126,9 @@ export default function Component() {
   useEffect(() => {
     const alRedimensionar = () => {
       setPanelWidth((actual) => fitPanelToViewport({ width: actual }, window.innerWidth).width)
+      if (typeof window !== "undefined" && window.innerWidth >= 768) {
+        setMobilePanel(null)
+      }
     }
     window.addEventListener("resize", alRedimensionar)
     return () => window.removeEventListener("resize", alRedimensionar)
@@ -359,7 +368,7 @@ export default function Component() {
         aria-label="Panel lateral"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        className="fixed left-0 top-0 bottom-0 z-30 flex select-none pointer-events-auto"
+        className="fixed left-0 top-0 bottom-0 z-30 hidden md:flex select-none pointer-events-auto"
       >
         {/* Rail de iconos (barra de tareas tipo dock, 56px) */}
         <div className="flex w-14 flex-col items-center justify-between border-r border-zinc-800/80 bg-[#000000]/95 py-3.5 backdrop-blur-2xl text-zinc-200 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.6)]">
@@ -614,9 +623,9 @@ export default function Component() {
         />
       </div>
 
-      {/* Buscador modo isla centrado en la parte superior */}
+      {/* Buscador modo isla centrado en la parte superior (solo desktop) */}
       <div
-        className="fixed top-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-auto p-1.5"
+        className="fixed top-4 left-1/2 -translate-x-1/2 z-30 hidden md:flex flex-col items-center pointer-events-auto p-1.5"
         onMouseEnter={() => setIsIslandHovered(true)}
         onMouseLeave={() => setIsIslandHovered(false)}
       >
@@ -789,6 +798,302 @@ export default function Component() {
           </div>
         )}
       </div>
+
+      {/* Cápsula de expediente activo en móvil */}
+      {showToggle && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-30 flex md:hidden items-center gap-1.5 max-w-[92vw] px-3 py-1.5 rounded-full border border-sky-500/40 bg-[#09090b]/90 backdrop-blur-xl shadow-lg">
+          <span className="font-mono text-xs font-bold text-sky-400 truncate max-w-[130px]">
+            {expedientCode}
+          </span>
+          <div className="h-3 w-px bg-zinc-700 mx-0.5" />
+          {coordinatesAvailable && (
+            <button
+              type="button"
+              onClick={() => setShowTable(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-300 hover:text-white"
+              title="Ver coordenadas"
+              aria-label="Ver coordenadas móvil"
+            >
+              <TableIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleExportSHP}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-300 hover:text-white"
+            title="Descargar expediente"
+            aria-label="Descargar expediente móvil"
+          >
+            <Download className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              handleReset()
+              setIslandSearchText("")
+              setIslandResultsOpen(false)
+            }}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:text-rose-400"
+            title="Cerrar expediente móvil"
+            aria-label="Cerrar expediente móvil"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Barra de navegación inferior móvil */}
+      <MobileBottomBar
+        activePanel={mobilePanel}
+        onSelectPanel={(panel) => setMobilePanel((curr) => (curr === panel ? null : panel))}
+        activeLayersCount={activeCount}
+      />
+
+      {/* Hoja deslizante inferior (Bottom Sheet) */}
+      <MobileBottomSheet
+        isOpen={mobilePanel !== null}
+        onClose={() => setMobilePanel(null)}
+        title={
+          mobilePanel === "layers"
+            ? "Capas del mapa"
+            : mobilePanel === "tools"
+            ? "Herramientas"
+            : mobilePanel === "expediente"
+            ? "Buscar Expediente"
+            : mobilePanel === "view-location"
+            ? "Vista y Ubicación"
+            : ""
+        }
+      >
+        {mobilePanel === "layers" && (
+          <LayerPanel
+            layers={layers}
+            order={layerOrder}
+            onToggle={alternarCapa}
+            onOpacity={cambiarOpacidad}
+            onColor={cambiarColor}
+            onReorder={setLayerOrder}
+            subLayers={sgcState.subLayers}
+            chosenSub={sgcState.chosenSub}
+            onToggleSubLayer={sgcState.onToggleSubLayer}
+            areaHasFilter={areaHasFilter}
+            onOpenFilters={(areaId, el) =>
+              setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
+            }
+          />
+        )}
+
+        {mobilePanel === "tools" && (
+          <div className="space-y-4">
+            {/* 1. Sistema de Coordenadas */}
+            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                  Sistema de Coordenadas
+                </Label>
+                <span className="font-mono text-[10px] text-zinc-300 bg-zinc-800/90 px-2 py-0.5 rounded-md border border-zinc-700/60">
+                  EPSG:{selectedCoordinateSystem}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={(event) => {
+                  const el = event.currentTarget
+                  setCrsPopover((actual) => (actual ? null : el))
+                }}
+                className="flex h-11 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-left transition-all active:bg-zinc-800"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Globe2 className="h-4 w-4 shrink-0 text-zinc-300" />
+                  <span className="min-w-0 truncate text-[13px] font-medium text-white">
+                    {crsById(selectedCoordinateSystem).label}
+                  </span>
+                </div>
+                <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
+              </button>
+            </div>
+
+            {/* 2. Fusión de capas */}
+            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-[0.08em]">
+                  Fusión de capas
+                </span>
+              </div>
+              <div className="flex rounded-xl border border-zinc-800/90 p-1 bg-zinc-900/80 text-xs gap-1">
+                <button
+                  type="button"
+                  onClick={() => setBlendMode("multiply")}
+                  className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-all ${
+                    blendMode === "multiply"
+                      ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
+                      : "text-zinc-400"
+                  }`}
+                >
+                  Multiplicar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBlendMode("normal")}
+                  className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-all ${
+                    blendMode === "normal"
+                      ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
+                      : "text-zinc-400"
+                  }`}
+                >
+                  Normal
+                </button>
+              </div>
+            </div>
+
+            {/* 3. Medición */}
+            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3">
+              <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block mb-2">
+                Medición y Dibujo
+              </Label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    mapRef.current?.startMode?.("measure-distance")
+                    setMobilePanel(null)
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-300 active:scale-95"
+                >
+                  <Spline className="h-5 w-5 text-zinc-200" />
+                  <span className="text-xs font-medium">Distancia</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    mapRef.current?.startMode?.("measure-area")
+                    setMobilePanel(null)
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-300 active:scale-95"
+                >
+                  <Square className="h-5 w-5 text-zinc-200" />
+                  <span className="text-xs font-medium">Área</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    mapRef.current?.clearDrawings?.()
+                    setMobilePanel(null)
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-400 active:scale-95"
+                >
+                  <Trash2 className="h-5 w-5 text-zinc-400" />
+                  <span className="text-xs font-medium">Limpiar</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4. Aplicación Móvil y Gestión de Memoria */}
+            <MobileStorageManager />
+          </div>
+        )}
+
+        {mobilePanel === "expediente" && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                <input
+                  type="text"
+                  value={islandSearchText}
+                  onChange={handleIslandSearchChange}
+                  placeholder="Escribe código o titular..."
+                  className="w-full h-11 pl-9 pr-9 bg-zinc-900/90 border border-zinc-800 rounded-xl text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                />
+                {islandSearchText && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIslandSearchText("")
+                      setIslandSuggestions([])
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (islandSearchText.trim()) {
+                    handleSelectIslandExpedient(islandSearchText.trim())
+                    setMobilePanel(null)
+                  }
+                }}
+                className="h-11 px-4 rounded-xl bg-sky-500 text-zinc-950 font-semibold text-xs active:scale-95 transition-all"
+              >
+                Buscar
+              </button>
+            </div>
+
+            {islandLoading && (
+              <div className="flex items-center justify-center py-4 text-zinc-400 text-xs gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-sky-400" />
+                Buscando expedientes...
+              </div>
+            )}
+
+            {islandSuggestions.length > 0 && (
+              <div className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800 overflow-hidden max-h-60 overflow-y-auto">
+                {islandSuggestions.map((sug) => (
+                  <button
+                    key={sug.code}
+                    type="button"
+                    onClick={() => {
+                      handleSelectIslandExpedient(sug.code)
+                      setMobilePanel(null)
+                    }}
+                    className="w-full px-3.5 py-2.5 text-left flex items-center justify-between hover:bg-zinc-900/80 active:bg-zinc-800 transition-colors"
+                  >
+                    <span className="font-mono text-xs font-semibold text-white">{sug.code}</span>
+                    {sug.titular && (
+                      <span className="text-[11px] text-zinc-400 truncate max-w-[180px]">{sug.titular}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {mobilePanel === "view-location" && (
+          <div className="space-y-3">
+            <p className="text-xs text-zinc-400">
+              Controla la perspectiva del mapa y obtén tu posición satelital en tiempo real.
+            </p>
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  mapRef.current?.toggle3D?.()
+                  setMobilePanel(null)
+                }}
+                className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 active:scale-95 transition-all"
+              >
+                <Compass className="h-6 w-6 text-sky-400" />
+                <span className="text-xs font-semibold text-zinc-200">Relieve 3D</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  mapRef.current?.handleLocateUser?.()
+                  setMobilePanel(null)
+                }}
+                className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 active:scale-95 transition-all"
+              >
+                <Crosshair className="h-6 w-6 text-emerald-400" />
+                <span className="text-xs font-semibold text-zinc-200">Mi Ubicación GPS</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </MobileBottomSheet>
 
       {showTable && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-md">

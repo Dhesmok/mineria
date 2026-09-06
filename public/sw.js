@@ -15,6 +15,32 @@ const STATIC_ASSETS = [
   "/pdfjs/pdf.worker.min.mjs",
 ]
 
+// Límite acotado para evitar saturación de memoria en móviles (Astra Contract)
+const MAX_TILES_IN_SW = 700
+const TARGET_TILES_IN_SW = 630
+
+async function trimTileCache() {
+  try {
+    const cache = await caches.open(CACHE_NAMES.TILES)
+    const keys = await cache.keys()
+    if (keys.length > MAX_TILES_IN_SW) {
+      const deleteCount = keys.length - TARGET_TILES_IN_SW
+      const toDelete = keys.slice(0, deleteCount)
+      await Promise.all(toDelete.map((k) => cache.delete(k)))
+    }
+  } catch (err) {
+    console.warn("[SW] Error recortando caché de teselas:", err)
+  }
+}
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "CLEAR_TILE_CACHE") {
+    caches.delete(CACHE_NAMES.TILES).then(() => {
+      event.ports?.[0]?.postMessage({ success: true })
+    })
+  }
+})
+
 // Instalación: cachear recursos críticos de App Shell
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -68,6 +94,7 @@ self.addEventListener("fetch", (event) => {
           const networkResponse = await fetch(event.request)
           if (networkResponse && networkResponse.status === 200) {
             cache.put(event.request, networkResponse.clone())
+            trimTileCache()
           }
           return networkResponse
         } catch {

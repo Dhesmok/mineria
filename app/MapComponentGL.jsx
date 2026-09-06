@@ -673,7 +673,9 @@ export default function MapComponentGL({
     mapInstance.addPointAt = addPointAt
     mapInstance.chooseBasemap = chooseBasemap
     mapInstance.startMode = startMode
-  }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult, addPointAt, chooseBasemap, startMode])
+    mapInstance.toggle3D = toggle3D
+    mapInstance.handleLocateUser = handleLocateUser
+  }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult, addPointAt, chooseBasemap, startMode, toggle3D, handleLocateUser])
 
   /**
    * El aviso de "mapa listo", por referencia.
