@@ -10,6 +10,7 @@ import {
   elevationFromPixel,
   latToMercatorY,
   lngToMercatorX,
+  maxAround,
   mercatorXToLng,
   mercatorYToLat,
   mosaicCornersOf,
@@ -161,6 +162,34 @@ describe("tileRangeFor", () => {
     expect(rango.tilesX).toBe(2)
     expect(rango.tilesY).toBe(1)
   })
+
+  it("acota estrictamente los índices a [0, 2^zoom - 1] en coordenadas límite (±180° y polos)", () => {
+    ;[-180, 180].forEach((lng) => {
+      ;[-90, 90, -85.05112878, 85.05112878].forEach((lat) => {
+        const rango = tileRangeFor({ west: lng, east: lng, south: lat, north: lat }, 13)
+        const maxIndex = 2 ** rango.zoom - 1
+        expect(rango.minX).toBeGreaterThanOrEqual(0)
+        expect(rango.minX).toBeLessThanOrEqual(maxIndex)
+        expect(rango.maxX).toBeGreaterThanOrEqual(0)
+        expect(rango.maxX).toBeLessThanOrEqual(maxIndex)
+        expect(rango.minY).toBeGreaterThanOrEqual(0)
+        expect(rango.minY).toBeLessThanOrEqual(maxIndex)
+        expect(rango.maxY).toBeGreaterThanOrEqual(0)
+        expect(rango.maxY).toBeLessThanOrEqual(maxIndex)
+      })
+    })
+  })
+
+  it("garantiza índices válidos [0, 0] en zoom 0", () => {
+    const rango = tileRangeFor({ west: -180, east: 180, south: -85, north: 85 }, 0)
+    expect(rango.zoom).toBe(0)
+    expect(rango.minX).toBe(0)
+    expect(rango.maxX).toBe(0)
+    expect(rango.minY).toBe(0)
+    expect(rango.maxY).toBe(0)
+    expect(rango.tilesX).toBe(1)
+    expect(rango.tilesY).toBe(1)
+  })
 })
 
 describe("mosaicCornersOf", () => {
@@ -263,6 +292,77 @@ describe("pasteTile y blankTile", () => {
     blankTile(mosaico, cols, 0, 0)
     expect(Number.isNaN(mosaico[0])).toBe(true)
     expect(Number.isNaN(mosaico[cols * TILE_SIZE - 1])).toBe(true)
+  })
+
+  it("trata los píxeles con transparencia (alfa = 0) como sin dato (NaN)", () => {
+    const cols = TILE_SIZE
+    const mosaico = new Float32Array(cols * TILE_SIZE).fill(500)
+    const rgba = new Uint8ClampedArray(TILE_SIZE * TILE_SIZE * 4)
+    // Píxel 0: alfa 0 pero con valores RGB que darían 100 m si se interpretaran
+    rgba[0] = 128
+    rgba[1] = 100
+    rgba[2] = 0
+    rgba[3] = 0 // transparente
+
+    // Píxel 1: opaco con 100 m
+    rgba[4] = 128
+    rgba[5] = 100
+    rgba[6] = 0
+    rgba[7] = 255
+
+    pasteTile(mosaico, cols, rgba, 0, 0)
+    expect(Number.isNaN(mosaico[0])).toBe(true)
+    expect(mosaico[1]).toBe(100)
+  })
+
+  it("preserva la elevación válida de 0 metros cuando el píxel es opaco", () => {
+    const cols = TILE_SIZE
+    const mosaico = new Float32Array(cols * TILE_SIZE).fill(999)
+    const rgba = new Uint8ClampedArray(TILE_SIZE * TILE_SIZE * 4)
+    // Píxel 0: elevación exacta de 0 m (128, 0, 0), opaco
+    rgba[0] = 128
+    rgba[1] = 0
+    rgba[2] = 0
+    rgba[3] = 255
+
+    pasteTile(mosaico, cols, rgba, 0, 0)
+    expect(mosaico[0]).toBe(0)
+  })
+})
+
+describe("maxAround", () => {
+  it("ignora NaN e infinitos si existen alturas finitas válidas", () => {
+    const cols = 3
+    const rows = 3
+    // Cuadrícula 3x3: el centro es (1, 1)
+    const heights = new Float32Array([
+      NaN, 1200, Infinity,
+      -Infinity, 1500, NaN,
+      800, Infinity, 2100,
+    ])
+    const max = maxAround(heights, cols, rows, 1, 1, 1)
+    expect(max).toBe(2100)
+  })
+
+  it("devuelve el máximo correcto con alturas finitas negativas y valores infinitos", () => {
+    const cols = 2
+    const rows = 2
+    const heights = new Float32Array([
+      -500, Infinity,
+      -200, -Infinity,
+    ])
+    const max = maxAround(heights, cols, rows, 0, 0, 1)
+    expect(max).toBe(-200)
+  })
+
+  it("devuelve null cuando no hay ninguna muestra finita en el radio consultado", () => {
+    const cols = 2
+    const rows = 2
+    const heights = new Float32Array([
+      NaN, Infinity,
+      -Infinity, NaN,
+    ])
+    expect(maxAround(heights, cols, rows, 0, 0, 1)).toBeNull()
   })
 })
 

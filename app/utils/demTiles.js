@@ -137,16 +137,18 @@ export const tileRangeFor = (bounds, zoom) => {
   const norte = clamp(latToMercatorY(bounds.north), 0, 1)
   const sur = clamp(latToMercatorY(bounds.south), 0, 1)
 
-  const minX = Math.floor(oeste * teselas)
-  const minY = Math.floor(norte * teselas)
+  const minX = clamp(Math.floor(oeste * teselas), 0, teselas - 1)
+  const minY = clamp(Math.floor(norte * teselas), 0, teselas - 1)
   // El menos épsilon es para el borde exacto: si el rectángulo termina justo en
   // la línea entre dos teselas, `ceil` pediría una columna entera de más que no
   // se ve.
-  const maxX = Math.min(teselas - 1, Math.ceil(este * teselas - 1e-9) - 1)
-  const maxY = Math.min(teselas - 1, Math.ceil(sur * teselas - 1e-9) - 1)
+  const rawMaxX = Math.ceil(este * teselas - 1e-9) - 1
+  const rawMaxY = Math.ceil(sur * teselas - 1e-9) - 1
+  const maxX = clamp(Math.max(minX, rawMaxX), 0, teselas - 1)
+  const maxY = clamp(Math.max(minY, rawMaxY), 0, teselas - 1)
 
-  const tilesX = Math.max(1, maxX - minX + 1)
-  const tilesY = Math.max(1, maxY - minY + 1)
+  const tilesX = maxX - minX + 1
+  const tilesY = maxY - minY + 1
 
   // El tope de teselas manda por encima del zoom mínimo, y el reparto es a
   // propósito: aquí se cuida la memoria, y que el resultado *signifique* algo lo
@@ -162,8 +164,8 @@ export const tileRangeFor = (bounds, zoom) => {
     zoom: nivel,
     minX,
     minY,
-    maxX: minX + tilesX - 1,
-    maxY: minY + tilesY - 1,
+    maxX,
+    maxY,
     tilesX,
     tilesY,
     cols: tilesX * TILE_SIZE,
@@ -249,7 +251,9 @@ export const maxAround = (heights, cols, rows, col, row, radiusCells) => {
     const fila = f * cols
     for (let c = desdeCol; c <= hastaCol; c++) {
       const altura = heights[fila + c]
-      if (altura > maximo) maximo = altura
+      if (Number.isFinite(altura) && altura > maximo) {
+        maximo = altura
+      }
     }
   }
 
@@ -285,7 +289,8 @@ export const pasteTile = (mosaic, mosaicCols, rgba, colOffset, rowOffset) => {
     const destino = (rowOffset + fila) * mosaicCols + colOffset
     for (let col = 0; col < TILE_SIZE; col++) {
       const i = origen + col * 4
-      mosaic[destino + col] = elevationFromPixel(rgba[i], rgba[i + 1], rgba[i + 2])
+      mosaic[destino + col] =
+        rgba[i + 3] === 0 ? NaN : elevationFromPixel(rgba[i], rgba[i + 1], rgba[i + 2])
     }
   }
 }
