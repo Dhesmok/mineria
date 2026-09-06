@@ -1634,25 +1634,25 @@ export default function BlockModel3D({
   return (
     <div className="relative w-full h-full flex flex-col bg-zinc-950 select-none overflow-hidden font-sans">
       {/* Cabecera Obsidian Glass */}
-      <div className="h-12 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800/80 px-4 flex items-center justify-between z-20 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-400">
+      <div className="h-12 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800/80 px-3 sm:px-4 flex items-center justify-between z-20 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-1.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-400 shrink-0">
             <Box size={16} />
           </div>
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold tracking-wide text-zinc-100 flex items-center gap-2">
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-semibold tracking-wide text-zinc-100 flex items-center gap-2 truncate">
               Bloque 3D del Terreno
-              <span className="text-[10px] font-medium text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+              <span className="text-[10px] font-medium text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30 shrink-0">
                 Relieve Real
               </span>
             </span>
-            <span className="text-[10px] text-zinc-400">
+            <span className="text-[10px] text-zinc-400 font-mono truncate">
               {widthKm} × {heightKm} km · Escala Métrica 1:1
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {onRedrawRectangle && (
             <button
               onClick={onRedrawRectangle}
@@ -1660,14 +1660,15 @@ export default function BlockModel3D({
               title="Seleccionar otra área en el mapa"
             >
               <Box size={13} />
-              <span>Cambiar Área</span>
+              <span className="hidden sm:inline">Cambiar Área</span>
+              <span className="sm:hidden">Área</span>
             </button>
           )}
 
           {onToggleMaximize && (
             <button
               onClick={onToggleMaximize}
-              className="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 rounded-md border border-zinc-800 transition-colors"
+              className="hidden md:flex p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 rounded-md border border-zinc-800 transition-colors"
               title={isMaximized ? "Restaurar tamaño normal" : "Maximizar pantalla completa"}
             >
               {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
@@ -1706,7 +1707,7 @@ export default function BlockModel3D({
       </div>
 
       {/* HUD de Controles Flotante Inferior */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-zinc-900/90 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl max-w-[95vw] overflow-x-auto no-scrollbar pb-[calc(0.5rem+env(safe-area-inset-bottom))] touch-pan-x">
+      <div className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom,12px))] md:bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-zinc-900/95 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl max-w-[96vw] overflow-x-auto no-scrollbar touch-pan-x">
         {/* Control de Exageración Vertical */}
         <div className="flex items-center gap-2 pr-3 border-r border-zinc-800">
           <Mountain size={14} className="text-zinc-400 shrink-0" />
@@ -1873,7 +1874,7 @@ export default function BlockModel3D({
       )}
 
       {/* Leyenda Hipsométrica Flotante */}
-      <div className="absolute bottom-4 left-4 z-10 bg-zinc-900/85 backdrop-blur-md px-3 py-2 rounded-xl border border-zinc-800/80 shadow-xl flex flex-col gap-1 pointer-events-none">
+      <div className="hidden sm:flex absolute bottom-4 left-4 z-10 bg-zinc-900/85 backdrop-blur-md px-3 py-2 rounded-xl border border-zinc-800/80 shadow-xl flex-col gap-1 pointer-events-none">
         <div className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-300">
           <Layers size={12} className="text-sky-400" />
           <span>Elevación Topográfica</span>

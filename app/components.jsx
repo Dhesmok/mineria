@@ -104,6 +104,7 @@ export default function Component() {
   const [crsPopover, setCrsPopover] = useState(null)
   const [showAttributeTable, setShowAttributeTable] = useState(false)
   const [mobilePanel, setMobilePanel] = useState(null)
+  const [isBlockModelActive, setIsBlockModelActive] = useState(false)
 
   const [blendMode, setBlendMode] = useState("multiply")
   const [prefsCargadas, setPrefsCargadas] = useState(false)
@@ -302,6 +303,33 @@ export default function Component() {
     mapRef.current = map
     setMapInitialized(true)
   }, [])
+
+  const centerOnActiveExpedient = useCallback(() => {
+    if (!mapRef.current || !coordinates || coordinates.length === 0) return
+    let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity
+    for (const coord of coordinates) {
+      if (!Array.isArray(coord) || coord.length < 2) continue
+      const [lng, lat] = coord
+      if (typeof lng === "number" && typeof lat === "number" && isFinite(lng) && isFinite(lat)) {
+        if (lng < minLng) minLng = lng
+        if (lng > maxLng) maxLng = lng
+        if (lat < minLat) minLat = lat
+        if (lat > maxLat) maxLat = lat
+      }
+    }
+    if (minLng !== Infinity && maxLng !== -Infinity && minLat !== Infinity && maxLat !== -Infinity) {
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 768
+      mapRef.current.fitBounds(
+        [[minLng, minLat], [maxLng, maxLat]],
+        {
+          padding: isMobile
+            ? { top: 90, bottom: 90, left: 30, right: 30 }
+            : { top: 100, bottom: 100, left: 100, right: 100 },
+          duration: 800,
+        }
+      )
+    }
+  }, [coordinates])
 
   const activeCount = useMemo(
     () => Object.values(layers).filter((l) => l.on).length,
@@ -620,6 +648,7 @@ export default function Component() {
           panelOpen={isDrawerOpen}
           blendMode={blendMode}
           onBlendModeChange={setBlendMode}
+          onBlockModelChange={setIsBlockModelActive}
         />
       </div>
 
@@ -753,10 +782,16 @@ export default function Component() {
         {/* Acciones de expediente activo si existe */}
         {showToggle && (
           <div className="mt-2.5 flex items-center gap-2.5 rounded-full border border-zinc-800/90 bg-[#09090b]/95 px-4 py-1.5 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
-            <span className="flex items-center gap-2 font-mono text-[12.5px] font-semibold text-emerald-400">
+            <button
+              type="button"
+              onClick={centerOnActiveExpedient}
+              title="Centrar mapa en este expediente"
+              aria-label={`Centrar mapa en expediente ${expedientCode}`}
+              className="flex items-center gap-2 font-mono text-[12.5px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+            >
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               {expedientCode || "Expediente activo"}
-            </span>
+            </button>
 
             <div className="h-3.5 w-px bg-zinc-800" />
 
@@ -800,11 +835,18 @@ export default function Component() {
       </div>
 
       {/* Cápsula de expediente activo en móvil */}
-      {showToggle && (
+      {showToggle && !isBlockModelActive && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-30 flex md:hidden items-center gap-1.5 max-w-[92vw] px-3 py-1.5 rounded-full border border-sky-500/40 bg-[#09090b]/90 backdrop-blur-xl shadow-lg">
-          <span className="font-mono text-xs font-bold text-sky-400 truncate max-w-[130px]">
-            {expedientCode}
-          </span>
+          <button
+            type="button"
+            onClick={centerOnActiveExpedient}
+            className="flex items-center gap-1 font-mono text-xs font-bold text-sky-400 hover:text-sky-300 active:scale-95 transition-all truncate max-w-[130px]"
+            title="Centrar mapa en este expediente"
+            aria-label={`Centrar mapa en expediente ${expedientCode}`}
+          >
+            <Crosshair className="h-3 w-3 shrink-0 text-sky-400" />
+            <span className="truncate">{expedientCode}</span>
+          </button>
           <div className="h-3 w-px bg-zinc-700 mx-0.5" />
           {coordinatesAvailable && (
             <button
@@ -843,11 +885,13 @@ export default function Component() {
       )}
 
       {/* Barra de navegación inferior móvil */}
-      <MobileBottomBar
-        activePanel={mobilePanel}
-        onSelectPanel={(panel) => setMobilePanel((curr) => (curr === panel ? null : panel))}
-        activeLayersCount={activeCount}
-      />
+      {!isBlockModelActive && (
+        <MobileBottomBar
+          activePanel={mobilePanel}
+          onSelectPanel={(panel) => setMobilePanel((curr) => (curr === panel ? null : panel))}
+          activeLayersCount={activeCount}
+        />
+      )}
 
       {/* Hoja deslizante inferior (Bottom Sheet) */}
       <MobileBottomSheet
