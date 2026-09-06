@@ -107,12 +107,13 @@ export const useDualMapSyncGL = (
     }
   }, [baseMapInstance, overlayContainerRef])
 
-  // 2. Sincronizacin de cmara (baseMap -> overlayMap)
+  // 2. Sincronización de cámara (baseMap -> overlayMap)
   useEffect(() => {
     if (!baseMapInstance) return
 
     let isSyncing = false
     const syncCamera = () => {
+      if (!hasActiveOverlayLayers) return
       if (isSyncing || !overlayMapRef.current || !baseMapRef.current) return
       isSyncing = true
       const base = baseMapRef.current
@@ -126,6 +127,7 @@ export const useDualMapSyncGL = (
     }
 
     const onResize = () => {
+      if (!hasActiveOverlayLayers) return
       overlayMapRef.current?.resize()
     }
 
@@ -138,7 +140,7 @@ export const useDualMapSyncGL = (
       baseMapInstance.off("move", syncCamera)
       baseMapInstance.off("resize", onResize)
     }
-  }, [baseMapInstance, baseMapRef])
+  }, [baseMapInstance, baseMapRef, hasActiveOverlayLayers])
 
   // 3. El relieve, que también hay que ponérselo al de arriba: si no, en 3D las
   // capas temáticas se quedarían pegadas al plano mientras el suelo se levanta.

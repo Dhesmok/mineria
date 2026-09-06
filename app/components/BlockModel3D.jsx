@@ -663,6 +663,8 @@ async function loadHighResSatelliteCanvas(
   return finalCanvas
 }
 
+const demTileCache = new Map()
+
 /**
  * Descarga y decodifica el mosaico DEM con elevación real continua libre de errores CORS.
  */
@@ -690,26 +692,24 @@ async function loadDemElevationGrid(bbox, segX, segZ) {
 
       const p = (async () => {
         try {
-          const res = await fetch(url, { mode: "cors" })
-          if (!res.ok) return
-          const blob = await res.blob()
-          if (typeof createImageBitmap === "function") {
-            const bitmap = await createImageBitmap(blob)
-            mosaicCtx.drawImage(bitmap, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-            bitmap.close?.()
-          } else {
-            const img = new Image()
-            img.crossOrigin = "anonymous"
-            await new Promise((resolve) => {
-              img.onload = () => {
-                try {
-                  mosaicCtx.drawImage(img, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-                } catch {}
-                resolve(true)
+          let bitmap = demTileCache.get(url)
+          if (!bitmap) {
+            const res = await fetch(url, { mode: "cors" })
+            if (!res.ok) return
+            const blob = await res.blob()
+            bitmap = await createImageFromBlob(blob)
+            if (bitmap) {
+              demTileCache.set(url, bitmap)
+              if (demTileCache.size > 250) {
+                const firstKey = demTileCache.keys().next().value
+                const old = demTileCache.get(firstKey)
+                if (old?.close) old.close()
+                demTileCache.delete(firstKey)
               }
-              img.onerror = () => resolve(false)
-              img.src = URL.createObjectURL(blob)
-            })
+            }
+          }
+          if (bitmap) {
+            mosaicCtx.drawImage(bitmap, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
           }
         } catch {
           // fallo de tesela individual ignorado
@@ -918,6 +918,10 @@ export default function BlockModel3D({
   const hemiLightRef = useRef(null)
   const animFrameRef = useRef(null)
   const pinsGroupRef = useRef(null)
+  const needsRenderRef = useRef(true)
+  const requestRender = useCallback(() => {
+    needsRenderRef.current = true
+  }, [])
 
   const elevationGridRef = useRef([])
   const elevationMinRef = useRef(0)
@@ -1185,13 +1189,22 @@ export default function BlockModel3D({
     blockGroup.add(pinsGroup)
     pinsGroupRef.current = pinsGroup
 
+    const handleControlsChange = () => {
+      needsRenderRef.current = true
+    }
+    controls.addEventListener?.("change", handleControlsChange)
+
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate)
       controls.update()
       if (autoRotateRef.current && blockGroupRef.current) {
         blockGroupRef.current.rotation.y += 0.0035
+        needsRenderRef.current = true
       }
-      renderer.render(scene, camera)
+      if (needsRenderRef.current) {
+        renderer.render(scene, camera)
+        needsRenderRef.current = false
+      }
     }
     animate()
 
@@ -1203,6 +1216,7 @@ export default function BlockModel3D({
       cameraRef.current.aspect = w / h
       cameraRef.current.updateProjectionMatrix()
       rendererRef.current.setSize(w, h, true)
+      needsRenderRef.current = true
     }
 
     const ro = typeof ResizeObserver !== "undefined"
@@ -1215,6 +1229,7 @@ export default function BlockModel3D({
 
     return () => {
       cancelAnimationFrame(animFrameRef.current)
+      controls.removeEventListener?.("change", handleControlsChange)
       window.removeEventListener("resize", handleResize)
       if (ro) ro.disconnect()
       if (renderer.domElement && container.contains(renderer.domElement)) {
@@ -1239,7 +1254,8 @@ export default function BlockModel3D({
     if (floorMeshRef.current) {
       floorMeshRef.current.material.opacity = isLight ? 0.22 : 0.45
     }
-  }, [studioTheme])
+    requestRender()
+  }, [studioTheme, requestRender])
 
   // Ajuste reactivo inmediato al maximizar o restaurar tamaño
   useEffect(() => {
@@ -1251,9 +1267,10 @@ export default function BlockModel3D({
       cameraRef.current.aspect = w / h
       cameraRef.current.updateProjectionMatrix()
       rendererRef.current.setSize(w, h, true)
+      requestRender()
     }, 40)
     return () => clearTimeout(timer)
-  }, [isMaximized])
+  }, [isMaximized, requestRender])
 
   const layerStateKey = useMemo(() => {
     if (!layerState) return ""
@@ -1274,8 +1291,12 @@ export default function BlockModel3D({
       if (grid && grid.length > 0 && topMeshRef.current?.material) {
         const reliefTex = createReliefBasemapTexture(grid, segX, segZ, rectangle.bbox, activeVectors)
         if (reliefTex && !canceled) {
+          if (topMeshRef.current.material.map) {
+            topMeshRef.current.material.map.dispose()
+          }
           topMeshRef.current.material.map = reliefTex
           topMeshRef.current.material.needsUpdate = true
+          requestRender()
         }
       }
       return
@@ -1300,11 +1321,15 @@ export default function BlockModel3D({
       tex.needsUpdate = true
 
       if (topMeshRef.current?.material) {
+        if (topMeshRef.current.material.map) {
+          topMeshRef.current.material.map.dispose()
+        }
         topMeshRef.current.material.map = tex
         topMeshRef.current.material.roughness = 0.8
         topMeshRef.current.material.metalness = 0.05
         topMeshRef.current.material.color.setHex(0xffffff)
         topMeshRef.current.material.needsUpdate = true
+        requestRender()
       }
     })
 
@@ -1325,6 +1350,7 @@ export default function BlockModel3D({
     segX,
     segZ,
     rectangle,
+    requestRender,
   ])
 
   // 3. Carga Asíncrona del DEM Real de Máxima Resolución
@@ -1387,6 +1413,7 @@ export default function BlockModel3D({
 
           wallPos.needsUpdate = true
           wallsMeshRef.current.geometry.computeVertexNormals()
+          requestRender()
         }
       })
       .catch((err) => {
@@ -1397,7 +1424,7 @@ export default function BlockModel3D({
     return () => {
       canceled = true
     }
-  }, [isOpen, bboxKey, computeHeight, basemap, segX, segZ, baseDepth, map, layerState, loadedFeatures, rectangle])
+  }, [isOpen, bboxKey, computeHeight, basemap, segX, segZ, baseDepth, map, layerState, loadedFeatures, rectangle, requestRender])
 
   // 4. Actualización Instantánea de Exageración Vertical (0.5 ms sin tocar la escena)
   useEffect(() => {
@@ -1441,6 +1468,7 @@ export default function BlockModel3D({
 
     wallPos.needsUpdate = true
     wallsMeshRef.current.geometry.computeVertexNormals()
+    requestRender()
 
     // Pines
     if (pinsGroupRef.current) {
@@ -1452,14 +1480,15 @@ export default function BlockModel3D({
         }
       })
     }
-  }, [exaggeration, computeHeight, segX, segZ, baseDepth, pins])
+  }, [exaggeration, computeHeight, segX, segZ, baseDepth, pins, requestRender])
 
   // Wireframe
   useEffect(() => {
     if (topMeshRef.current) {
       topMeshRef.current.material.wireframe = wireframe
+      requestRender()
     }
-  }, [wireframe])
+  }, [wireframe, requestRender])
 
   // Ángulo de Iluminación Solar continuo con sombras dinámicas realistas
   useEffect(() => {
@@ -1481,21 +1510,22 @@ export default function BlockModel3D({
       hemiLightRef.current.groundColor.setHex(0x27272a)
       hemiLightRef.current.intensity = 0.55
     } else if (sinAngle > 0.3) {
-      // Mañana dorada
-      sunLightRef.current.color.setHex(0xffecd2)
-      sunLightRef.current.intensity = 1.45
-      hemiLightRef.current.color.setHex(0xdbeafe)
-      hemiLightRef.current.groundColor.setHex(0x3f3f46)
-      hemiLightRef.current.intensity = 0.65
-    } else {
-      // Luz solar cenital brillante
+      // Mediodía
       sunLightRef.current.color.setHex(0xffffff)
-      sunLightRef.current.intensity = 1.55
-      hemiLightRef.current.color.setHex(0xf0f9ff)
-      hemiLightRef.current.groundColor.setHex(0x52525b)
-      hemiLightRef.current.intensity = 0.85
+      sunLightRef.current.intensity = 2.1
+      hemiLightRef.current.color.setHex(0xf4f4f5)
+      hemiLightRef.current.groundColor.setHex(0x3f3f46)
+      hemiLightRef.current.intensity = 0.75
+    } else {
+      // Mañana / suave
+      sunLightRef.current.color.setHex(0xffedd5)
+      sunLightRef.current.intensity = 1.8
+      hemiLightRef.current.color.setHex(0xe4e4e7)
+      hemiLightRef.current.groundColor.setHex(0x27272a)
+      hemiLightRef.current.intensity = 0.65
     }
-  }, [sunAngle])
+    requestRender()
+  }, [sunAngle, requestRender])
 
   // Renderizado dinámico de pines
   useEffect(() => {
