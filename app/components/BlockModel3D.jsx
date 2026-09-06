@@ -20,6 +20,31 @@ import {
   Grid,
 } from "lucide-react"
 import { TILE_SIZE } from "../utils/demTiles"
+import { SGC_KEYS, sgcImageUrl } from "../utils/sgcLayers"
+import { ANH_KEYS, anhImageUrl } from "../utils/anhLayers"
+import { ANM_LAYERS, anmSourceId } from "../utils/anmLayers"
+
+function lngLatToMercator(lng, lat) {
+  const x = (lng * 20037508.34) / 180
+  const y =
+    ((Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) / (Math.PI / 180)) * 20037508.34) / 180
+  return [x, y]
+}
+
+async function createImageFromBlob(blob) {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await createImageBitmap(blob)
+    } catch {}
+  }
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = URL.createObjectURL(blob)
+  })
+}
 
 /**
  * Textura procedural de tierra homogénea cálida (Minecraft-style earth / estrato natural)
@@ -141,10 +166,12 @@ function drawVectorLayersOnCanvas(ctx, canvasW, canvasH, bbox, activeVectors) {
   for (const layer of activeVectors) {
     const strokeColor = layer.color || "#eab308"
     const opacity = typeof layer.opacity === "number" ? layer.opacity : 0.65
-    const fillColor = hexToRgba(strokeColor, Math.max(0.18, Math.min(0.85, opacity * 0.55)))
+    const fillColor = layer.fillColor
+      ? hexToRgba(layer.fillColor, Math.max(0.25, Math.min(0.85, opacity * 0.7)))
+      : hexToRgba(strokeColor, Math.max(0.18, Math.min(0.85, opacity * 0.55)))
     ctx.fillStyle = fillColor
     ctx.strokeStyle = strokeColor
-    ctx.lineWidth = 2.5
+    ctx.lineWidth = 3
     ctx.lineJoin = "round"
     ctx.lineCap = "round"
 
@@ -173,56 +200,73 @@ function getActiveVectorLayers(map, layerState, loadedFeatures = []) {
   const activeVectors = []
   const recordedKeys = new Set()
 
-  if (layerState) {
-    for (const [key, conf] of Object.entries(layerState)) {
-      if (!conf?.on) continue
-      recordedKeys.add(key)
-      let fc = null
-      if (map && typeof map.getSource === "function") {
-        const possibleSourceIds = [`anm-${key}`, `sgc-${key}`, `anh-${key}`, key]
-        for (const sid of possibleSourceIds) {
-          try {
-            const src = map.getSource(sid)
-            if (src && src._data && src._data.features && src._data.features.length > 0) {
-              fc = src._data
-              break
-            }
-          } catch {}
-        }
-      }
-
-      if (fc && fc.features && fc.features.length > 0) {
-        activeVectors.push({
-          key,
-          color: conf.color || "#eab308",
-          opacity: conf.opacity !== undefined ? conf.opacity : 0.65,
-          features: fc.features,
-        })
-      }
-    }
-  }
-
-  // Si hay loadedFeatures con geometría
+  // 1. Si hay loadedFeatures con geometría (Títulos mineros, solicitudes vigentes, etc.)
   if (Array.isArray(loadedFeatures) && loadedFeatures.length > 0) {
     const byKey = {}
     for (const f of loadedFeatures) {
-      if (f?.geometry && f.layerKey && !recordedKeys.has(f.layerKey)) {
+      if (f?.geometry && f.layerKey) {
+        // Solo incluir si la capa está activa en layerState (o si no se pasó layerState)
+        if (layerState && !layerState[f.layerKey]?.on) continue
         if (!byKey[f.layerKey]) byKey[f.layerKey] = []
         byKey[f.layerKey].push(f)
       }
     }
     for (const [k, feats] of Object.entries(byKey)) {
-      const conf = layerState?.[k]
-      activeVectors.push({
-        key: k,
-        color: conf?.color || "#38bdf8",
-        opacity: conf?.opacity !== undefined ? conf.opacity : 0.65,
-        features: feats,
-      })
+      if (feats.length > 0) {
+        const conf = layerState?.[k]
+        const anmDef = ANM_LAYERS.find((l) => l.key === k)
+        activeVectors.push({
+          key: k,
+          color: conf?.color || anmDef?.lineColor || "#38bdf8",
+          fillColor: anmDef?.fillColor || conf?.color || "#38bdf8",
+          opacity: conf?.opacity !== undefined ? conf.opacity : 0.65,
+          features: feats,
+        })
+        recordedKeys.add(k)
+      }
     }
   }
 
-  // Resaltado de búsqueda si existe
+  // 2. Revisar fuentes de MapLibre para cualquier capa vectorial activa restante
+  if (layerState) {
+    for (const [key, conf] of Object.entries(layerState)) {
+      if (!conf?.on || recordedKeys.has(key)) continue
+      let feats = null
+      if (map && typeof map.getSource === "function") {
+        const possibleSourceIds = [anmSourceId(key), `anm-${key}`, `sgc-${key}`, `anh-${key}`, key]
+        for (const sid of possibleSourceIds) {
+          try {
+            const src = map.getSource(sid)
+            if (src && src._data && src._data.features && src._data.features.length > 0) {
+              feats = src._data.features
+              break
+            }
+            if (typeof map.querySourceFeatures === "function") {
+              const queried = map.querySourceFeatures(sid)
+              if (queried && queried.length > 0) {
+                feats = queried
+                break
+              }
+            }
+          } catch {}
+        }
+      }
+
+      if (feats && feats.length > 0) {
+        const anmDef = ANM_LAYERS.find((l) => l.key === key)
+        activeVectors.push({
+          key,
+          color: conf.color || anmDef?.lineColor || "#eab308",
+          fillColor: anmDef?.fillColor || conf.color || "#eab308",
+          opacity: conf.opacity !== undefined ? conf.opacity : 0.65,
+          features: feats,
+        })
+        recordedKeys.add(key)
+      }
+    }
+  }
+
+  // 3. Resaltado de búsqueda o expediente si existe
   if (map && typeof map.getSource === "function") {
     try {
       const searchSrc = map.getSource("search-highlight") || map.getSource("expedient-highlight")
@@ -230,6 +274,7 @@ function getActiveVectorLayers(map, layerState, loadedFeatures = []) {
         activeVectors.push({
           key: "search-highlight",
           color: "#f43f5e",
+          fillColor: "#f43f5e",
           opacity: 0.85,
           features: searchSrc._data.features,
         })
@@ -385,9 +430,15 @@ function getOptimalDemTileRange(minLng, minLat, maxLng, maxLat, maxTiles = 144) 
  * Descarga y compone directamente las teselas de mapa base a resolución nativa ultra-nítida
  * y superpone vectorialmente todas las capas mineras y geológicas activas.
  */
-async function loadHighResSatelliteCanvas(bbox, basemap = "satellite", activeVectors = []) {
+async function loadHighResSatelliteCanvas(
+  bbox,
+  basemap = "satellite",
+  activeVectors = [],
+  options = {},
+) {
   if (typeof document === "undefined" || !bbox) return null
   const [minLng, minLat, maxLng, maxLat] = bbox
+  const { showLabels = true, layerState = null, plancha = null, planchaOpacity = 0.75 } = options
 
   const opt = getOptimalSatelliteTileRange(minLng, minLat, maxLng, maxLat, 400)
   const { zoom, minX, maxX, minY, maxY, tilesX, tilesY } = opt
@@ -407,11 +458,12 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite", activeVec
     if (basemap === "positron" || basemap === "grayBase") {
       return `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`
     }
-    if (basemap === "googlePlain") {
+    // Si se desactivaron los labels o se seleccionó googlePlain, sin etiquetas
+    if (basemap === "googlePlain" || !showLabels) {
       const s = Math.abs((x + y) % 4)
       return `https://mt${s}.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${z}`
     }
-    // googleHybrid / satellite por defecto
+    // googleHybrid / satellite con etiquetas
     const s = Math.abs((x + y) % 4)
     return `https://mt${s}.google.com/vt/lyrs=s,h&x=${x}&y=${y}&z=${z}`
   }
@@ -438,23 +490,26 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite", activeVec
           const res = await fetch(url, { mode: "cors" })
           if (!res.ok) return
           const blob = await res.blob()
-          if (typeof createImageBitmap === "function") {
-            const bitmap = await createImageBitmap(blob)
-            fullCtx.drawImage(bitmap, tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX)
-            bitmap.close?.()
-          } else {
-            const img = new Image()
-            img.crossOrigin = "anonymous"
-            await new Promise((resolve) => {
-              img.onload = () => {
-                try {
-                  fullCtx.drawImage(img, tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX)
-                } catch {}
-                resolve(true)
+          const img = await createImageFromBlob(blob)
+          if (img) {
+            fullCtx.drawImage(img, tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX)
+            if (typeof img.close === "function") img.close()
+          }
+
+          // Si es ESRI satelital con etiquetas activas, sobreponer referencia cartográfica
+          if ((basemap === "esri" || basemap === "esriImagery") && showLabels) {
+            try {
+              const refUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${zoom}/${tileY}/${tileX}`
+              const refRes = await fetch(refUrl, { mode: "cors" })
+              if (refRes.ok) {
+                const refBlob = await refRes.blob()
+                const refImg = await createImageFromBlob(refBlob)
+                if (refImg) {
+                  fullCtx.drawImage(refImg, tx * TILE_PX, ty * TILE_PX, TILE_PX, TILE_PX)
+                  if (typeof refImg.close === "function") refImg.close()
+                }
               }
-              img.onerror = () => resolve(false)
-              img.src = URL.createObjectURL(blob)
-            })
+            } catch {}
           }
         } catch {
           // Fallback ignorado
@@ -509,13 +564,106 @@ async function loadHighResSatelliteCanvas(bbox, basemap = "satellite", activeVec
   finalCtx.imageSmoothingQuality = "high"
   finalCtx.drawImage(fullCanvas, cropX, cropY, cropW, cropH, 0, 0, outW, outH)
 
-  // Dibuja las capas vectoriales activas recortadas al perímetro del bloque 3D
+  // 1. Sobreponer Capas Ráster SGC Geología activas recortadas al perímetro
+  if (layerState) {
+    const [oeste, sur] = lngLatToMercator(minLng, minLat)
+    const [este, norte] = lngLatToMercator(maxLng, maxLat)
+    const mercBbox = [oeste, sur, este, norte]
+
+    for (const sgcKey of SGC_KEYS) {
+      const conf = layerState[sgcKey]
+      if (conf?.on) {
+        try {
+          const sgcUrl = sgcImageUrl({
+            key: sgcKey,
+            bbox: mercBbox,
+            width: Math.min(outW, 2048),
+            height: Math.min(outH, 2048),
+          })
+          const sgcRes = await fetch(sgcUrl)
+          if (sgcRes.ok) {
+            const blob = await sgcRes.blob()
+            const img = await createImageFromBlob(blob)
+            if (img) {
+              finalCtx.save()
+              finalCtx.globalAlpha = typeof conf.opacity === "number" ? conf.opacity : 0.65
+              finalCtx.drawImage(img, 0, 0, outW, outH)
+              finalCtx.restore()
+              if (typeof img.close === "function") img.close()
+            }
+          }
+        } catch {
+          // Ignorar fallo de carga de capa SGC
+        }
+      }
+    }
+
+    // 2. Sobreponer Capas Ráster ANH Hidrocarburos activas
+    for (const anhKey of ANH_KEYS) {
+      const conf = layerState[anhKey]
+      if (conf?.on) {
+        try {
+          const anhUrl = anhImageUrl({
+            key: anhKey,
+            bbox: [minLng, minLat, maxLng, maxLat],
+            width: Math.min(outW, 2048),
+            height: Math.min(outH, 2048),
+          })
+          const anhRes = await fetch(anhUrl)
+          if (anhRes.ok) {
+            const blob = await anhRes.blob()
+            const img = await createImageFromBlob(blob)
+            if (img) {
+              finalCtx.save()
+              finalCtx.globalAlpha = typeof conf.opacity === "number" ? conf.opacity : 0.65
+              finalCtx.drawImage(img, 0, 0, outW, outH)
+              finalCtx.restore()
+              if (typeof img.close === "function") img.close()
+            }
+          }
+        } catch {
+          // Ignorar fallo de carga de capa ANH
+        }
+      }
+    }
+  }
+
+  // 3. Sobreponer Plancha Geológica PDF georreferenciada si está cargada
+  if (plancha?.canvas && plancha?.corners) {
+    try {
+      const [nw, ne, se, sw] = plancha.corners
+      const pMinLng = Math.min(nw[0], sw[0])
+      const pMaxLng = Math.max(ne[0], se[0])
+      const pMinLat = Math.min(sw[1], se[1])
+      const pMaxLat = Math.max(nw[1], ne[1])
+
+      const project = (lng, lat) => {
+        const px = ((lng - minLng) / (maxLng - minLng)) * outW
+        const py = ((lat2normY(lat) - bNorthY) / (bSouthY - bNorthY)) * outH
+        return [px, py]
+      }
+
+      const [px0, py0] = project(pMinLng, pMaxLat)
+      const [px1, py1] = project(pMaxLng, pMinLat)
+
+      finalCtx.save()
+      finalCtx.globalAlpha = typeof planchaOpacity === "number" ? planchaOpacity : 0.75
+      finalCtx.drawImage(plancha.canvas, px0, py0, px1 - px0, py1 - py0)
+      finalCtx.restore()
+    } catch {
+      // Ignorar si el dibujo de la plancha falla
+    }
+  }
+
+  // 4. Dibuja las capas vectoriales activas recortadas al perímetro del bloque 3D
   if (activeVectors && activeVectors.length > 0) {
     drawVectorLayersOnCanvas(finalCtx, outW, outH, bbox, activeVectors)
   }
 
   return finalCanvas
 }
+
+const demTileCache = new Map()
 
 /**
  * Descarga y decodifica el mosaico DEM con elevación real continua libre de errores CORS.
@@ -544,26 +692,24 @@ async function loadDemElevationGrid(bbox, segX, segZ) {
 
       const p = (async () => {
         try {
-          const res = await fetch(url, { mode: "cors" })
-          if (!res.ok) return
-          const blob = await res.blob()
-          if (typeof createImageBitmap === "function") {
-            const bitmap = await createImageBitmap(blob)
-            mosaicCtx.drawImage(bitmap, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-            bitmap.close?.()
-          } else {
-            const img = new Image()
-            img.crossOrigin = "anonymous"
-            await new Promise((resolve) => {
-              img.onload = () => {
-                try {
-                  mosaicCtx.drawImage(img, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-                } catch {}
-                resolve(true)
+          let bitmap = demTileCache.get(url)
+          if (!bitmap) {
+            const res = await fetch(url, { mode: "cors" })
+            if (!res.ok) return
+            const blob = await res.blob()
+            bitmap = await createImageFromBlob(blob)
+            if (bitmap) {
+              demTileCache.set(url, bitmap)
+              if (demTileCache.size > 250) {
+                const firstKey = demTileCache.keys().next().value
+                const old = demTileCache.get(firstKey)
+                if (old?.close) old.close()
+                demTileCache.delete(firstKey)
               }
-              img.onerror = () => resolve(false)
-              img.src = URL.createObjectURL(blob)
-            })
+            }
+          }
+          if (bitmap) {
+            mosaicCtx.drawImage(bitmap, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE)
           }
         } catch {
           // fallo de tesela individual ignorado
@@ -750,8 +896,11 @@ export default function BlockModel3D({
   elevationAt,
   map,
   basemap = "satellite",
+  showLabels = true,
   layerState,
   loadedFeatures,
+  plancha = null,
+  planchaOpacity = 0.75,
   onRedrawRectangle,
   isMaximized,
   onToggleMaximize,
@@ -769,6 +918,10 @@ export default function BlockModel3D({
   const hemiLightRef = useRef(null)
   const animFrameRef = useRef(null)
   const pinsGroupRef = useRef(null)
+  const needsRenderRef = useRef(true)
+  const requestRender = useCallback(() => {
+    needsRenderRef.current = true
+  }, [])
 
   const elevationGridRef = useRef([])
   const elevationMinRef = useRef(0)
@@ -1036,13 +1189,22 @@ export default function BlockModel3D({
     blockGroup.add(pinsGroup)
     pinsGroupRef.current = pinsGroup
 
+    const handleControlsChange = () => {
+      needsRenderRef.current = true
+    }
+    controls.addEventListener?.("change", handleControlsChange)
+
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate)
       controls.update()
       if (autoRotateRef.current && blockGroupRef.current) {
         blockGroupRef.current.rotation.y += 0.0035
+        needsRenderRef.current = true
       }
-      renderer.render(scene, camera)
+      if (needsRenderRef.current) {
+        renderer.render(scene, camera)
+        needsRenderRef.current = false
+      }
     }
     animate()
 
@@ -1054,6 +1216,7 @@ export default function BlockModel3D({
       cameraRef.current.aspect = w / h
       cameraRef.current.updateProjectionMatrix()
       rendererRef.current.setSize(w, h, true)
+      needsRenderRef.current = true
     }
 
     const ro = typeof ResizeObserver !== "undefined"
@@ -1066,6 +1229,7 @@ export default function BlockModel3D({
 
     return () => {
       cancelAnimationFrame(animFrameRef.current)
+      controls.removeEventListener?.("change", handleControlsChange)
       window.removeEventListener("resize", handleResize)
       if (ro) ro.disconnect()
       if (renderer.domElement && container.contains(renderer.domElement)) {
@@ -1090,7 +1254,8 @@ export default function BlockModel3D({
     if (floorMeshRef.current) {
       floorMeshRef.current.material.opacity = isLight ? 0.22 : 0.45
     }
-  }, [studioTheme])
+    requestRender()
+  }, [studioTheme, requestRender])
 
   // Ajuste reactivo inmediato al maximizar o restaurar tamaño
   useEffect(() => {
@@ -1102,9 +1267,10 @@ export default function BlockModel3D({
       cameraRef.current.aspect = w / h
       cameraRef.current.updateProjectionMatrix()
       rendererRef.current.setSize(w, h, true)
+      requestRender()
     }, 40)
     return () => clearTimeout(timer)
-  }, [isMaximized])
+  }, [isMaximized, requestRender])
 
   const layerStateKey = useMemo(() => {
     if (!layerState) return ""
@@ -1125,14 +1291,23 @@ export default function BlockModel3D({
       if (grid && grid.length > 0 && topMeshRef.current?.material) {
         const reliefTex = createReliefBasemapTexture(grid, segX, segZ, rectangle.bbox, activeVectors)
         if (reliefTex && !canceled) {
+          if (topMeshRef.current.material.map) {
+            topMeshRef.current.material.map.dispose()
+          }
           topMeshRef.current.material.map = reliefTex
           topMeshRef.current.material.needsUpdate = true
+          requestRender()
         }
       }
       return
     }
 
-    loadHighResSatelliteCanvas(rectangle.bbox, basemap, activeVectors).then((canvas) => {
+    loadHighResSatelliteCanvas(rectangle.bbox, basemap, activeVectors, {
+      showLabels,
+      layerState,
+      plancha,
+      planchaOpacity,
+    }).then((canvas) => {
       if (canceled || !canvas || !topMeshRef.current?.material) return
 
       const tex = new THREE.CanvasTexture(canvas)
@@ -1146,18 +1321,37 @@ export default function BlockModel3D({
       tex.needsUpdate = true
 
       if (topMeshRef.current?.material) {
+        if (topMeshRef.current.material.map) {
+          topMeshRef.current.material.map.dispose()
+        }
         topMeshRef.current.material.map = tex
         topMeshRef.current.material.roughness = 0.8
         topMeshRef.current.material.metalness = 0.05
         topMeshRef.current.material.color.setHex(0xffffff)
         topMeshRef.current.material.needsUpdate = true
+        requestRender()
       }
     })
 
     return () => {
       canceled = true
     }
-  }, [isOpen, bboxKey, basemap, layerState, layerStateKey, map, loadedFeatures, segX, segZ, rectangle])
+  }, [
+    isOpen,
+    bboxKey,
+    basemap,
+    showLabels,
+    layerState,
+    layerStateKey,
+    plancha,
+    planchaOpacity,
+    map,
+    loadedFeatures,
+    segX,
+    segZ,
+    rectangle,
+    requestRender,
+  ])
 
   // 3. Carga Asíncrona del DEM Real de Máxima Resolución
   useEffect(() => {
@@ -1219,6 +1413,7 @@ export default function BlockModel3D({
 
           wallPos.needsUpdate = true
           wallsMeshRef.current.geometry.computeVertexNormals()
+          requestRender()
         }
       })
       .catch((err) => {
@@ -1229,7 +1424,7 @@ export default function BlockModel3D({
     return () => {
       canceled = true
     }
-  }, [isOpen, bboxKey, computeHeight, basemap, segX, segZ, baseDepth, map, layerState, loadedFeatures, rectangle])
+  }, [isOpen, bboxKey, computeHeight, basemap, segX, segZ, baseDepth, map, layerState, loadedFeatures, rectangle, requestRender])
 
   // 4. Actualización Instantánea de Exageración Vertical (0.5 ms sin tocar la escena)
   useEffect(() => {
@@ -1273,6 +1468,7 @@ export default function BlockModel3D({
 
     wallPos.needsUpdate = true
     wallsMeshRef.current.geometry.computeVertexNormals()
+    requestRender()
 
     // Pines
     if (pinsGroupRef.current) {
@@ -1284,14 +1480,15 @@ export default function BlockModel3D({
         }
       })
     }
-  }, [exaggeration, computeHeight, segX, segZ, baseDepth, pins])
+  }, [exaggeration, computeHeight, segX, segZ, baseDepth, pins, requestRender])
 
   // Wireframe
   useEffect(() => {
     if (topMeshRef.current) {
       topMeshRef.current.material.wireframe = wireframe
+      requestRender()
     }
-  }, [wireframe])
+  }, [wireframe, requestRender])
 
   // Ángulo de Iluminación Solar continuo con sombras dinámicas realistas
   useEffect(() => {
@@ -1313,21 +1510,22 @@ export default function BlockModel3D({
       hemiLightRef.current.groundColor.setHex(0x27272a)
       hemiLightRef.current.intensity = 0.55
     } else if (sinAngle > 0.3) {
-      // Mañana dorada
-      sunLightRef.current.color.setHex(0xffecd2)
-      sunLightRef.current.intensity = 1.45
-      hemiLightRef.current.color.setHex(0xdbeafe)
-      hemiLightRef.current.groundColor.setHex(0x3f3f46)
-      hemiLightRef.current.intensity = 0.65
-    } else {
-      // Luz solar cenital brillante
+      // Mediodía
       sunLightRef.current.color.setHex(0xffffff)
-      sunLightRef.current.intensity = 1.55
-      hemiLightRef.current.color.setHex(0xf0f9ff)
-      hemiLightRef.current.groundColor.setHex(0x52525b)
-      hemiLightRef.current.intensity = 0.85
+      sunLightRef.current.intensity = 2.1
+      hemiLightRef.current.color.setHex(0xf4f4f5)
+      hemiLightRef.current.groundColor.setHex(0x3f3f46)
+      hemiLightRef.current.intensity = 0.75
+    } else {
+      // Mañana / suave
+      sunLightRef.current.color.setHex(0xffedd5)
+      sunLightRef.current.intensity = 1.8
+      hemiLightRef.current.color.setHex(0xe4e4e7)
+      hemiLightRef.current.groundColor.setHex(0x27272a)
+      hemiLightRef.current.intensity = 0.65
     }
-  }, [sunAngle])
+    requestRender()
+  }, [sunAngle, requestRender])
 
   // Renderizado dinámico de pines
   useEffect(() => {

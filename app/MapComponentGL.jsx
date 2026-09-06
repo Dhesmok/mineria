@@ -1405,8 +1405,11 @@ export default function MapComponentGL({
             elevationAt={elevationAt}
             map={mapRef.current}
             basemap={basemap}
+            showLabels={showLabels}
             layerState={layerState}
             loadedFeatures={loadedFeatures}
+            plancha={plancha}
+            planchaOpacity={planchaOpacity}
             onRedrawRectangle={handleStartDrawBox}
             expedientCode={expedientCode}
             isMaximized={splitRatio <= 0.05}
