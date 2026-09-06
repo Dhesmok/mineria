@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Button } from "@/components/ui/button"
+import { Layers, Globe, Loader2 } from 'lucide-react'
 import proj4 from 'proj4'
 import shpwrite from '@mapbox/shp-write'
 import * as turf from '@turf/turf'
@@ -139,23 +139,52 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
   }, [expedientCode, requireMapData]);
 
   return (
-    <div className="flex flex-col justify-center gap-4">
-      <Button
-        variant="default"
-        className="w-full bg-green-500 text-white"
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <button
+        type="button"
         onClick={exportSHP}
         disabled={isExportingSHP || isExportingKML}
+        className="group relative flex flex-col items-start gap-2.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {isExportingSHP ? 'Exportando...' : 'Exportar SHP'}
-      </Button>
-      <Button
-        variant="default"
-        className="w-full bg-green-500 text-white"
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-700/60 bg-zinc-800 text-emerald-400 transition-transform group-hover:scale-105 shadow-sm">
+          {isExportingSHP ? (
+            <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+          ) : (
+            <Layers className="h-5 w-5" />
+          )}
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors">
+            {isExportingSHP ? 'Exportando...' : 'Exportar SHP'}
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-400 leading-tight">
+            Shapefile georreferenciado con sistema EPSG:{selectedCoordinateSystem}
+          </p>
+        </div>
+      </button>
+
+      <button
+        type="button"
         onClick={exportKML}
         disabled={isExportingSHP || isExportingKML}
+        className="group relative flex flex-col items-start gap-2.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {isExportingKML ? 'Exportando...' : 'Exportar KML'}
-      </Button>
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-700/60 bg-zinc-800 text-amber-400 transition-transform group-hover:scale-105 shadow-sm">
+          {isExportingKML ? (
+            <Loader2 className="h-5 w-5 animate-spin text-amber-400" />
+          ) : (
+            <Globe className="h-5 w-5" />
+          )}
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors">
+            {isExportingKML ? 'Exportando...' : 'Exportar KML'}
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-400 leading-tight">
+            Archivo Google Earth KML en coordenadas geográficas WGS84
+          </p>
+        </div>
+      </button>
     </div>
   )
 }

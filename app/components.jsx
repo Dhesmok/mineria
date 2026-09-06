@@ -5,7 +5,23 @@ import dynamic from "next/dynamic"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
-import { ChevronLeft, ChevronDown, Download, RefreshCw, Globe2 } from "lucide-react"
+import {
+  Layers,
+  Wrench,
+  Pin,
+  PinOff,
+  Search,
+  X,
+  Loader2,
+  Download,
+  Table as TableIcon,
+  Globe2,
+  ChevronDown,
+  Spline,
+  Square,
+  Trash2,
+  Linkedin,
+} from "lucide-react"
 import ExportComponent from "./ExportComponent"
 import { axisLabels, crsById, formatCoordinate, fromGeographic, SOURCE_CRS } from "./utils/crs"
 import { areaById, DEFAULT_ORDER, initialLayerState, layerByKey } from "./utils/themeAreas"
@@ -13,15 +29,14 @@ import { LayerPanel } from "./components/LayerPanel"
 import { AreaFilters } from "./components/AreaFilters"
 import { AttributeTable } from "./components/AttributeTable"
 import { CrsPicker } from "./components/CrsPicker"
-import { ExpedientSearch } from "./components/ExpedientSearch"
+import { ExpedientSearch, queryExpedientSuggestions } from "./components/ExpedientSearch"
 import { matchesFilters } from "./utils/layerFilters"
 import { readPreferences, writePreferences } from "./utils/preferences"
+import { debounce } from "@/lib/utils"
 import {
   PANEL_HEIGHT_DEFAULT,
   PANEL_WIDTH_DEFAULT,
   fitPanelToViewport,
-  heightFromPointer,
-  widthFromPointer,
 } from "./utils/panelSize"
 
 // `ssr: false` es obligatorio: MapLibre necesita el objeto `window` y una
@@ -29,15 +44,13 @@ import {
 // el servidor.
 const MapComponent = dynamic(() => import("./MapComponentGL"), {
   ssr: false,
-  loading: () => <p>Cargando mapa...</p>,
+  loading: () => <p className="text-slate-400 p-4 text-sm">Cargando mapa...</p>,
 })
 
-// Los sistemas de coordenadas viven en utils/crs.js, no aquí: la tabla, la
-// exportación y el campo de "ir a una coordenada" tienen que usar exactamente
-// las mismas definiciones o mostrarían números distintos para el mismo punto.
-
 export default function Component() {
-  const [showSidebar, setShowSidebar] = useState(true)
+  const [isPinned, setIsPinned] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  const [drawerTab, setDrawerTab] = useState("capas")
   const [showTable, setShowTable] = useState(false)
   const [coordinates, setCoordinates] = useState([])
   const [coordinateRings, setCoordinateRings] = useState([])
@@ -50,75 +63,33 @@ export default function Component() {
   const [coordinatesAvailable, setCoordinatesAvailable] = useState(false)
   const [geoJsonData, setGeoJsonData] = useState(null)
   const mapRef = useRef(null)
-  // Solo se guarda el «ya está listo»; el mapa en sí vive en mapRef.
   const [, setMapInitialized] = useState(false)
-  // Estado de las capas: encendida, opacidad y colores, todo por clave. Antes
-  // eran ocho estados sueltos —uno por interruptor y otro por deslizador—, que
-  // con trece capas y su color serían treinta y nueve.
   const [layers, setLayers] = useState(initialLayerState)
-  // El orden de pintado, de arriba abajo. Es lo que el usuario reordena
-  // arrastrando en la pestaña "Activas".
   const [layerOrder, setLayerOrder] = useState(DEFAULT_ORDER)
-  // Filtros sobre lo cargado, y los atributos con que el panel arma sus
-  // opciones. Viven aquí y no en el mapa porque el panel es quien los enseña.
-  // Un juego de filtros por área: con cuatro áreas y trece capas, un filtro
-  // común se llenaba de opciones de cosas que ni siquiera estaban encendidas.
   const [areaFilters, setAreaFilters] = useState({})
-  // El alcance sí es común: "en pantalla" o "toda la capa" describe cómo se
-  // consulta, no qué se busca.
   const [filterScope, setFilterScope] = useState("viewport")
-  // Lo que el mapa tiene cargado: atributos para armar el filtro, figuras con su
-  // recuadro para la tabla, y qué capas recortó el servicio.
   const [layerData, setLayerData] = useState({ features: [], truncated: [] })
-  // Lo que el servicio del SGC dice tener dentro de cada capa —los treinta y dos
-  // departamentos, por ejemplo— y cuáles están marcados. Se descubre en el mapa,
-  // porque hace falta el mapa para pedirlo, pero se dibuja aquí, bajo su capa:
-  // encender un departamento es parte de encender la capa, no una ventana aparte.
   const [sgcState, setSgcState] = useState({})
-  // Cuánto mide el panel. Se puede arrastrar el borde derecho y el de abajo,
-  // porque con un departamento desplegado la lista no cabe en los 350 px de
-  // fábrica y los nombres se cortan. Ver `utils/panelSize.js`.
   const [panelWidth, setPanelWidth] = useState(PANEL_WIDTH_DEFAULT)
   const [panelHeight, setPanelHeight] = useState(PANEL_HEIGHT_DEFAULT)
   const panelRef = useRef(null)
 
-  // Qué ventana flotante está abierta y a qué botón se ancla.
+  // Buscador modo isla (inferior)
+  const [islandSearchText, setIslandSearchText] = useState("")
+  const [islandSuggestions, setIslandSuggestions] = useState([])
+  const [islandLoading, setIslandLoading] = useState(false)
+  const [islandResultsOpen, setIslandResultsOpen] = useState(false)
+  const [islandSelectedIndex, setIslandSelectedIndex] = useState(-1)
+  const islandAbortRef = useRef(null)
+
+  // Ventanas flotantes
   const [filterPopover, setFilterPopover] = useState(null)
   const [searchPopover, setSearchPopover] = useState(null)
   const [crsPopover, setCrsPopover] = useState(null)
   const [showAttributeTable, setShowAttributeTable] = useState(false)
 
-  /**
-   * Las preferencias guardadas se aplican **después de montar**, no al crear el
-   * estado.
-   *
-   * Es contraintuitivo y tiene una razón concreta: Next genera esta página en el
-   * servidor, donde no existe el almacenamiento del navegador. Si el estado
-   * inicial se leyera de ahí, el servidor pintaría los valores de fábrica y el
-   * navegador los guardados, y React se encuentra dos árboles distintos: el
-   * error de hidratación tira la página entera y la vuelve a pintar. Se vio en
-   * el navegador; en el código no se nota.
-   */
   const [blendMode, setBlendMode] = useState("multiply")
   const [prefsCargadas, setPrefsCargadas] = useState(false)
-
-  /**
-   * En un teléfono la hoja arranca recogida.
-   *
-   * Abierta ocupa más de la mitad de la pantalla, y lo primero que alguien
-   * quiere ver al abrir un visor es el mapa. En escritorio no aplica: ahí el
-   * panel es una columna al lado y no tapa nada.
-   *
-   * Se decide después de montar y no en el estado inicial, por lo mismo que las
-   * preferencias: el servidor no sabe el ancho de la pantalla, y pintar algo
-   * distinto de lo que pinta el navegador tira la página entera.
-   */
-  useEffect(() => {
-    // `matchMedia` no existe en todos los entornos —jsdom, por ejemplo, donde
-    // corren las pruebas—, y sin la comprobación esto lanzaba y se llevaba por
-    // delante el montaje entero del panel.
-    if (window.matchMedia?.("(max-width: 767px)")?.matches) setShowSidebar(false)
-  }, [])
 
   useEffect(() => {
     const prefs = readPreferences()
@@ -126,9 +97,6 @@ export default function Component() {
     setLayers(prefs.layers)
     setLayerOrder(prefs.layerOrder)
     setBlendMode(prefs.blendMode || "multiply")
-    // El tamaño guardado, devuelto a lo que cabe en **esta** pantalla: un panel
-    // ajustado en un monitor grande se abría igual de ancho en el portátil y
-    // tapaba el mapa entero. Ver `fitPanelToViewport`.
     const cabe = fitPanelToViewport(
       { width: prefs.panelWidth, height: prefs.panelHeight },
       window.innerWidth,
@@ -138,15 +106,6 @@ export default function Component() {
     setPrefsCargadas(true)
   }, [])
 
-  /**
-   * Y lo mismo al cambiar el tamaño de la ventana.
-   *
-   * Sin esto, achicar la ventana —o cambiar de pantalla, o girar el teléfono—
-   * dejaba el panel con el ancho de antes: más ancho que la ventana, con el
-   * tirador fuera y sin forma de recuperarlo salvo borrando datos del navegador.
-   * Solo encoge cuando hace falta; al volver a agrandar la ventana el panel se
-   * queda como esté, que es donde el usuario lo dejó.
-   */
   useEffect(() => {
     const alRedimensionar = () => {
       setPanelWidth((actual) => fitPanelToViewport({ width: actual }, window.innerWidth).width)
@@ -155,13 +114,6 @@ export default function Component() {
     return () => window.removeEventListener("resize", alRedimensionar)
   }, [])
 
-  // Guardar es un efecto y no una llamada dentro de cada manejador: así no hay
-  // que acordarse de hacerlo en los cinco sitios donde se cambia una capa, y no
-  // se puede olvidar en el sexto.
-  //
-  // El guardia de `prefsCargadas` no sobra: sin él, el primer render escribiría
-  // los valores de fábrica encima de lo que el usuario tenía guardado, antes de
-  // que el efecto de arriba llegara a leerlo.
   useEffect(() => {
     if (prefsCargadas) writePreferences({ layers })
   }, [layers, prefsCargadas])
@@ -182,54 +134,11 @@ export default function Component() {
     if (prefsCargadas) writePreferences({ panelWidth, panelHeight })
   }, [panelWidth, panelHeight, prefsCargadas])
 
-  /**
-   * Arrastrar un borde del panel.
-   *
-   * Se escucha en la ventana y no en el propio tirador. La primera versión
-   * capturaba el puntero en el tirador, que es lo que recomienda la
-   * documentación, y no funcionaba: el arrastre no movía nada. En la ventana
-   * funciona siempre y además resuelve solo el caso de soltar el ratón lejos del
-   * borde —encima del mapa, o fuera de la página—, que es donde un arrastre se
-   * quedaba pegado. Es el mismo arreglo que necesitó la barra de opacidad, y por
-   * el mismo motivo.
-   *
-   * El ancho se mide desde el borde izquierdo del panel y no por lo que se ha
-   * movido el ratón: así, si el puntero se pasa de los topes y vuelve, el borde
-   * vuelve con él en vez de quedarse descolgado. Ver `utils/panelSize.js`.
-   */
-  const arrastrarBorde = useCallback((eje) => (evento) => {
-    evento.preventDefault()
-    const caja = panelRef.current?.getBoundingClientRect()
-    if (!caja) return
-
-    const mover = (e) => {
-      if (eje === "ancho") setPanelWidth(widthFromPointer(e.clientX, caja.left, window.innerWidth))
-      else setPanelHeight(heightFromPointer(e.clientY, caja.top, window.innerHeight))
-    }
-    const soltar = () => {
-      window.removeEventListener("pointermove", mover)
-      window.removeEventListener("pointerup", soltar)
-      window.removeEventListener("pointercancel", soltar)
-      document.body.style.userSelect = ""
-    }
-    // Sin esto, arrastrar selecciona el texto del panel de paso y queda todo
-    // azul hasta el siguiente clic.
-    document.body.style.userSelect = "none"
-    window.addEventListener("pointermove", mover)
-    window.addEventListener("pointerup", soltar)
-    window.addEventListener("pointercancel", soltar)
-  }, [])
-
   const filtroDe = useCallback(
     (areaId) => areaFilters[areaId] ?? { selections: {}, areaRange: null },
     [areaFilters],
   )
 
-  // Lo que viaja al mapa: el alcance, que es común, y el filtro de cada área.
-  //
-  // Antes viajaba además una copia del de Minería, aplanada, y era esa copia la
-  // que el mapa usaba para todas las capas. Funcionaba solo porque las cuatro
-  // capas conectadas son de Minería.
   const filters = useMemo(
     () => ({ scope: filterScope, byArea: areaFilters }),
     [areaFilters, filterScope],
@@ -250,31 +159,15 @@ export default function Component() {
     }))
   }, [])
 
-  /**
-   * Los registros que pasan el filtro, que es lo que enseña la tabla.
-   *
-   * Se calcula aquí y no se le pregunta al mapa qué está pintando: en modo
-   * "toda la capa" hay resultados que ni siquiera están en pantalla, y llegar a
-   * ellos por la tabla es justamente la gracia.
-   */
   const registrosVisibles = useMemo(
     () =>
       layerData.features.filter((f) => {
-        // Cada figura se juzga con el filtro de su propia área, no con el de
-        // Minería para todas.
         const { selections, areaRange } = filtroDe(layerByKey(f.layerKey)?.areaId)
         return matchesFilters(f.properties, selections, areaRange)
       }),
     [layerData.features, filtroDe],
   )
 
-  /**
-   * Los atributos de lo cargado que pertenece a un área.
-   *
-   * Es con lo que la ventana de filtros arma sus opciones. Estaba escrito como
-   * «si el área es Minería, todo lo cargado; si no, nada»: correcto hoy, y
-   * equivocado en cuanto se conecte la primera capa de otra área.
-   */
   const propiedadesDelArea = useCallback(
     (areaId) =>
       layerData.features
@@ -283,17 +176,10 @@ export default function Component() {
     [layerData.features],
   )
 
-  /** Llevar el mapa hasta un registro elegido en la tabla. */
   const enfocarRegistro = useCallback((registro) => {
     setShowAttributeTable(false)
     const map = mapRef.current
     if (!map || !registro?.bbox) return
-
-    // `bboxOfGeometry` devuelve un objeto con nombres, no la tupla
-    // [oeste, sur, este, norte] de GeoJSON. Leerlo como si fuera un arreglo
-    // dejaba los cuatro valores en `undefined` y `fitBounds` no se quejaba: la
-    // tabla se cerraba y el mapa se quedaba exactamente donde estaba. Solo se
-    // vio comparando el centro antes y después en un navegador de verdad.
     const { west, south, east, north } = registro.bbox
     map.fitBounds(
       [
@@ -323,17 +209,14 @@ export default function Component() {
     [actualizarCapa],
   )
 
-  /** Lanza la búsqueda del expediente que entregue el buscador flotante. */
+  /** Lanza la búsqueda del expediente que entregue cualquier buscador. */
   const buscarExpediente = useCallback((codigo) => {
     setExpedientCode(codigo)
+    setIslandSearchText(codigo)
     setSearchTrigger((prev) => prev + 1)
     setShowToggle(true)
   }, [])
 
-  // Era un `alert()`: el único diálogo del sistema operativo en toda la
-  // interfaz, y encima bloquea la página hasta cerrarlo. Ahora el botón
-  // sencillamente no aparece cuando no hay coordenadas que enseñar, que es
-  // mejor respuesta que dejar pulsar algo para decir que no se puede.
   const handleShowCoordinates = () => setShowTable(true)
 
   const handleCloseTable = () => {
@@ -342,6 +225,9 @@ export default function Component() {
 
   const handleReset = () => {
     setExpedientCode("")
+    setIslandSearchText("")
+    setIslandSuggestions([])
+    setIslandResultsOpen(false)
     setCoordinates([])
     setCoordinateRings([])
     setTransformedCoordinates([])
@@ -372,9 +258,6 @@ export default function Component() {
     setGeoJsonData(newGeoJsonData)
   }, [])
 
-  // Índice del primer vértice de cada anillo, para intercalar un encabezado en la
-  // tabla. Sin esto los huecos y las partes de un multipolígono se numeraban
-  // seguidos, como si fueran un único contorno.
   const ringStartLabels = useMemo(() => {
     const labels = new Map()
     let offset = 0
@@ -386,8 +269,6 @@ export default function Component() {
   }, [coordinateRings])
 
   useEffect(() => {
-    // Recalcular también cuando no hay coordenadas: antes se conservaban las del
-    // expediente anterior tras una búsqueda sin resultados.
     if (coordinates.length === 0) {
       setTransformedCoordinates([])
       return
@@ -402,251 +283,308 @@ export default function Component() {
     setMapInitialized(true)
   }, [])
 
+  const activeCount = useMemo(
+    () => Object.values(layers).filter((l) => l.on).length,
+    [layers],
+  )
+
+  // Búsqueda asistida en la isla inferior
+  const runIslandQuery = useCallback(async (query) => {
+    if (!query || query.trim().length < 3) {
+      setIslandSuggestions([])
+      setIslandResultsOpen(false)
+      setIslandLoading(false)
+      return
+    }
+    if (islandAbortRef.current) islandAbortRef.current.abort()
+    islandAbortRef.current = new AbortController()
+    setIslandLoading(true)
+    try {
+      const results = await queryExpedientSuggestions(query.trim(), islandAbortRef.current.signal)
+      setIslandSuggestions(results)
+      setIslandResultsOpen(results.length > 0)
+      setIslandSelectedIndex(-1)
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        setIslandSuggestions([])
+        setIslandResultsOpen(false)
+      }
+    } finally {
+      setIslandLoading(false)
+    }
+  }, [])
+
+  const debouncedIslandQuery = useMemo(
+    () => debounce(runIslandQuery, 300),
+    [runIslandQuery],
+  )
+
+  const handleIslandSearchChange = (e) => {
+    const val = e.target.value
+    setIslandSearchText(val)
+    if (val.trim().length >= 3) {
+      debouncedIslandQuery(val)
+    } else {
+      debouncedIslandQuery.cancel()
+      setIslandSuggestions([])
+      setIslandResultsOpen(false)
+    }
+  }
+
+  const handleSelectIslandExpedient = (code) => {
+    setIslandSearchText(code)
+    setIslandResultsOpen(false)
+    debouncedIslandQuery.cancel()
+    buscarExpediente(code)
+  }
+
+  const isDrawerOpen = isPinned || isHovered
+
   return (
-    <div className="relative flex w-full h-screen bg-gray-100">
-      {/* El panel y su pestaña se mueven juntos.
-
-          Antes eran dos mandos distintos: una X dentro del panel para
-          esconderlo y, cuando estaba escondido, un botón redondo en la esquina
-          de la pantalla para volver a sacarlo. Dos sitios y dos formas para una
-          sola cosa. Ahora es una pestaña pegada al costado del panel: la
-          pestaña se desliza con él y queda asomando, así que ocultar y mostrar
-          se hacen siempre en el mismo punto y la flecha dice hacia dónde va.
-
-          El título «Títulos y Solicitudes» desapareció: el panel ya no es solo
-          de la ANM —agrupa Geología, Hidrocarburos y Catastro—, y un encabezado
-          que nombra a una sola de las cuatro áreas confunde más de lo que
-          orienta. Sin él, el panel arranca 44 px más arriba. */}
-      <div
-        // **Dos disposiciones, una sola marca.**
-        //
-        // En pantalla ancha el panel es una columna a la izquierda con su
-        // pestaña al costado, y se esconde deslizándose hacia la izquierda. En
-        // un teléfono eso no cabe: 350 px de columna sobre una pantalla de 390
-        // tapan el mapa entero. Ahí el panel pasa a ser una hoja que sube desde
-        // abajo con la pestaña arriba, que es el gesto que ya usan todas las
-        // aplicaciones de mapas y no hay que explicar.
-        //
-        // Se resuelve con clases por tamaño y no con JavaScript a propósito: un
-        // `window.innerWidth` leído al montar no coincide con lo que pintó el
-        // servidor, y eso tira la página entera para volver a pintarla —ya pasó
-        // con las preferencias—.
-        //
-        // La cuenta del desplazamiento horizontal no es evidente: el bloque mide
-        // el panel (350) más la pestaña (24) = 374, y arranca a 16 del borde.
-        // Para que el panel salga entero hay que correrlo 366, o sea 100 % menos
-        // media unidad. Con «100 % menos la pestaña» —que es lo que parece—
-        // quedaba una franja de 16 px asomando, y eso solo se vio en una
-        // captura.
-        className={`fixed inset-x-0 bottom-0 z-10 flex max-h-[75vh] flex-col-reverse transition-transform duration-300 ease-out md:absolute md:inset-x-auto md:bottom-auto md:left-4 md:top-4 md:max-h-[calc(100vh-5rem)] md:flex-row md:items-start ${
-          showSidebar
-            ? "translate-y-0 md:translate-x-0"
-            : "translate-y-[calc(100%-2.75rem)] md:translate-y-0 md:-translate-x-[calc(100%-0.5rem)]"
-        }`}
+    <div className="relative flex w-full h-screen bg-[#000000] overflow-hidden">
+      {/* Dock lateral pegado al borde izquierdo con rail colapsable y drawer fluido */}
+      <aside
+        aria-label="Panel lateral"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className="fixed left-0 top-0 bottom-0 z-30 flex select-none pointer-events-auto"
       >
-      {/* El panel y sus dos tiradores. El envoltorio existe solo para que los
-          tiradores puedan colocarse sobre los bordes: dentro del panel se
-          desplazarían con el contenido, porque el panel se desplaza por dentro. */}
-      <div
-        className="relative flex w-full min-w-0 md:w-auto"
-        style={{ "--panel-ancho": `${panelWidth}px`, "--panel-alto": `${panelHeight * 100}vh` }}
-      >
-      <div
-        ref={panelRef}
-        // El alto máximo con desplazamiento interno no es un adorno: el panel
-        // crece cada vez que se le añade algo, y al añadirle el campo de
-        // coordenadas su fila de botones bajó hasta meterse debajo de los
-        // controles del mapa, que quedaban por encima e impedían pulsarla. Con
-        // un tope, el panel se desplaza por dentro en vez de invadir la
-        // pantalla.
-        //
-        // En pantalla grande las dos medidas las pone el usuario arrastrando los
-        // bordes; en el teléfono no, porque ahí el panel es una hoja que sube
-        // desde abajo y no hay borde libre que agarrar.
-        className="flex max-h-[75vh] w-full flex-col overflow-y-auto overflow-x-hidden rounded-t-xl bg-white shadow-lg md:max-h-[var(--panel-alto)] md:w-[var(--panel-ancho)] md:rounded-xl"
-      >
-        <div className="p-4 space-y-4">
-          {/* El buscador de expedientes se mudó a la lupa del área de Minería.
-              Estaba aquí arriba, fijo, aunque solo sirva para esa área: pregunta
-              por TENURE_ID y CODIGO_EXPEDIENTE, que son campos de la ANM. */}
-
-          {/* El sistema de coordenadas gobierna todo lo que enseña una posición:
-              la tabla, la exportación, la lectura del cursor sobre el mapa, las
-              etiquetas de los puntos dibujados y la caja de escribir una
-              coordenada.
-
-              Era una lista desplegable con su explicación debajo, tres renglones
-              para un ajuste que se toca una vez. Ahora es un botón que dice cuál
-              está puesto; la explicación de cada sistema vive dentro, que es
-              donde hace falta. */}
-          {/* Sin filete arriba: separaba de nada —es lo primero del panel— y
-              dejaba una raya suelta bajo el borde de la tarjeta.
-
-              Y el rótulo, con la letra de las barras de área (Minería,
-              Geología…): estaba en 14 px redonda, mientras que todos los demás
-              encabezados del panel son de 11 versalitas. Era el único de su
-              tamaño en la columna, y por eso se leía como de otra aplicación. */}
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500">
-              Sistema de coordenadas
-            </Label>
+        {/* Rail de iconos (barra de tareas tipo dock, 56px) */}
+        <div className="flex w-14 flex-col items-center justify-between border-r border-zinc-800/80 bg-[#000000]/95 py-3.5 backdrop-blur-2xl text-zinc-200 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.6)]">
+          {/* Iconos de navegación del rail */}
+          <div className="flex flex-col items-center gap-2 pt-1">
             <button
               type="button"
-              onClick={(event) => {
-                const el = event.currentTarget
-                setCrsPopover((actual) => (actual ? null : el))
-              }}
-              // El mismo gris que las barras de Minería, Geología y las demás: en
-              // blanco parecía de otra familia, justo encima de ellas.
-              className="flex h-9 w-full items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 text-left transition-colors hover:bg-slate-100"
+              onClick={() => setDrawerTab("capas")}
+              title="Capas del proyecto"
+              aria-label="Pestaña Capas"
+              className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+                drawerTab === "capas" && isDrawerOpen
+                  ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
+                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+              }`}
             >
-              <Globe2 className="h-4 w-4 shrink-0 text-slate-400" />
-              <span className="min-w-0 flex-1 truncate text-[13px] text-slate-900">
-                {crsById(selectedCoordinateSystem).label}
-              </span>
-              <span className="shrink-0 font-mono text-[10px] text-slate-400">
-                EPSG:{selectedCoordinateSystem}
-              </span>
-              <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+              <Layers className="h-5 w-5" />
+              {activeCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-1 text-[9px] font-bold text-black shadow">
+                  {activeCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDrawerTab("herramientas")}
+              title="Herramientas y configuración"
+              aria-label="Pestaña Herramientas"
+              className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+                drawerTab === "herramientas" && isDrawerOpen
+                  ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
+                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+              }`}
+            >
+              <Wrench className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="flex items-center justify-between border-b border-slate-100 py-2">
-            <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-              Fusión de capas
-            </span>
-            <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-[11px]">
+          {/* Enlace al perfil de LinkedIn en la base de la barra */}
+          <div className="flex flex-col items-center gap-2">
+            <a
+              href="https://www.linkedin.com/in/fabio-espinosa/"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Fabio A. Espinosa en LinkedIn"
+              aria-label="Perfil de LinkedIn de Fabio A. Espinosa"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 transition-colors"
+            >
+              <Linkedin className="h-4.5 w-4.5" />
+            </a>
+          </div>
+        </div>
+
+        {/* Drawer desplegable en negro obsidiana glass (~360px) */}
+        <div
+          ref={panelRef}
+          className={`flex flex-col border-r border-zinc-800/80 bg-[#09090b]/95 text-zinc-100 backdrop-blur-2xl transition-all duration-300 ease-out overflow-hidden ${
+            isDrawerOpen
+              ? "w-[360px] opacity-100 shadow-[20px_0_40px_rgba(0,0,0,0.6)]"
+              : "w-0 opacity-0 pointer-events-none"
+          }`}
+        >
+          {/* Cabecera del drawer con título de sección y controles */}
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4 bg-[#000000]/70">
+            <div className="flex items-center gap-2">
+              {drawerTab === "capas" ? (
+                <Layers className="h-4 w-4 text-zinc-300" />
+              ) : (
+                <Wrench className="h-4 w-4 text-zinc-300" />
+              )}
+              <span className="text-sm font-semibold tracking-tight text-white">
+                {drawerTab === "capas" ? "Capas" : "Herramientas"}
+              </span>
+              {drawerTab === "capas" && activeCount > 0 && (
+                <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300 border border-zinc-700">
+                  {activeCount}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setBlendMode("multiply")}
-                className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
-                  blendMode === "multiply"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
+                onClick={() => setIsPinned((p) => !p)}
+                title={isPinned ? "Desfijar panel lateral" : "Fijar panel lateral"}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
+                  isPinned
+                    ? "bg-zinc-800 text-white border border-zinc-700"
+                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
                 }`}
-                title="Multiplicar: funde los colores con el relieve y el mapa base (como en ArcGIS)"
               >
-                Multiplicar
+                {isPinned ? <Pin className="h-3.5 w-3.5 fill-white" /> : <PinOff className="h-3.5 w-3.5" />}
               </button>
               <button
                 type="button"
-                onClick={() => setBlendMode("normal")}
-                className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
-                  blendMode === "normal"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-                title="Normal: transparencia simple estándar"
+                onClick={() => {
+                  setIsPinned(false)
+                  setIsHovered(false)
+                }}
+                title="Cerrar panel"
+                aria-label="Cerrar panel"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
               >
-                Normal
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
 
-          <LayerPanel
-            layers={layers}
-            order={layerOrder}
-            onToggle={alternarCapa}
-            onOpacity={cambiarOpacidad}
-            onColor={cambiarColor}
-            onReorder={setLayerOrder}
-            subLayers={sgcState.subLayers}
-            chosenSub={sgcState.chosenSub}
-            onToggleSubLayer={sgcState.onToggleSubLayer}
-            areaHasFilter={areaHasFilter}
-            onOpenFilters={(areaId, el) => setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))}
-            onOpenSearch={(areaId, el) => setSearchPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))}
-          />
+          {/* Cuerpo con scroll interno del drawer */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 space-y-4">
+            {drawerTab === "capas" ? (
+              <>
+                <LayerPanel
+                  layers={layers}
+                  order={layerOrder}
+                  onToggle={alternarCapa}
+                  onOpacity={cambiarOpacidad}
+                  onColor={cambiarColor}
+                  onReorder={setLayerOrder}
+                  subLayers={sgcState.subLayers}
+                  chosenSub={sgcState.chosenSub}
+                  onToggleSubLayer={sgcState.onToggleSubLayer}
+                  areaHasFilter={areaHasFilter}
+                  onOpenFilters={(areaId, el) =>
+                    setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
+                  }
+                />
+              </>
+            ) : (
+              <div className="space-y-3.5">
+                {/* 1. Sistema de Coordenadas (PRIMERO) */}
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
+                      Sistema de Coordenadas
+                    </Label>
+                    <span className="font-mono text-[10px] text-zinc-300 bg-zinc-800/90 px-2 py-0.5 rounded-md border border-zinc-700/60">
+                      EPSG:{selectedCoordinateSystem}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      const el = event.currentTarget
+                      setCrsPopover((actual) => (actual ? null : el))
+                    }}
+                    className="flex h-10 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Globe2 className="h-4 w-4 shrink-0 text-zinc-300" />
+                      <span className="min-w-0 truncate text-[12.5px] font-medium text-white">
+                        {crsById(selectedCoordinateSystem).label}
+                      </span>
+                    </div>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                  </button>
+                </div>
 
-          {showToggle && (
-            <div className="space-y-4">
-              {coordinatesAvailable && (
-                <Button
-                  variant="outline"
-                  onClick={handleShowCoordinates}
-                  className="w-full border border-slate-200 text-[13px] font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Mostrar coordenadas
-                </Button>
-              )}
-              <div className="flex justify-between gap-4">
-                <Button
-                  variant="outline"
-                  onClick={handleReset}
-                  className="flex-1 border text-gray-700 hover:bg-gray-100"
-                >
-                  <RefreshCw className="mr-2" size={18} />
-                  Borrar
-                </Button>
-                <Button onClick={handleExportSHP} className="flex-1 bg-green-500 hover:bg-green-600 text-white">
-                  <Download className="mr-2" size={18} />
-                  Exportar
-                </Button>
+                {/* 2. Fusión de capas */}
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-[0.08em]">
+                      Fusión de capas
+                    </span>
+                  </div>
+                  <div className="flex rounded-xl border border-zinc-800/90 p-1 bg-zinc-900/80 text-[11px] gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setBlendMode("multiply")}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        blendMode === "multiply"
+                          ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                      title="Multiplicar: funde con relieve y mapa base"
+                    >
+                      Multiplicar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBlendMode("normal")}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        blendMode === "normal"
+                          ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
+                          : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                      title="Normal: transparencia simple"
+                    >
+                      Normal
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Medición y Captura */}
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block mb-2">
+                    Medición y Captura
+                  </Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => mapRef.current?.startMode?.("measure-distance")}
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
+                      title="Medir distancia lineal entre puntos"
+                    >
+                      <Spline className="h-4 w-4 text-zinc-200" />
+                      <span className="text-[11px] font-medium">Distancia</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => mapRef.current?.startMode?.("measure-area")}
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
+                      title="Medir área y perímetro de un polígono"
+                    >
+                      <Square className="h-4 w-4 text-zinc-200" />
+                      <span className="text-[11px] font-medium">Área</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => mapRef.current?.clearDrawings?.()}
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-400 hover:border-rose-900/60 hover:bg-rose-950/30 hover:text-rose-300 transition-all active:scale-[0.98]"
+                      title="Limpiar dibujos y mediciones"
+                    >
+                      <Trash2 className="h-4 w-4 text-zinc-400" />
+                      <span className="text-[11px] font-medium">Limpiar</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Los tiradores de los bordes. Delgados y sin color hasta que se pasa por
-          encima: un panel con marco grueso pesa en pantalla, y esto solo hace
-          falta cuando hace falta. El área que responde al ratón es más ancha que
-          la raya que se ve, porque acertarle a tres píxeles es un ejercicio de
-          puntería.
-
-          Van **por fuera** del panel —`left-full`, `top-full`— y no montados
-          sobre su borde, que es lo primero que probé. Cuando el panel tiene
-          contenido de sobra le sale barra de desplazamiento, y la barra se queda
-          con el clic aunque encima haya otra cosa: el tirador funcionaba con el
-          panel corto y dejaba de funcionar en cuanto la lista crecía, que es
-          justo cuando hace falta agrandarlo. */}
-      <span
-        onPointerDown={arrastrarBorde("ancho")}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Ancho del panel"
-        title="Arrastra para cambiar el ancho del panel"
-        className="absolute inset-y-0 left-full hidden w-2.5 cursor-col-resize touch-none md:block"
-      >
-        <span className="pointer-events-none absolute inset-y-3 left-0.5 w-1 rounded-full bg-transparent transition-colors hover:bg-slate-300" />
-      </span>
-      <span
-        onPointerDown={arrastrarBorde("alto")}
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Alto del panel"
-        title="Arrastra para cambiar el alto del panel"
-        className="absolute inset-x-0 top-full hidden h-2.5 cursor-row-resize touch-none md:block"
-      >
-        <span className="pointer-events-none absolute inset-x-3 top-0.5 h-1 rounded-full bg-transparent transition-colors hover:bg-slate-300" />
-      </span>
-      </div>
-
-        {/* La pestaña. Va fuera de la caja que se desplaza por dentro, para que
-            no se vaya con el contenido al recorrer la lista de capas.
-
-            En el teléfono es una barra ancha encima de la hoja, con el asa que
-            todo el mundo reconoce; en escritorio, una lengüeta al costado. */}
-        <button
-          type="button"
-          onClick={() => setShowSidebar((visible) => !visible)}
-          aria-expanded={showSidebar}
-          aria-label={showSidebar ? "Ocultar panel" : "Mostrar panel"}
-          title={showSidebar ? "Ocultar panel" : "Mostrar panel"}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-t-xl bg-white text-slate-400 shadow-[0_-2px_8px_rgba(15,23,42,0.08)] transition-colors hover:bg-slate-50 hover:text-slate-700 md:mt-3 md:h-14 md:w-6 md:rounded-l-none md:rounded-r-lg md:border-l md:border-slate-100 md:shadow-lg"
-        >
-          {/* El asa: solo en táctil, donde es la señal de «esto se arrastra». */}
-          <span className="h-1 w-9 rounded-full bg-slate-300 md:hidden" />
-          <span className="text-[13px] font-medium text-slate-600 md:hidden">Capas y filtros</span>
-          <ChevronLeft
-            className={`hidden h-4 w-4 transition-transform duration-300 md:block ${
-              showSidebar ? "" : "rotate-180"
-            }`}
-          />
-        </button>
-      </div>
-
-      <div className="flex-grow relative">
+      {/* Mapa en el centro / fondo */}
+      <div className="flex-grow relative h-full w-full">
         <MapComponent
           expedientCode={expedientCode}
           onCoordinatesUpdate={handleCoordinatesUpdate}
@@ -658,38 +596,189 @@ export default function Component() {
           filters={filters}
           onLayerData={setLayerData}
           onSgcState={setSgcState}
-          panelOpen={showSidebar}
+          panelOpen={isDrawerOpen}
           blendMode={blendMode}
           onBlendModeChange={setBlendMode}
         />
       </div>
+
+      {/* Buscador modo isla centrado en la parte superior */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-auto">
+        {/* Barra de búsqueda estilo cápsula flotante */}
+        <div className="relative flex items-center w-[92vw] sm:w-[460px] h-12 rounded-full border border-zinc-800 bg-[#09090b]/95 px-4 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8)] backdrop-blur-2xl transition-all focus-within:border-zinc-700 focus-within:ring-1 focus-within:ring-zinc-600">
+          <Search className="h-4.5 w-4.5 shrink-0 text-zinc-400 mr-3" />
+          <input
+            type="text"
+            value={islandSearchText}
+            onChange={handleIslandSearchChange}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault()
+                setIslandSelectedIndex((i) => Math.min(i + 1, islandSuggestions.length - 1))
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault()
+                setIslandSelectedIndex((i) => Math.max(i - 1, 0))
+              } else if (e.key === "Enter") {
+                e.preventDefault()
+                if (islandSelectedIndex >= 0 && islandSuggestions[islandSelectedIndex]) {
+                  const sel = islandSuggestions[islandSelectedIndex]
+                  const code = typeof sel === "string" ? sel : sel?.code
+                  if (code) handleSelectIslandExpedient(code)
+                } else if (islandSearchText.trim()) {
+                  handleSelectIslandExpedient(islandSearchText.trim())
+                }
+              } else if (e.key === "Escape") {
+                setIslandResultsOpen(false)
+              }
+            }}
+            placeholder="Buscar expediente..."
+            className="h-full w-full bg-transparent text-[13.5px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+          />
+          {islandLoading && <Loader2 className="h-4 w-4 shrink-0 text-zinc-400 animate-spin ml-2" />}
+          {islandSearchText && !islandLoading && (
+            <button
+              type="button"
+              onClick={() => {
+                setIslandSearchText("")
+                setIslandSuggestions([])
+                setIslandResultsOpen(false)
+              }}
+              className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors ml-1"
+              title="Limpiar búsqueda"
+              aria-label="Limpiar búsqueda"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (islandSelectedIndex >= 0 && islandSuggestions[islandSelectedIndex]) {
+                const sel = islandSuggestions[islandSelectedIndex]
+                const code = typeof sel === "string" ? sel : sel?.code
+                if (code) handleSelectIslandExpedient(code)
+              } else if (islandSearchText.trim()) {
+                handleSelectIslandExpedient(islandSearchText.trim())
+              }
+            }}
+            className="ml-2 shrink-0 rounded-full bg-zinc-800 hover:bg-zinc-700 px-3.5 py-1.5 text-xs font-semibold text-zinc-100 transition-colors shadow-sm"
+          >
+            Buscar
+          </button>
+
+          {/* Desplegable de sugerencias que emerge hacia abajo */}
+          {islandResultsOpen && islandSuggestions.length > 0 && (
+            <div
+              role="listbox"
+              aria-label="Sugerencias de expediente"
+              className="absolute top-full left-0 right-0 mt-2 max-h-60 overflow-y-auto rounded-2xl border border-zinc-800 bg-[#09090b]/95 p-1.5 shadow-2xl backdrop-blur-2xl z-30"
+            >
+              {islandSuggestions.map((item, index) => {
+                const code = typeof item === "string" ? item : (item?.code || "")
+                const layerName = typeof item === "object" ? item?.layerName : null
+                const isSelected = index === islandSelectedIndex
+                return (
+                  <div
+                    key={code || index}
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => handleSelectIslandExpedient(code)}
+                    className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs transition-colors ${
+                      isSelected ? "bg-zinc-800 text-white font-medium" : "text-zinc-300 hover:bg-zinc-800/60"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Search className="h-3.5 w-3.5 text-zinc-400" />
+                      <span className="font-mono font-medium text-zinc-100">{code}</span>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                        layerName?.toLowerCase().includes("solicitud") ||
+                        layerName?.toLowerCase().includes("trámite") ||
+                        layerName?.toLowerCase().includes("tramite")
+                          ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                      }`}
+                    >
+                      {layerName || "Expediente"}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Acciones de expediente activo si existe */}
+        {showToggle && (
+          <div className="mt-2.5 flex items-center gap-2.5 rounded-full border border-zinc-800/90 bg-[#09090b]/95 px-4 py-1.5 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
+            <span className="flex items-center gap-2 font-mono text-[12.5px] font-semibold text-emerald-400">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              {expedientCode || "Expediente activo"}
+            </span>
+
+            <div className="h-3.5 w-px bg-zinc-800" />
+
+            <div className="flex items-center gap-1.5">
+              {coordinatesAvailable && (
+                <button
+                  type="button"
+                  onClick={handleShowCoordinates}
+                  title="Ver tabla de coordenadas"
+                  aria-label="Ver coordenadas"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all shadow-sm active:scale-95"
+                >
+                  <TableIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleExportSHP}
+                title="Exportar expediente"
+                aria-label="Exportar expediente"
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all shadow-sm active:scale-95"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleReset()
+                  setIslandSearchText("")
+                  setIslandResultsOpen(false)
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-900 hover:text-zinc-200 transition-all active:scale-95"
+                title="Borrar expediente activo"
+                aria-label="Borrar expediente activo"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {showTable && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md m-4">
-            {/* Aquí había una segunda lista desplegable con los diez sistemas,
-                heredada de cuando el panel no tenía la suya. Eran dos mandos
-                para el mismo ajuste, con dos aspectos distintos, y cambiar uno
-                cambiaba el otro sin que se viera. Ahora esto solo dice en qué
-                sistema está la tabla; para cambiarlo se usa el botón del panel,
-                que es el único sitio donde se elige. */}
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-md">
+          <div className="bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
             <div className="mb-4 flex items-baseline gap-2">
-              <h2 className="text-xl font-semibold text-slate-900">Coordenadas</h2>
-              <span className="text-[13px] text-slate-500">
+              <h2 className="text-xl font-semibold text-zinc-100">Coordenadas</h2>
+              <span className="text-[13px] text-zinc-400">
                 {crsById(selectedCoordinateSystem).label}
               </span>
-              <span className="font-mono text-[10px] text-slate-400">
+              <span className="font-mono text-[10px] text-zinc-300 bg-zinc-800/80 px-1.5 py-0.5 rounded border border-zinc-700">
                 EPSG:{selectedCoordinateSystem}
               </span>
             </div>
-            <div className="overflow-auto max-h-[60vh]">
+            <div className="overflow-auto max-h-[60vh] rounded-xl border border-zinc-800">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="bg-gray-100 text-gray-700">Punto</TableHead>
-                    <TableHead className="bg-gray-100 text-gray-700">
+                  <TableRow className="border-zinc-800 bg-zinc-900/80 hover:bg-zinc-900/80">
+                    <TableHead className="text-zinc-300">Punto</TableHead>
+                    <TableHead className="text-zinc-300">
                       {axisLabels(selectedCoordinateSystem).first}
                     </TableHead>
-                    <TableHead className="bg-gray-100 text-gray-700">
+                    <TableHead className="text-zinc-300">
                       {axisLabels(selectedCoordinateSystem).second}
                     </TableHead>
                   </TableRow>
@@ -698,24 +787,21 @@ export default function Component() {
                   {transformedCoordinates.map((coord, index) => (
                     <Fragment key={index}>
                       {coordinateRings.length > 1 && ringStartLabels.has(index) && (
-                        <TableRow>
+                        <TableRow className="border-zinc-800 bg-zinc-900/50">
                           <TableCell
                             colSpan={3}
-                            className="bg-gray-100 text-xs font-semibold text-gray-600 text-center"
+                            className="text-xs font-semibold text-zinc-300 text-center"
                           >
                             {ringStartLabels.get(index)}
                           </TableCell>
                         </TableRow>
                       )}
-                      <TableRow>
-                        <TableCell className="text-center">{index + 1}</TableCell>
-                        {/* Primero la ordenada —latitud o norte—, que es como se
-                            leen las dos columnas de la cabecera; el par viene de
-                            proj4 como [x, y], al revés. */}
-                        <TableCell className="text-center">
+                      <TableRow className="border-zinc-800/50 hover:bg-zinc-800/40">
+                        <TableCell className="text-center font-mono text-xs text-zinc-400">{index + 1}</TableCell>
+                        <TableCell className="text-center font-mono text-xs text-zinc-200">
                           {formatCoordinate(coord[1], selectedCoordinateSystem)}
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center font-mono text-xs text-zinc-200">
                           {formatCoordinate(coord[0], selectedCoordinateSystem)}
                         </TableCell>
                       </TableRow>
@@ -724,12 +810,16 @@ export default function Component() {
                 </TableBody>
               </Table>
             </div>
-            <Button onClick={handleCloseTable} className="mt-4 w-full bg-red-500 hover:bg-red-600 text-white">
+            <Button
+              onClick={handleCloseTable}
+              className="mt-4 w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 rounded-xl"
+            >
               Cerrar
             </Button>
           </div>
         </div>
       )}
+
       {filterPopover && (
         <AreaFilters
           area={areaById(filterPopover.areaId)}
@@ -781,17 +871,24 @@ export default function Component() {
       )}
 
       {showExportModal && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md m-4">
-            <h2 className="text-2xl font-bold mb-4 text-gray-800">Tipo de archivo</h2>
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-md">
+          <div className="relative bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold tracking-tight text-zinc-100">Tipo de archivo para exportar</h2>
+              <button
+                type="button"
+                onClick={handleCloseExportModal}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+                aria-label="Cerrar modal de descarga"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
             <ExportComponent
               geoJsonData={geoJsonData}
               selectedCoordinateSystem={selectedCoordinateSystem}
               expedientCode={expedientCode}
             />
-            <Button onClick={handleCloseExportModal} className="mt-4 w-full bg-red-500 hover:bg-red-600 text-white">
-              Cerrar
-            </Button>
           </div>
         </div>
       )}

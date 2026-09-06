@@ -319,9 +319,9 @@ export const FloatingPanel = ({
           // contexto, y en blanco sobre el fondo claro de CARTO se perdía: había
           // que buscarlo. Además el 3D está encendido mientras existe, así que
           // el oscuro dice lo mismo que en el resto del visor.
-          className={`${asa.className} z-30 flex h-9 items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 text-[13px] font-medium text-white shadow-lg transition-colors hover:bg-slate-700`}
+          className={`${asa.className} z-30 flex h-9 items-center gap-2 rounded-xl border border-zinc-800 bg-[#09090b]/95 px-3 text-[13px] font-medium text-white shadow-2xl backdrop-blur-2xl transition-colors hover:bg-zinc-800`}
         >
-          {Icon && <Icon className="h-4 w-4" />}
+          {Icon && <Icon className="h-4 w-4 text-zinc-300" />}
           {title}
         </button>
       ) : (
@@ -333,17 +333,17 @@ export const FloatingPanel = ({
           role="dialog"
           aria-label={title}
           style={estilo}
-          className={`z-30 flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg ${
+          className={`z-30 flex max-h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl ${
             compact ? "w-fit" : "w-[min(16rem,calc(100vw-1.5rem))]"
           }`}
         >
           <div
             {...asa}
-            className={`${asa.className} flex shrink-0 items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-2 py-1.5`}
+            className={`${asa.className} flex shrink-0 items-center gap-1.5 border-b border-zinc-800/80 bg-zinc-950/80 px-2.5 py-2`}
           >
-            <GripHorizontal className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <GripHorizontal className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
             {!compact && (
-              <span className="flex-1 select-none text-[11px] font-medium text-slate-600">
+              <span className="flex-1 select-none text-[11px] font-semibold text-zinc-200">
                 {title}
               </span>
             )}
@@ -356,7 +356,7 @@ export const FloatingPanel = ({
               }}
               aria-label={closeLabel ?? (collapsible ? `Guardar ${title}` : `Cerrar ${title}`)}
               title={collapsible ? "Guardar en un botón" : "Cerrar"}
-              className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+              className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
             >
               <X className="h-3.5 w-3.5" />
             </button>

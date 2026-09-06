@@ -39,18 +39,18 @@ import { sampleGrid, slopeAspectFrom } from "../../utils/terrainAnalysis"
 export const PITCH_3D = 45
 export const EXAGGERATION_DEFAULT = 1.5
 export const EXAGGERATION_MIN = 0.5
-export const EXAGGERATION_MAX = 3
+export const EXAGGERATION_MAX = 5
 
 /**
  * El cielo. Sin él, al inclinar la cámara el horizonte queda cortado en seco
  * contra el fondo de la página y el relieve parece flotar en el vacío.
  */
 const SKY = {
-  "sky-color": "#8fc3f2",
-  "horizon-color": "#dfeaf5",
-  "fog-color": "#e8eef4",
-  "horizon-fog-blend": 0.6,
-  "fog-ground-blend": 0.1,
+  "sky-color": "#09090b",
+  "horizon-color": "#18181b",
+  "fog-color": "#09090b",
+  "horizon-fog-blend": 0.8,
+  "fog-ground-blend": 0.3,
 }
 
 /**
@@ -64,10 +64,9 @@ const SKY = {
 export const PITCH_MAX = 72
 
 /**
- * Velocidad del giro continuo, en grados por segundo. Una vuelta completa cada
- * 36 segundos: lo bastante lento para leer el terreno mientras pasa.
+ * Velocidad del giro continuo, en grados por segundo.
  */
-const SPIN_DEGREES_PER_SECOND = 10
+const SPIN_DEGREES_PER_SECOND = 16
 
 /**
  * Cuánto se espera, como mucho, a que el terreno tenga teselas antes de inclinar.
@@ -432,20 +431,47 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     let frame = 0
     let previous = performance.now()
     let lastPublished = 0
+    let isUserDragging = false
+
+    const canvas = mapInstance.getCanvas?.()
+
+    const onPointerDown = (e) => {
+      // Si el usuario pulsa para arrastrar el mapa manualmente, pausamos el giro temporalmente
+      if (e.buttons > 0) {
+        isUserDragging = true
+      }
+    }
+
+    const onPointerUp = () => {
+      isUserDragging = false
+      previous = performance.now()
+    }
+
+    if (canvas) {
+      canvas.addEventListener("pointerdown", onPointerDown, { passive: true })
+      canvas.addEventListener("touchstart", onPointerDown, { passive: true })
+    }
+    window.addEventListener("pointerup", onPointerUp, { passive: true })
+    window.addEventListener("mouseup", onPointerUp, { passive: true })
+    window.addEventListener("touchend", onPointerUp, { passive: true })
+    window.addEventListener("pointercancel", onPointerUp, { passive: true })
 
     const step = (now) => {
-      const seconds = (now - previous) / 1000
+      if (isUserDragging) {
+        previous = now
+        frame = requestAnimationFrame(step)
+        return
+      }
+
+      // Evita saltos si el navegador se ralentiza temporalmente (máximo 50ms por paso)
+      const elapsed = Math.min((now - previous) / 1000, 0.05)
       previous = now
-      // jumpTo y no easeTo: una animación por fotograma se pisaría con la
-      // siguiente y el giro saldría a saltos.
-      const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * seconds
+
+      // Giro suave y continuo
+      const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * elapsed
       mapInstance.jumpTo({ bearing })
 
-      // El deslizador de giro sigue al mapa, pero no a 60 veces por segundo:
-      // cada jumpTo dispara un `moveend`, y publicar eso al estado repintaría el
-      // visor entero en cada fotograma. Cuatro veces por segundo basta para que
-      // el control se vea vivo y no cuesta nada.
-      if (now - lastPublished > 250) {
+      if (now - lastPublished > 200) {
         lastPublished = now
         setBearing(mapInstance.getBearing())
       }
@@ -457,7 +483,15 @@ export const useTerrainGL = (mapRef, mapInstance) => {
 
     return () => {
       cancelAnimationFrame(frame)
-      // Al parar, el estado se pone al día con dónde quedó de verdad la cámara.
+      if (canvas) {
+        canvas.removeEventListener("pointerdown", onPointerDown)
+        canvas.removeEventListener("touchstart", onPointerDown)
+      }
+      window.removeEventListener("pointerup", onPointerUp)
+      window.removeEventListener("mouseup", onPointerUp)
+      window.removeEventListener("touchend", onPointerUp)
+      window.removeEventListener("pointercancel", onPointerUp)
+
       setBearing(mapInstance.getBearing())
     }
   }, [isSpinning, mapInstance])
@@ -514,6 +548,41 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       mapInstance.off("rotateend", syncCamera)
       mapInstance.off("pitchend", syncCamera)
       mapInstance.off("moveend", syncCamera)
+    }
+  }, [mapInstance])
+
+  // Evitar que el clic derecho abra el menú contextual y deje trabado el giro 3D (dragRotate),
+  // y asegurar que si se mueve el ratón sin botones pulsados, MapLibre no quede "pegado".
+  useEffect(() => {
+    if (!mapInstance) return
+    const canvas = mapInstance.getCanvas?.()
+    if (!canvas) return
+
+    const onContextMenu = (e) => {
+      e.preventDefault()
+    }
+
+    const onGlobalPointerMove = (e) => {
+      if (e.buttons === 0) {
+        if (mapInstance.dragRotate?.isActive?.() || mapInstance.dragPan?.isActive?.()) {
+          canvas.dispatchEvent(
+            new MouseEvent("mouseup", {
+              bubbles: true,
+              cancelable: true,
+              clientX: e.clientX,
+              clientY: e.clientY,
+            }),
+          )
+        }
+      }
+    }
+
+    canvas?.addEventListener?.("contextmenu", onContextMenu)
+    window.addEventListener("pointermove", onGlobalPointerMove, { passive: true })
+
+    return () => {
+      canvas?.removeEventListener?.("contextmenu", onContextMenu)
+      window.removeEventListener("pointermove", onGlobalPointerMove)
     }
   }, [mapInstance])
 

@@ -148,25 +148,16 @@ export const BASEMAP_SOURCES = {
 export const BASEMAPS = [
   {
     /**
-     * Sin fondo.
+     * Relieve sombreado del terreno.
      *
-     * No es un hueco en la lista: es lo que hace falta para mirar el modelo de
-     * elevación solo. Sobre una imagen de satélite, la capa de pendiente compite
-     * con el color del propio terreno y cuesta leer dónde empieza un escarpe;
-     * sin nada debajo, los colores son solo los de la pendiente.
-     *
-     * No apaga el mapa entero: debajo de todo queda un fondo neutro declarado en
-     * el estilo, para que las capas se lean sobre algo y no sobre el blanco de
-     * la página.
+     * Sombreado analítico del modelo de elevación sobre fondo neutro,
+     * permitiendo apreciar la geomorfología y los títulos sin interferencia satelital.
      */
-    id: "none",
-    name: "Sin mapa de fondo",
-    short: "Ninguno",
-    source: "",
-    hint: "Fondo neutro. Para leer el relieve, la pendiente o los títulos sin nada que compita.",
-    // "none", no "fixed": sin teselas no hay nombres ni fijos ni quitables, y
-    // la lista de fondos anunciaba «nombres fijos» en esta fila, que es
-    // sencillamente falso. Se vio en una captura, no en las pruebas.
+    id: "relief",
+    name: "Relieve sombreado",
+    short: "Relieve",
+    source: "AWS DEM",
+    hint: "Sombreado analítico del relieve sobre fondo neutro.",
     labels: "none",
     withLabels: [],
     withoutLabels: [],
@@ -253,7 +244,8 @@ export const DEFAULT_BASEMAP = "satellite"
 
 const BY_ID = new Map(BASEMAPS.map((basemap) => [basemap.id, basemap]))
 
-export const basemapById = (id) => BY_ID.get(id) ?? BY_ID.get(DEFAULT_BASEMAP)
+export const basemapById = (id) =>
+  BY_ID.get(id === "none" ? "relief" : id) ?? BY_ID.get(DEFAULT_BASEMAP)
 
 /**
  * ¿Se le pueden quitar los nombres a este fondo?

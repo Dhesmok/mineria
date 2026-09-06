@@ -70,9 +70,9 @@ export const MapMenuPanel = ({ label, anchorRect, anchorEl, onClose, children, w
       role="dialog"
       aria-label={label}
       style={{ ...posicion, width: `min(${width}px, calc(100vw - 1.5rem))`, maxHeight: ALTO_MAXIMO }}
-      className="fixed z-50 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
+      className="fixed z-50 overflow-y-auto overscroll-contain rounded-2xl border border-zinc-800 bg-[#09090b]/95 p-1.5 text-zinc-100 shadow-2xl backdrop-blur-2xl"
     >
-      <p className="px-2.5 pb-1.5 pt-2 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+      <p className="px-2.5 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
         {label}
       </p>
       {children}
@@ -100,11 +100,11 @@ export const MapMenuItem = ({ icon: Icon, name, hint, active, badge, compact, ..
     aria-label={name}
     title={hint ? `${name} — ${hint}` : name}
     {...props}
-    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-      active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"
+    className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+      active ? "bg-zinc-800 text-white border border-zinc-700 font-medium shadow-sm" : "text-zinc-300 hover:bg-zinc-850 hover:text-white"
     }`}
   >
-    {Icon && <Icon className="h-4 w-4 shrink-0" />}
+    {Icon && <Icon className="h-4 w-4 shrink-0 text-zinc-400" />}
     {/* Recogida no se esconde el texto, se deja de dibujar. Escondido con
         `sr-only` seguía habiendo un hueco entre el icono y el borde, y sobre
         todo seguía habiendo un `flex-1` que estiraba la fila: el panel se
@@ -116,7 +116,7 @@ export const MapMenuItem = ({ icon: Icon, name, hint, active, badge, compact, ..
         {hint && (
           <span
             className={`mt-0.5 block text-[11px] leading-tight ${
-              active ? "text-white/70" : "text-slate-500"
+              active ? "text-zinc-300" : "text-zinc-400"
             }`}
           >
             {hint}
@@ -127,7 +127,7 @@ export const MapMenuItem = ({ icon: Icon, name, hint, active, badge, compact, ..
     {!compact && badge && (
       <span
         className={`shrink-0 rounded px-1.5 py-px text-[10px] font-semibold ${
-          active ? "bg-white/20" : "bg-slate-100 text-slate-500"
+          active ? "bg-white/20 text-white" : "bg-zinc-800 text-zinc-400 border border-zinc-700"
         }`}
       >
         {badge}
@@ -137,4 +137,4 @@ export const MapMenuItem = ({ icon: Icon, name, hint, active, badge, compact, ..
 )
 
 /** Un filete entre grupos de opciones dentro de la misma ventana. */
-export const MapMenuSeparator = () => <div className="my-1 border-t border-slate-100" />
+export const MapMenuSeparator = () => <div className="my-1 border-t border-zinc-800/80" />

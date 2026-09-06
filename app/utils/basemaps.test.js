@@ -11,31 +11,30 @@ import {
 
 describe("basemaps", () => {
   it("cada fondo declara capas para las dos formas", () => {
-    // Salvo «Ninguno», que es justamente no encender ninguna: sin fondo se ve
-    // el color neutro que el estilo pone debajo de todo.
-    BASEMAPS.filter((basemap) => basemap.id !== "none").forEach((basemap) => {
+    // Salvo «Relieve», que es justamente no encender capas de satélite/callejero
+    // para mostrar el sombreado sobre fondo neutro.
+    BASEMAPS.filter((basemap) => basemap.id !== "relief").forEach((basemap) => {
       expect(basemap.withLabels.length).toBeGreaterThan(0)
       expect(basemap.withoutLabels.length).toBeGreaterThan(0)
     })
   })
 
-  it("«Ninguno» no enciende ninguna capa de fondo", () => {
-    // Es lo que hace falta para mirar el modelo de elevación solo: sobre una
-    // imagen de satélite, la pendiente compite con el color del terreno.
-    expect(visibleBasemapLayers("none", true)).toEqual([])
-    expect(visibleBasemapLayers("none", false)).toEqual([])
-    expect(supportsLabelToggle("none")).toBe(false)
+  it("«Relieve» no enciende capas ráster externas", () => {
+    // Para ver el sombreado del terreno sin imágenes que compitan
+    expect(visibleBasemapLayers("relief", true)).toEqual([])
+    expect(visibleBasemapLayers("relief", false)).toEqual([])
+    expect(supportsLabelToggle("relief")).toBe(false)
   })
 
-  it("«Ninguno» tampoco tiene nombres fijos que anunciar", () => {
-    // Las dos respuestas son «no», pero por razones distintas, y la lista de
-    // fondos las distingue: en OSM enseña «nombres fijos» porque los hay y no
-    // se pueden quitar; aquí no debe enseñar nada, porque no hay nombres. La
-    // primera versión decía «nombres fijos» sobre un fondo vacío.
-    expect(hasFixedLabels("none")).toBe(false)
+  it("«Relieve» tampoco tiene nombres fijos que anunciar", () => {
+    expect(hasFixedLabels("relief")).toBe(false)
     expect(hasFixedLabels("osm")).toBe(true)
     expect(hasFixedLabels("topo")).toBe(true)
     expect(hasFixedLabels("positron")).toBe(false)
+  })
+
+  it("el id antiguo 'none' resuelve como alias a 'relief'", () => {
+    expect(basemapById("none").id).toBe("relief")
   })
 
   it("todas las capas que nombra un fondo están en la lista general", () => {
