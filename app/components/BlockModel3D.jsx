@@ -24,84 +24,209 @@ import {
 import { TILE_SIZE } from "../utils/demTiles"
 
 /**
- * Genera una textura procedural de nubes orgánicas fractales (fBm con bordes suaves algodonosos)
+ * Shaders GLSL 3.0 para Raymarching Volumétrico 3D de Nubes Atmosféricas
+ * Inspirado en la implementación de nubes volumétricas geoespaciales (como sfv-3d-labels y Three.js Volume Cloud).
  */
-function createRealisticCloudTexture() {
-  if (typeof document === "undefined") return null
-  const canvas = document.createElement("canvas")
-  canvas.width = 1024
-  canvas.height = 1024
-  const ctx = canvas.getContext("2d")
-  if (!ctx || typeof ctx.createImageData !== "function") return null
+const VOLUMETRIC_CLOUD_VERTEX_SHADER = /* glsl */ `
+in vec3 position;
 
-  const imgData = ctx.createImageData(1024, 1024)
-  const data = imgData.data
+uniform mat4 modelMatrix;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+uniform vec3 cameraPos;
 
-  function hash(x, y) {
-    const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453
-    return s - Math.floor(s)
-  }
+out vec3 vOrigin;
+out vec3 vDirection;
 
-  function smoothNoise(x, y) {
-    const i = Math.floor(x)
-    const j = Math.floor(y)
-    const fx = x - i
-    const fy = y - j
+void main() {
+    vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+    vOrigin = vec3( inverse( modelMatrix ) * vec4( cameraPos, 1.0 ) ).xyz;
+    vDirection = position - vOrigin;
+    gl_Position = projectionMatrix * mvPosition;
+}
+`
 
-    const sx = fx * fx * (3 - 2 * fx)
-    const sy = fy * fy * (3 - 2 * fy)
+const VOLUMETRIC_CLOUD_FRAGMENT_SHADER = /* glsl */ `
+precision highp float;
+precision highp sampler3D;
 
-    const n00 = hash(i, j)
-    const n10 = hash(i + 1, j)
-    const n01 = hash(i, j + 1)
-    const n11 = hash(i + 1, j + 1)
+in vec3 vOrigin;
+in vec3 vDirection;
 
-    const ix0 = n00 + sx * (n10 - n00)
-    const ix1 = n01 + sx * (n11 - n01)
-    return ix0 + sy * (ix1 - ix0)
-  }
+out vec4 color;
 
-  function fbm(x, y) {
-    let v = 0
-    let a = 0.52
-    let scale = 1.0
-    for (let o = 0; o < 5; o++) {
-      v += a * smoothNoise(x * scale, y * scale)
-      scale *= 2.05
-      a *= 0.48
+uniform sampler3D map;
+uniform vec3 baseColor;
+uniform vec3 sunColor;
+uniform vec3 sunDirection;
+uniform float threshold;
+uniform float range;
+uniform float opacity;
+uniform float steps;
+uniform vec3 windOffset;
+uniform float frame;
+
+uint wang_hash(uint seed) {
+    seed = (seed ^ 61u) ^ (seed >> 16u);
+    seed *= 9u;
+    seed = seed ^ (seed >> 4u);
+    seed *= 0x27d4eb2du;
+    seed = seed ^ (seed >> 15u);
+    return seed;
+}
+
+float randomFloat(inout uint seed) {
+    return float(wang_hash(seed)) / 4294967296.0;
+}
+
+vec2 hitBox( vec3 orig, vec3 dir ) {
+    const vec3 box_min = vec3( - 0.5 );
+    const vec3 box_max = vec3( 0.5 );
+    vec3 inv_dir = 1.0 / dir;
+    vec3 tmin_tmp = ( box_min - orig ) * inv_dir;
+    vec3 tmax_tmp = ( box_max - orig ) * inv_dir;
+    vec3 tmin = min( tmin_tmp, tmax_tmp );
+    vec3 tmax = max( tmin_tmp, tmax_tmp );
+    float t0 = max( tmin.x, max( tmin.y, tmin.z ) );
+    float t1 = min( tmax.x, min( tmax.y, tmax.z ) );
+    return vec2( t0, t1 );
+}
+
+void main() {
+    vec3 rayDir = normalize( vDirection );
+    vec2 bounds = hitBox( vOrigin, rayDir );
+
+    if ( bounds.x > bounds.y ) discard;
+
+    bounds.x = max( bounds.x, 0.0 );
+    float distanceInBox = bounds.y - bounds.x;
+    if ( distanceInBox <= 0.0 ) discard;
+
+    float stepSize = distanceInBox / steps;
+
+    // Dithering estocástico para eliminar bandas de muestreo
+    uint seed = uint( gl_FragCoord.x ) * uint( 1973 ) + uint( gl_FragCoord.y ) * uint( 9277 ) + uint( frame ) * uint( 26699 );
+    float randNum = randomFloat( seed );
+    vec3 p = vOrigin + ( bounds.x + randNum * stepSize ) * rayDir;
+
+    vec3 lDir = normalize( sunDirection );
+    float cosTheta = dot( rayDir, lDir );
+    float forwardScatter = 0.5 + 0.5 * cosTheta * cosTheta;
+
+    vec4 ac = vec4( 0.0 );
+
+    for ( float i = 0.0; i < steps; i += 1.0 ) {
+        vec3 coord = fract( p + 0.5 + windOffset );
+        float d = texture( map, coord ).r;
+
+        d = smoothstep( threshold - range, threshold + range, d );
+
+        if ( d > 0.001 ) {
+            // Sombra interna y dispersión de luz solar en el volumen
+            float shadowSample = texture( map, fract( coord + lDir * 0.035 ) ).r;
+            float shadow = clamp( 1.0 - ( shadowSample - d ) * 2.8, 0.25, 1.0 );
+
+            vec3 stepColor = mix( baseColor, sunColor, shadow * forwardScatter );
+            float stepAlpha = ( 1.0 - ac.a ) * d * opacity;
+
+            ac.rgb += stepColor * stepAlpha;
+            ac.a += stepAlpha;
+
+            if ( ac.a >= 0.95 ) break;
+        }
+
+        p += rayDir * stepSize;
     }
-    return v
+
+    if ( ac.a <= 0.01 ) discard;
+    color = ac;
+}
+`
+
+/**
+ * Genera una textura 3D real (Data3DTexture) de ruido fractal Perlin para simulación volumétrica
+ */
+function createVolumetricCloud3DTexture() {
+  if (typeof THREE.Data3DTexture !== "function") return null
+
+  const size = 64
+  const data = new Uint8Array(size * size * size)
+
+  const p = [
+    151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180
+  ]
+  const perm = new Uint8Array(512)
+  for (let i = 0; i < 256; i++) {
+    perm[i] = p[i]
+    perm[256 + i] = p[i]
   }
 
-  for (let y = 0; y < 1024; y++) {
-    const ny = (y / 1024) * 5
-    for (let x = 0; x < 1024; x++) {
-      const nx = (x / 1024) * 5
-      const idx = (y * 1024 + x) * 4
+  const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10)
+  const lerp = (t, a, b) => a + t * (b - a)
+  const grad = (hash, x, y, z) => {
+    const h = hash & 15
+    const u = h < 8 ? x : y
+    const v = h < 4 ? y : h === 12 || h === 14 ? x : z
+    return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v)
+  }
 
-      const qx = fbm(nx, ny)
-      const qy = fbm(nx + 3.1, ny + 1.7)
-      let d = fbm(nx + qx * 1.2, ny + qy * 1.2)
+  const perlin3D = (x, y, z) => {
+    const X = Math.floor(x) & 255
+    const Y = Math.floor(y) & 255
+    const Z = Math.floor(z) & 255
+    const fx = x - Math.floor(x)
+    const fy = y - Math.floor(y)
+    const fz = z - Math.floor(z)
+    const u = fade(fx)
+    const v = fade(fy)
+    const w = fade(fz)
+    const A = perm[X] + Y, AA = perm[A] + Z, AB = perm[A + 1] + Z
+    const B = perm[X + 1] + Y, BA = perm[B] + Z, BB = perm[B + 1] + Z
 
-      d = (d - 0.42) / 0.46
-      d = Math.max(0, Math.min(1, d))
-      const alpha = Math.round(d * d * (3 - 2 * d) * 255)
-      const shade = Math.round(238 + d * 17)
+    return lerp(
+      w,
+      lerp(
+        v,
+        lerp(u, grad(perm[AA], fx, fy, fz), grad(perm[BA], fx - 1, fy, fz)),
+        lerp(u, grad(perm[AB], fx, fy - 1, fz), grad(perm[BB], fx - 1, fy - 1, fz))
+      ),
+      lerp(
+        v,
+        lerp(u, grad(perm[AA + 1], fx, fy, fz - 1), grad(perm[BA + 1], fx - 1, fy, fz - 1)),
+        lerp(u, grad(perm[AB + 1], fx, fy - 1, fz - 1), grad(perm[BB + 1], fx - 1, fy - 1, fz - 1))
+      )
+    )
+  }
 
-      data[idx] = shade
-      data[idx + 1] = shade
-      data[idx + 2] = Math.min(255, shade + 4)
-      data[idx + 3] = alpha
+  let idx = 0
+  for (let z = 0; z < size; z++) {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        // Ruido fractal fBm de 3 octavas 3D
+        const n1 = perlin3D(x * 0.06, y * 0.09, z * 0.06)
+        const n2 = perlin3D(x * 0.12, y * 0.18, z * 0.12) * 0.5
+        const n3 = perlin3D(x * 0.24, y * 0.36, z * 0.24) * 0.25
+        let total = (n1 + n2 + n3) / 1.75
+
+        // Atenuación vertical para base plana y copas redondeadas de cúmulos
+        const ny = (y / size) * 2.0 - 1.0
+        const verticalShape = Math.max(0, 1.0 - ny * ny)
+        total = Math.max(0, (total * 0.5 + 0.5) * verticalShape)
+
+        data[idx++] = Math.floor(Math.min(255, total * 255))
+      }
     }
   }
 
-  ctx.putImageData(imgData, 0, 0)
-  const texture = new THREE.CanvasTexture(canvas)
+  const texture = new THREE.Data3DTexture(data, size, size, size)
+  texture.format = THREE.RedFormat
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  texture.unpackAlignment = 1
   texture.wrapS = THREE.RepeatWrapping
   texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(2, 2)
-  texture.generateMipmaps = true
-  texture.colorSpace = THREE.SRGBColorSpace
+  texture.wrapR = THREE.RepeatWrapping
+  texture.needsUpdate = true
   return texture
 }
 
@@ -850,8 +975,7 @@ export default function BlockModel3D({
   const wallsMeshRef = useRef(null)
   const floorMeshRef = useRef(null)
   const cloudsGroupRef = useRef(null)
-  const cloudsMat1Ref = useRef(null)
-  const cloudsMat2Ref = useRef(null)
+  const cloudsMatRef = useRef(null)
   const cloudsTextureRef = useRef(null)
   const sunLightRef = useRef(null)
   const hemiLightRef = useRef(null)
@@ -1133,48 +1257,44 @@ export default function BlockModel3D({
     blockGroup.add(pinsGroup)
     pinsGroupRef.current = pinsGroup
 
-    // --- F. Capa de Nubes Realistas ---
+    // --- F. Capa de Nubes Volumétricas 3D Reales (Raymarching en volumen 3D con dispersión solar) ---
     const cloudsGroup = new THREE.Group()
     cloudsGroup.visible = false
     blockGroup.add(cloudsGroup)
     cloudsGroupRef.current = cloudsGroup
 
-    const cloudTex = createRealisticCloudTexture()
+    const cloudTex = createVolumetricCloud3DTexture()
     cloudsTextureRef.current = cloudTex
 
     if (cloudTex) {
-      const cloudGeom1 = new THREE.PlaneGeometry(W * 1.5, D * 1.5)
-      cloudGeom1.rotateX(-Math.PI / 2)
-      const cloudMat1 = new THREE.MeshStandardMaterial({
-        map: cloudTex,
+      const cloudMat = new THREE.RawShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        uniforms: {
+          map: { value: cloudTex },
+          cameraPos: { value: new THREE.Vector3() },
+          baseColor: { value: new THREE.Color(0x8fa3b8) },
+          sunColor: { value: new THREE.Color(0xfff8ee) },
+          sunDirection: { value: new THREE.Vector3(0.5, 0.8, 0.5).normalize() },
+          threshold: { value: 0.35 },
+          opacity: { value: 0.45 },
+          range: { value: 0.12 },
+          steps: { value: 48.0 },
+          windOffset: { value: new THREE.Vector3(0, 0, 0) },
+          frame: { value: 0 },
+        },
+        vertexShader: VOLUMETRIC_CLOUD_VERTEX_SHADER,
+        fragmentShader: VOLUMETRIC_CLOUD_FRAGMENT_SHADER,
+        side: THREE.BackSide,
         transparent: true,
-        opacity: 0.6,
-        roughness: 0.95,
-        metalness: 0.0,
         depthWrite: false,
-        side: THREE.DoubleSide,
       })
-      const cloudMesh1 = new THREE.Mesh(cloudGeom1, cloudMat1)
-      cloudsGroup.add(cloudMesh1)
-      cloudsMat1Ref.current = cloudMat1
+      cloudsMatRef.current = cloudMat
 
-      // Capa de nubes secundaria con desfase para relieve volumétrico
-      const cloudGeom2 = new THREE.PlaneGeometry(W * 1.65, D * 1.65)
-      cloudGeom2.rotateX(-Math.PI / 2)
-      const cloudMat2 = new THREE.MeshStandardMaterial({
-        map: cloudTex,
-        transparent: true,
-        opacity: 0.3,
-        roughness: 0.98,
-        metalness: 0.0,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      })
-      const cloudMesh2 = new THREE.Mesh(cloudGeom2, cloudMat2)
-      cloudMesh2.position.y = 0.16
-      cloudMesh2.rotation.y = Math.PI / 6
-      cloudsGroup.add(cloudMesh2)
-      cloudsMat2Ref.current = cloudMat2
+      // Malla de volumen 3D: Una losa tridimensional envolvente sobre el relieve
+      const cloudGeom = new THREE.BoxGeometry(1, 1, 1)
+      const cloudMesh = new THREE.Mesh(cloudGeom, cloudMat)
+      cloudMesh.scale.set(W * 1.35, Math.max(0.7, (W + D) * 0.08), D * 1.35)
+      cloudsGroup.add(cloudMesh)
     }
 
     const animate = () => {
@@ -1183,9 +1303,12 @@ export default function BlockModel3D({
       if (autoRotateRef.current && blockGroupRef.current) {
         blockGroupRef.current.rotation.y += 0.0035
       }
-      if (cloudsEnabledRef.current && cloudsTextureRef.current) {
-        cloudsTextureRef.current.offset.x += 0.00018
-        cloudsTextureRef.current.offset.y += 0.00008
+      if (cloudsEnabledRef.current && cloudsMatRef.current && cameraRef.current) {
+        cloudsMatRef.current.uniforms.cameraPos.value.copy(cameraRef.current.position)
+        // Desplazamiento procedural de viento dentro del volumen 3D
+        cloudsMatRef.current.uniforms.windOffset.value.x += 0.0003
+        cloudsMatRef.current.uniforms.windOffset.value.z += 0.00015
+        cloudsMatRef.current.uniforms.frame.value++
       }
       renderer.render(scene, camera)
     }
@@ -1219,8 +1342,7 @@ export default function BlockModel3D({
       renderer.dispose()
       floorMeshRef.current = null
       cloudsGroupRef.current = null
-      cloudsMat1Ref.current = null
-      cloudsMat2Ref.current = null
+      cloudsMatRef.current = null
       cloudsTextureRef.current = null
       topMeshRef.current = null
       wallsMeshRef.current = null
@@ -1442,16 +1564,16 @@ export default function BlockModel3D({
     }
   }, [wireframe])
 
-  // Actualización reactiva de visibilidad, altura y densidad de nubes
+  // Actualización reactiva de visibilidad, altura y densidad de nubes volumétricas 3D
   useEffect(() => {
     if (!cloudsGroupRef.current) return
     cloudsGroupRef.current.visible = cloudsEnabled
 
-    if (cloudsMat1Ref.current) {
-      cloudsMat1Ref.current.opacity = Math.max(0.08, Math.min(0.95, cloudDensity * 0.85))
-    }
-    if (cloudsMat2Ref.current) {
-      cloudsMat2Ref.current.opacity = Math.max(0.04, Math.min(0.6, cloudDensity * 0.45))
+    if (cloudsMatRef.current) {
+      // Mapeo adaptativo de densidad: controla el umbral de corte y la absorción volumétrica Beer-Lambert
+      const density = Math.max(0.1, Math.min(1.0, cloudDensity))
+      cloudsMatRef.current.uniforms.threshold.value = 0.55 - density * 0.35
+      cloudsMatRef.current.uniforms.opacity.value = 0.2 + density * 0.5
     }
 
     const minElev = elevationMinRef.current
@@ -1459,7 +1581,7 @@ export default function BlockModel3D({
     const summitY = computeHeight(maxElev, minElev, exaggeration)
     const baseRelief = Math.max(0.6, summitY)
 
-    // Posicionamiento de altura de las nubes en función del relieve y el slider
+    // Posicionamiento de altura del volumen 3D en función del relieve y el slider
     cloudsGroupRef.current.position.y = baseRelief * cloudHeightRatio
   }, [cloudsEnabled, cloudDensity, cloudHeightRatio, exaggeration, computeHeight])
 
@@ -1496,6 +1618,24 @@ export default function BlockModel3D({
       hemiLightRef.current.color.setHex(0xf0f9ff)
       hemiLightRef.current.groundColor.setHex(0x52525b)
       hemiLightRef.current.intensity = 0.85
+    }
+
+    // Actualización de dispersión y sombra solar en las nubes volumétricas 3D
+    if (cloudsMatRef.current) {
+      cloudsMatRef.current.uniforms.sunDirection.value
+        .set(cosAngle, sunHeight / dist, sinAngle)
+        .normalize()
+
+      if (sinAngle < -0.3) {
+        cloudsMatRef.current.uniforms.sunColor.value.setHex(0xffaa66)
+        cloudsMatRef.current.uniforms.baseColor.value.setHex(0x667688)
+      } else if (sinAngle > 0.3) {
+        cloudsMatRef.current.uniforms.sunColor.value.setHex(0xffedd5)
+        cloudsMatRef.current.uniforms.baseColor.value.setHex(0x7c91a6)
+      } else {
+        cloudsMatRef.current.uniforms.sunColor.value.setHex(0xfffef7)
+        cloudsMatRef.current.uniforms.baseColor.value.setHex(0x94a8bc)
+      }
     }
   }, [sunAngle])
 
