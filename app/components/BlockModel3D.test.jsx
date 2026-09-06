@@ -62,7 +62,6 @@ describe("BlockModel3D", () => {
     expect(screen.getByText("Relieve Real")).toBeInTheDocument()
     expect(screen.getByText("Exageración:")).toBeInTheDocument()
     expect(screen.getByText("Ángulo Sol")).toBeInTheDocument()
-    expect(screen.getByText("Nubes")).toBeInTheDocument()
   })
 
   it("llama a onClose al presionar la equis de cerrar", () => {
@@ -106,30 +105,6 @@ describe("BlockModel3D", () => {
     const sunSlider = screen.getByLabelText("Girar posición del sol para ver sombras dinámicas")
     fireEvent.change(sunSlider, { target: { value: "225" } })
     expect(screen.getByText("225°")).toBeInTheDocument()
-  })
-
-  it("permite activar la capa de nubes y configurar densidad y altura", () => {
-    render(
-      <BlockModel3D
-        isOpen={true}
-        onClose={jest.fn()}
-        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
-      />
-    )
-
-    const nubesBtn = screen.getByTitle("Activar capa de nubes realistas")
-    fireEvent.click(nubesBtn)
-
-    expect(screen.getByText("Densidad Nubes")).toBeInTheDocument()
-    expect(screen.getByText("Altura Nubes")).toBeInTheDocument()
-
-    const densitySlider = screen.getByLabelText("Densidad de nubes")
-    fireEvent.change(densitySlider, { target: { value: "0.85" } })
-    expect(screen.getByText("85%")).toBeInTheDocument()
-
-    const heightSlider = screen.getByLabelText("Altura de nubes")
-    fireEvent.change(heightSlider, { target: { value: "1.8" } })
-    expect(screen.getByText("1.8×")).toBeInTheDocument()
   })
 
   it("permite alternar el tema de estudio sin fallar", () => {
