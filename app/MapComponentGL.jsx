@@ -101,6 +101,7 @@ export default function MapComponentGL({
   panelOpen = false,
   blendMode = "multiply",
   onBlendModeChange: _onBlendModeChange,
+  onBlockModelChange,
 }) {
   // El contenedor se pasa por referencia y no por id. Durante la migración
   // convivían los dos visores y el de Leaflet ya ocupaba el id "map": MapLibre
@@ -118,6 +119,10 @@ export default function MapComponentGL({
   const [splitRatio, setSplitRatio] = useState(0.5)
   const [isDraggingSplit, setIsDraggingSplit] = useState(false)
   const splitContainerRef = useRef(null)
+
+  useEffect(() => {
+    onBlockModelChange?.(blockModelOpen)
+  }, [blockModelOpen, onBlockModelChange])
 
   const [selectedRectangle, setSelectedRectangle] = useState(null)
   const [isDrawingBox, setIsDrawingBox] = useState(false)
@@ -1383,7 +1388,7 @@ export default function MapComponentGL({
           onPointerDown={handleSplitPointerDown}
           onPointerMove={handleSplitPointerMove}
           onPointerUp={handleSplitPointerUp}
-          className="relative w-2 bg-zinc-950 border-x border-zinc-800 hover:border-emerald-500 cursor-col-resize flex items-center justify-center transition-colors z-30 select-none touch-none group shrink-0"
+          className="hidden md:flex relative w-2 bg-zinc-950 border-x border-zinc-800 hover:border-emerald-500 cursor-col-resize items-center justify-center transition-colors z-30 select-none touch-none group shrink-0"
           title="Arrastrar para ajustar la división de pantalla"
         >
           <div className="absolute w-5 h-10 rounded-full bg-zinc-800 border border-zinc-700 group-hover:border-emerald-500 flex items-center justify-center shadow-lg transition-colors">
@@ -1395,8 +1400,8 @@ export default function MapComponentGL({
       {/* Vista Bloque 3D del Terreno Derecha */}
       {blockModelOpen && (
         <div
-          className="relative h-full overflow-hidden shrink-0"
-          style={{ width: `${(1 - splitRatio) * 100}%` }}
+          className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto md:h-full overflow-hidden shrink-0 w-full"
+          style={typeof window !== "undefined" && window.innerWidth >= 768 ? { width: `${(1 - splitRatio) * 100}%` } : undefined}
         >
           <BlockModel3D
             isOpen={blockModelOpen}

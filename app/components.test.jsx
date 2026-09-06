@@ -258,5 +258,19 @@ describe("panel de capas por áreas", () => {
     expect(mobileNav).toHaveClass("flex")
     expect(mobileNav).toHaveClass("md:hidden")
   })
+
+  it("permite hacer clic en el expediente activo para centrar el mapa", async () => {
+    const user = userEvent.setup()
+    render(<Component />)
+
+    await typeInSearch(user, "ABC")
+    await screen.findByRole("listbox")
+    await user.click(await screen.findByText("ABC-123"))
+
+    // Los botones (escritorio y móvil) permiten centrar el mapa
+    const centerBtns = screen.getAllByRole("button", { name: /Centrar mapa en expediente ABC-123/i })
+    expect(centerBtns.length).toBeGreaterThanOrEqual(1)
+    await user.click(centerBtns[0])
+  })
 })
 
