@@ -35,6 +35,7 @@ import { ExpedientSearch, queryExpedientSuggestions } from "./components/Expedie
 import { OfflineIndicator } from "./components/OfflineIndicator"
 import { MobileBottomBar } from "./components/MobileBottomBar"
 import { MobileBottomSheet } from "./components/MobileBottomSheet"
+import { MobileStorageManager } from "./components/MobileStorageManager"
 import { matchesFilters } from "./utils/layerFilters"
 import { readPreferences, writePreferences } from "./utils/preferences"
 import { debounce } from "@/lib/utils"
@@ -986,6 +987,9 @@ export default function Component() {
                 </button>
               </div>
             </div>
+
+            {/* 4. Aplicación Móvil y Gestión de Memoria */}
+            <MobileStorageManager />
           </div>
         )}
 
