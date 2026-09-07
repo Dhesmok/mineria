@@ -760,7 +760,23 @@ export default function MapComponentGL({
         attributionControl: { compact: true },
       })
 
-      map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
+      // Asegurar que MapLibre dimensione su cámara interna antes de enganchar controles
+      try {
+        map.resize()
+      } catch {}
+
+      const agregarEscala = () => {
+        try {
+          map.resize()
+          map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
+        } catch {}
+      }
+
+      try {
+        map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
+      } catch {
+        map.once("styledata", agregarEscala)
+      }
 
       mapRef.current = map
       montado.mapa = map

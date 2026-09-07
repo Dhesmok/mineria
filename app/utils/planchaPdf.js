@@ -110,13 +110,17 @@ const respirar = (signal) =>
 
 /** Lo más ancho que la tarjeta acepta como textura, sin pasarse del tope. */
 export const anchoMaximoDeTextura = (max = ANCHO_MAXIMO) => {
+  // En pantallas móviles (< 768px), limitar a 2048 px para prevenir desbordamiento de memoria GPU (VRAM)
+  const limiteDispositivo = typeof window !== "undefined" && window.innerWidth < 768 ? 2048 : max
   try {
     const lienzo = document.createElement("canvas")
     const gl = lienzo.getContext("webgl2") ?? lienzo.getContext("webgl")
     const limite = gl?.getParameter(gl.MAX_TEXTURE_SIZE)
-    return Number.isFinite(limite) ? Math.min(limite, max) : max
+    // Liberar inmediatamente el contexto auxiliar para no agotar los contextos WebGL permitidos por el móvil
+    gl?.getExtension("WEBGL_lose_context")?.loseContext()
+    return Number.isFinite(limite) ? Math.min(limite, limiteDispositivo) : limiteDispositivo
   } catch {
-    return max
+    return limiteDispositivo
   }
 }
 
