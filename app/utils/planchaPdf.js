@@ -37,7 +37,65 @@ import { georeferencePlancha } from "./planchaGeo"
  * el ajuste de la cuadrícula queda con un residuo de tres décimas de píxel. Subir
  * de aquí no mejora el ajuste y multiplica la memoria por el cuadrado.
  */
-const ANCHO_MEDIDA = 3000
+export const ANCHO_MEDIDA = 3000
+
+/**
+ * Presupuesto de resolución para la pasada de medida.
+ *
+ * En escritorio 3000 px da una resolución óptima. En móviles (< 768 px) se
+ * limita a 1600 px y un tope estricto de 2 Megapíxeles para evitar que el proceso
+ * GPU/Skia de Android colapse por memoria (OOM) y pierda el contexto del lienzo.
+ */
+export const calcularEscalaMedida = (tamano, { intento = 1 } = {}) => {
+  const esMovil = typeof window !== "undefined" && window.innerWidth < 768
+  const anchoObjetivo = esMovil ? (intento > 1 ? 1200 : 1600) : ANCHO_MEDIDA
+  const maxPixeles = esMovil ? (intento > 1 ? 1440000 : 2000000) : 7500000
+
+  // Validar dominio de entrada numérico y finito estrictamente positivo sin coerción de tipos
+  const w = tamano?.width
+  const h = tamano?.height
+  if (
+    typeof w !== "number" ||
+    !Number.isFinite(w) ||
+    w <= 0 ||
+    typeof h !== "number" ||
+    !Number.isFinite(h) ||
+    h <= 0
+  ) {
+    return 0
+  }
+
+  const escalaPorDimension = Math.min(2, anchoObjetivo / Math.max(w, h))
+  // Descomponer raíces para prevenir desbordamiento a Infinity en w * h (ej. dimensiones extremas)
+  const escalaPorArea = Math.sqrt(maxPixeles) / (Math.sqrt(w) * Math.sqrt(h))
+  let escala = Math.min(escalaPorDimension, escalaPorArea)
+
+  // Presupuesto estricto garantizado: comprobar sobre las dimensiones efectivas
+  // del canvas (Math.max(1, Math.round(...))) sin ningún umbral inferior arbitrario
+  const dimEfectivas = (s) => ({
+    ancho: Math.max(1, Math.round(w * s)),
+    alto: Math.max(1, Math.round(h * s)),
+  })
+
+  while (escala > 0 && Number.isFinite(escala)) {
+    const { ancho, alto } = dimEfectivas(escala)
+    if (ancho <= anchoObjetivo && ancho * alto <= maxPixeles) break
+    const factorExceso = Math.max(ancho / anchoObjetivo, Math.sqrt((ancho * alto) / maxPixeles))
+    const siguiente = escala / Math.max(1.0001, factorExceso)
+    if (siguiente >= escala) {
+      escala *= 0.99
+    } else {
+      escala = siguiente
+    }
+  }
+
+  // Garantía final: verificar que el retorno jamás sea 1 si 1 excede el presupuesto
+  if (!Number.isFinite(escala) || escala <= 0 || dimEfectivas(escala).ancho * dimEfectivas(escala).alto > maxPixeles) {
+    escala = Math.min(anchoObjetivo / w, Math.sqrt(maxPixeles) / (Math.sqrt(w) * Math.sqrt(h)))
+  }
+
+  return escala
+}
 
 /**
  * Y cuántos como mucho para la imagen que se ve.
@@ -146,7 +204,118 @@ const luminancia = (datos, total) => {
  * @param {AbortSignal} [opciones.signal] para poder rendirse a medio camino
  * @returns {Promise<{ok:true, canvas:HTMLCanvasElement, ...}|{ok:false, reason:string}>}
  */
+/**
+ * Rasteriza la página a la escala indicada y extrae su luminancia para medición.
+ *
+ * Libera el canvas inmediatamente tras extraer los píxeles y valida que el
+ * renderizado no haya quedado vacío ni perdido por colapso del proceso gráfico.
+ */
+/**
+ * Rasteriza la página a la escala indicada y extrae su luminancia para medición.
+ *
+ * Libera el canvas inmediatamente tras extraer los píxeles (incluso ante errores)
+ * y valida que el renderizado no haya quedado vacío ni transparente por colapso del proceso gráfico.
+ */
+export const rasterizarParaMedir = async (pagina, escala, signal) => {
+  if (signal?.aborted) throw cancelado()
+  if (!Number.isFinite(escala) || escala <= 0) {
+    throw Object.assign(new Error("Escala de rasterización no válida."), { code: "INVALID_SCALE" })
+  }
+
+  const vista = pagina.getViewport({ scale: escala })
+  const ancho = Math.max(1, Math.round(vista.width))
+  const alto = Math.max(1, Math.round(vista.height))
+
+  const lienzo = document.createElement("canvas")
+  lienzo.width = ancho
+  lienzo.height = alto
+
+  try {
+    const pincel = lienzo.getContext("2d", { willReadFrequently: true })
+    if (!pincel || pincel.isContextLost?.()) {
+      throw Object.assign(new Error("No se pudo inicializar el lienzo 2D en este dispositivo."), {
+        code: "CONTEXT_LOST",
+      })
+    }
+
+    // Fondo blanco: un PDF no lo trae, y sobre el lienzo transparente todas las
+    // comprobaciones de «más oscuro que sus vecinos» darían lo mismo.
+    pincel.fillStyle = "#ffffff"
+    pincel.fillRect(0, 0, ancho, alto)
+
+    let renderTask
+    let onAbort
+    try {
+      if (signal) {
+        onAbort = () => {
+          try {
+            renderTask?.cancel()
+          } catch {}
+        }
+        signal.addEventListener("abort", onAbort, { once: true })
+      }
+
+      renderTask = pagina.render({ canvasContext: pincel, viewport: vista })
+      await renderTask.promise
+    } catch (err) {
+      if (signal?.aborted || err?.name === "RenderingCancelledException") {
+        throw cancelado()
+      }
+      throw err
+    } finally {
+      if (signal && onAbort) signal.removeEventListener("abort", onAbort)
+    }
+
+    if (signal?.aborted) throw cancelado()
+
+    if (pincel.isContextLost?.()) {
+      throw Object.assign(new Error("El contexto gráfico 2D se perdió durante el renderizado."), {
+        code: "CONTEXT_LOST",
+      })
+    }
+
+    const imagen = pincel.getImageData(0, 0, ancho, alto)
+    const total = ancho * alto
+    const data = imagen.data
+
+    // Verificación de integridad del raster: comprobar que no sea una imagen
+    // vacía, transparente o descartada por el compositor en móviles.
+    let trazosOscuros = 0
+    let pixelesOpacos = 0
+    const pasoMuestreo = Math.max(1, Math.floor(total / 4000))
+    const totalMuestras = Math.floor(total / pasoMuestreo)
+    for (let i = 0; i < total; i += pasoMuestreo) {
+      const p = i * 4
+      const alfa = data[p + 3]
+      if (alfa > 128) {
+        pixelesOpacos += 1
+        // Trazos oscuros del mapa sobre el fondo blanco
+        if (data[p] < 235 || data[p + 1] < 235 || data[p + 2] < 235) {
+          trazosOscuros += 1
+        }
+      }
+    }
+
+    // Una lectura con ceros (transparente) o completamente blanca (sin renderizar)
+    // delata que el compositor gráfico del dispositivo falló silenciosamente.
+    if (pixelesOpacos < totalMuestras * 0.5 || trazosOscuros === 0) {
+      throw Object.assign(
+        new Error("El lienzo rasterizado quedó vacío, transparente o sin trazos visibles."),
+        { code: "RASTER_EMPTY" },
+      )
+    }
+
+    const gris = luminancia(data, total)
+    return { gris, vista, escala, ancho, alto }
+  } finally {
+    // Garantizar liberación de memoria tanto en éxito como en fallo o cancelación
+    lienzo.width = 1
+    lienzo.height = 1
+  }
+}
+
 export const prepararPlancha = async (archivo, cerca, { signal } = {}) => {
+  if (signal?.aborted) throw cancelado()
   const reloj = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
   const tiempos = {}
   const pdf = await cargarPdfjs()
@@ -156,22 +325,47 @@ export const prepararPlancha = async (archivo, cerca, { signal } = {}) => {
     await respirar(signal)
     const inicioMedida = reloj()
     const tamano = pagina.getViewport({ scale: 1 })
-    const escalaMedida = Math.min(2, ANCHO_MEDIDA / Math.max(tamano.width, tamano.height))
-    const vistaMedida = pagina.getViewport({ scale: escalaMedida })
+    const esMovil = typeof window !== "undefined" && window.innerWidth < 768
 
-    const lienzo = document.createElement("canvas")
-    lienzo.width = Math.round(vistaMedida.width)
-    lienzo.height = Math.round(vistaMedida.height)
-    const pincel = lienzo.getContext("2d", { willReadFrequently: true })
-    // Fondo blanco: un PDF no lo trae, y sobre el lienzo transparente todas las
-    // comprobaciones de «más oscuro que sus vecinos» darían lo mismo.
-    pincel.fillStyle = "#ffffff"
-    pincel.fillRect(0, 0, lienzo.width, lienzo.height)
-    await pagina.render({ canvasContext: pincel, viewport: vistaMedida }).promise
-    await respirar(signal)
+    const escala1 = calcularEscalaMedida(tamano, { intento: 1 })
+    if (escala1 <= 0) {
+      return {
+        ok: false,
+        reason: "lienzo-fallido",
+        detail: "Las dimensiones del documento no son válidas para rasterización.",
+      }
+    }
 
-    const imagen = pincel.getImageData(0, 0, lienzo.width, lienzo.height)
-    const gris = luminancia(imagen.data, lienzo.width * lienzo.height)
+    // Intentar rasterizar con el presupuesto adaptativo (1600 px en móvil / 3000 px en escritorio).
+    // Solo si es móvil y ocurrió un fallo recuperable de contexto/memoria, reintentar a 1200 px.
+    let raster
+    try {
+      raster = await rasterizarParaMedir(pagina, escala1, signal)
+    } catch (primerFallo) {
+      if (primerFallo?.name === "AbortError" || signal?.aborted) throw primerFallo
+      const esFalloRecuperable =
+        primerFallo?.code === "CONTEXT_LOST" || primerFallo?.code === "RASTER_EMPTY"
+      if (esMovil && esFalloRecuperable) {
+        console.warn("Reintentando rasterizar plancha a resolución de emergencia...", primerFallo?.message)
+        await respirar(signal)
+        try {
+          raster = await rasterizarParaMedir(pagina, calcularEscalaMedida(tamano, { intento: 2 }), signal)
+        } catch (segundoFallo) {
+          if (segundoFallo?.name === "AbortError" || signal?.aborted) throw segundoFallo
+          return {
+            ok: false,
+            reason: "lienzo-fallido",
+            detail: segundoFallo?.message || "No se pudo procesar la imagen de la plancha",
+          }
+        }
+      } else {
+        return {
+          ok: false,
+          reason: "lienzo-fallido",
+          detail: primerFallo?.message || "No se pudo procesar la imagen de la plancha",
+        }
+      }
+    }
     tiempos.medida = Math.round(reloj() - inicioMedida)
     await respirar(signal)
 
@@ -183,29 +377,24 @@ export const prepararPlancha = async (archivo, cerca, { signal } = {}) => {
         // arriba— y el lienzo las cuenta al revés. `convertToViewportPoint` hace
         // la conversión con la misma matriz que usó para dibujar, que es la
         // única forma de que texto y píxeles hablen del mismo sitio.
-        const [x, y] = vistaMedida.convertToViewportPoint(item.transform[4], item.transform[5])
+        const [x, y] = raster.vista.convertToViewportPoint(item.transform[4], item.transform[5])
         return { text: item.str, x, y }
       })
 
     const inicioGeo = reloj()
     const geo = georeferencePlancha({
       items,
-      gray: gris,
-      width: lienzo.width,
-      height: lienzo.height,
+      gray: raster.gris,
+      width: raster.ancho,
+      height: raster.alto,
       cerca,
     })
     tiempos.geo = Math.round(reloj() - inicioGeo)
-    // El lienzo de medida ya no hace falta: se le quita el tamaño para que el
-    // navegador suelte los megas antes de pedirle el siguiente, que es más
-    // grande. Sin esto los dos conviven un instante.
-    lienzo.width = 1
-    lienzo.height = 1
     if (!geo.ok) return { ...geo, tiempos }
 
     await respirar(signal)
     const inicioRecorte = reloj()
-    const recorte = await recortarMapa(pagina, geo, escalaMedida)
+    const recorte = await recortarMapa(pagina, geo, raster.escala, { signal })
     tiempos.recorte = Math.round(reloj() - inicioRecorte)
     return { ...geo, canvas: recorte.canvas, escala: recorte.escala, tiempos }
   } finally {
@@ -223,7 +412,9 @@ export const prepararPlancha = async (archivo, cerca, { signal } = {}) => {
  * marco caiga en el origen del lienzo. Así el lienzo mide lo que el recorte y no
  * lo que la hoja.
  */
-const recortarMapa = async (pagina, geo, escalaMedida) => {
+export const recortarMapa = async (pagina, geo, escalaMedida, { signal } = {}) => {
+  if (signal?.aborted) throw cancelado()
+
   const { left, right, top, bottom } = geo.frame
   const anchoMedida = right - left
   const altoMedida = bottom - top
@@ -238,14 +429,59 @@ const recortarMapa = async (pagina, geo, escalaMedida) => {
   const lienzo = document.createElement("canvas")
   lienzo.width = Math.max(1, Math.round(anchoMedida * proporcion))
   lienzo.height = Math.max(1, Math.round(altoMedida * proporcion))
-  const pincel = lienzo.getContext("2d")
-  pincel.fillStyle = "#ffffff"
-  pincel.fillRect(0, 0, lienzo.width, lienzo.height)
-  await pagina.render({
-    canvasContext: pincel,
-    viewport: vista,
-    transform: [1, 0, 0, 1, -left * proporcion, -top * proporcion],
-  }).promise
 
-  return { canvas: lienzo, escala }
+  let exitoso = false
+  try {
+    const pincel = lienzo.getContext("2d")
+    if (!pincel || pincel.isContextLost?.()) {
+      throw Object.assign(new Error("No se pudo inicializar el lienzo para recortar el mapa."), {
+        code: "CONTEXT_LOST",
+      })
+    }
+    pincel.fillStyle = "#ffffff"
+    pincel.fillRect(0, 0, lienzo.width, lienzo.height)
+
+    let renderTask
+    let onAbort
+    try {
+      if (signal) {
+        onAbort = () => {
+          try {
+            renderTask?.cancel()
+          } catch {}
+        }
+        signal.addEventListener("abort", onAbort, { once: true })
+      }
+
+      renderTask = pagina.render({
+        canvasContext: pincel,
+        viewport: vista,
+        transform: [1, 0, 0, 1, -left * proporcion, -top * proporcion],
+      })
+      await renderTask.promise
+    } catch (err) {
+      if (signal?.aborted || err?.name === "RenderingCancelledException") {
+        throw cancelado()
+      }
+      throw err
+    } finally {
+      if (signal && onAbort) signal.removeEventListener("abort", onAbort)
+    }
+
+    if (signal?.aborted) throw cancelado()
+
+    if (pincel.isContextLost?.()) {
+      throw Object.assign(new Error("Contexto gráfico 2D perdido durante el recorte del mapa."), {
+        code: "CONTEXT_LOST",
+      })
+    }
+
+    exitoso = true
+    return { canvas: lienzo, escala }
+  } finally {
+    if (!exitoso) {
+      lienzo.width = 1
+      lienzo.height = 1
+    }
+  }
 }

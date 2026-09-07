@@ -46,6 +46,7 @@ const MENSAJES = {
   "sin-ajuste": "Se leyeron los rótulos pero no se encontraron sus líneas sobre el mapa.",
   "ejes-discordantes": "Los dos ejes de la cuadrícula no concuerdan: el ajuste no es de fiar.",
   "origen-desconocido": "La cuadrícula no cae cerca de esta plancha en ninguno de los orígenes conocidos.",
+  "lienzo-fallido": "El dispositivo no pudo procesar la imagen del mapa.",
 }
 
 /**
@@ -72,6 +73,32 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
     map.setLayoutProperty(PLANCHA_LAYER_ID, "visibility", plancha?.canvas ? "visible" : "none")
     map.setPaintProperty(PLANCHA_LAYER_ID, "raster-opacity", opacity)
   }, [mapRef, mapInstance, plancha, opacity])
+
+  /** Salvaguarda ante pérdida de contexto WebGL en móviles: solicitar restauración y reasociar la plancha. */
+  useEffect(() => {
+    const map = mapRef.current
+    const canvas = map?.getCanvas?.()
+    if (!canvas?.addEventListener) return
+
+    const alPerderContexto = (evento) => {
+      evento.preventDefault?.()
+      console.warn("Se perdió el contexto WebGL del mapa. Solicitando restauración...")
+    }
+    const alRestaurarContexto = () => {
+      console.info("Contexto WebGL restaurado exitosamente en el mapa.")
+      const fuente = map?.getSource?.(PLANCHA_SOURCE_ID)
+      if (fuente?.updateImage && plancha?.canvas && plancha?.corners) {
+        fuente.updateImage({ image: plancha.canvas, coordinates: plancha.corners })
+      }
+    }
+
+    canvas.addEventListener("webglcontextlost", alPerderContexto)
+    canvas.addEventListener("webglcontextrestored", alRestaurarContexto)
+    return () => {
+      canvas.removeEventListener("webglcontextlost", alPerderContexto)
+      canvas.removeEventListener("webglcontextrestored", alRestaurarContexto)
+    }
+  }, [mapRef, mapInstance, plancha])
 
   const quitar = useCallback(() => {
     cancelar.current?.abort()
