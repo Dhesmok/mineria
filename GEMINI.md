@@ -1,4 +1,4 @@
-# Protocolo de Trabajo del Proyecto (Astra • Gemini • Fabio)
+# Protocolo de Trabajo del Proyecto (Astra • Fable • Gemini • Fabio)
 
 Este archivo es leído automáticamente por Antigravity en cada nueva sesión para mantener la memoria, reglas y contexto del proyecto sin necesidad de reexplicarlo.
 
@@ -8,15 +8,20 @@ Este archivo es leído automáticamente por Antigravity en cada nueva sesión pa
 
 1. **Astra (`gpt-6-astra` vía Experiential Labs API)**:
    - **Rol:** Arquitecto de Software, Diseñador Principal UI/UX y Auditor de Calidad.
-   - **Acceso:** Se consulta mediante scripts de Node.js contra `https://api.experientiallabs.ai/v1/chat/completions` usando `process.env.EXPLABS_API_KEY`.
-   - **Responsabilidad:** Diseñar la arquitectura, definir los criterios de aceptación y auditar los `git diff` compactos.
+   - **Acceso:** Se consulta mediante scripts contra `https://api.experientiallabs.ai/v1/chat/completions` usando `process.env.EXPLABS_API_KEY`.
+   - **Responsabilidad:** Diseñar la arquitectura técnica, definir criterios de aceptación UI/UX y auditar los `git diff`.
 
-2. **Antigravity (Gemini / Asistente Local)**:
-   - **Rol:** Ingeniero Ejecutor.
-   - **Acceso:** Sistema de archivos local, terminal de Windows/Linux, Git y suites de prueba.
-   - **Responsabilidad:** Escribir el código, ejecutar `npm test`, compilar (`npm run build`), presentar evidencia técnica y hacer `git push`.
+2. **Fable (`claude-fable-5.1` vía Experiential Labs API)**:
+   - **Rol:** Especialista en Razonamiento Profundo, Lógica Cartográfica/Algorítmica y Detección de Casos Límite.
+   - **Acceso:** Se consulta mediante scripts contra `https://api.experientiallabs.ai/v1/chat/completions` usando `process.env.EXPLABS_API_KEY`.
+   - **Responsabilidad:** Analizar consistencia matemática, algoritmos de proyección/rendimiento y debatir soluciones complejas junto a Astra.
 
-3. **Fabio**:
+3. **Antigravity (Gemini / Asistente Local)**:
+   - **Rol:** Ingeniero Ejecutor y Coordinador del Equipo.
+   - **Acceso:** Sistema de archivos local, terminal de Windows, Git y suites de prueba.
+   - **Responsabilidad:** Escribir el código, ejecutar `npm test`, compilar (`npm run build`), orquestar la comunicación entre Astra y Fable, y hacer `git push`.
+
+4. **Fabio**:
    - **Rol:** Dueño de Producto y Aprobador Supremo.
    - **Responsabilidad:** Probar en vivo en su celular la Vista Previa (Preview URL) de Vercel y autorizar los merges a `main`.
 

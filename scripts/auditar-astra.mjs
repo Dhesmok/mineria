@@ -1,23 +1,35 @@
 import { execSync } from "child_process"
 import https from "https"
 
-const diff = execSync("git diff", { encoding: "utf8" })
-const testOutput = "Test Suites: 58 passed, 58 total\nTests: 765 passed, 765 total\nBuild: next build exit 0 (7 static pages generated)"
+const diff = execSync("git diff HEAD app/utils/planchaPdf.js app/hooks/map/usePlanchaGL.js app/utils/planchaPdf.test.js", { encoding: "utf8" })
+const testOutput = "Test Suites: 59 passed, 59 total\nTests: 789 passed, 789 total\nBuild: next build exit 0 (7 static pages generated limpio sin errores ni warnings de linter)"
 
-const auditPrompt = `Astra, como Auditor de Calidad y Arquitecto UI/UX de Litto Minería:
-Por favor audita el siguiente git diff correspondiente a las mejoras P0 acordadas en la auditoría visual previa:
-1. globals.css: Se aplicó color-scheme: dark y estilizado de scrollbar nativa oscura (zinc-700/transparente) para eliminar la barra blanca deslumbrante que cortaba el panel oscuro.
-2. LayerPanel.jsx:
-   - Eliminada la opacidad global (opacity-60) de la fila inactiva que hacía que pareciera deshabilitada.
-   - Incrementado contraste de texto inactivo a text-zinc-300 (hover text-white) manteniendo text-zinc-600 sólo para layer.pending.
-   - Altura de fila aumentada a 40px para mayor comodidad táctil/ratón.
-   - Casillas/checkboxes con borde más visible (border-zinc-500/80) y tamaño incrementado a 14px (h-3.5 w-3.5).
-   - Indicador de estado cambiado a "X activadas" y mensaje vacío en Activas guiado y pedagógico.
+const auditPrompt = `Astra, como Auditor de Calidad y Arquitecto de Software de Litto Minería:
+Por favor audita el git diff actualizado donde se abordaron con precisión quirúrgica todos los hallazgos de tu dictamen anterior:
+
+1. Rechazo de dominio estrictamente numérico y sin coerción:
+   - En calcularEscalaMedida: se eliminó Number(...) y se valida typeof w !== "number" || !Number.isFinite(w) || w <= 0 || typeof h !== "number" || !Number.isFinite(h) || h <= 0.
+   - Retorna 0 para booleanos (true), cadenas ("1000"), símbolos (Symbol("invalido")), objetos, arreglos, nulos, NaN, Infinity y negativos, sin lanzar excepción ni permitir coerción.
+   - En prepararPlancha: comprueba escala1 <= 0; si es así, retorna inmediatamente { ok: false, reason: "lienzo-fallido" }, llama a documento.destroy() y detiene el flujo sin invocar pagina.render ni crear lienzos.
+2. Inclusión del inicio síncrono del render en el bloque de normalización:
+   - En rasterizarParaMedir y recortarMapa: la invocación pagina.render(...) se trasladó al interior del bloque try/catch/finally.
+   - Si pagina.render(...) lanza síncronamente una RenderingCancelledException o si signal?.aborted es true, se captura y normaliza a cancelado() (AbortError estándar).
+   - El listener de abort siempre se retira en el bloque finally del render (removeEventListener).
+   - Si ocurre cualquier fallo o aborto, el canvas se reduce a 1x1 en el finally exterior.
+3. Cobertura completa de pruebas (23 pruebas unitarias en planchaPdf.test.js):
+   - Prueba estricta de no-coerción: verifica toBe(0) para booleanos, cadenas numéricas, símbolos, nulos, undefined, vacíos, negativos, NaN e Infinity.
+   - Pruebas explícitas de excepciones síncronas en el render: verifica que el lanzamiento síncrono de RenderingCancelledException en pagina.render sea capturado y lance AbortError, retirando el listener y reduciendo el lienzo a 1x1 (en recortarMapa y rasterizarParaMedir).
+   - Pruebas de aborto en vuelo: verificación de llamada a renderTask.cancel(), retirada de listener y reducción a 1x1 (en recortarMapa y rasterizarParaMedir).
+   - Pruebas de renderizado exitoso: verificación de preservación de dimensiones en recortarMapa, reducción garantizada a 1x1 del lienzo temporal en rasterizarParaMedir, y retirada del listener de la señal en ambos.
+   - Prueba de prepararPlancha ante dimensiones inválidas: confirma retorno neutral { ok: false, reason: "lienzo-fallido" }, destrucción del documento y 0 llamadas a pagina.render.
+4. Evidencia de pruebas y compilación:
+   - 59 suites pasadas, 789 pruebas pasadas al 100%.
+   - Build Next.js 14.2.7 limpio con código 0.
 
 Test evidence:
 ${testOutput}
 
-Git diff:
+Git diff (HEAD):
 \`\`\`diff
 ${diff}
 \`\`\`
