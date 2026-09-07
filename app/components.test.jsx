@@ -272,5 +272,28 @@ describe("panel de capas por áreas", () => {
     expect(centerBtns.length).toBeGreaterThanOrEqual(1)
     await user.click(centerBtns[0])
   })
+
+  it("el atajo de teclado 'Ctrl+K' y 'Meta+K' enfoca el buscador y Escape lo desenfoca", async () => {
+    const user = userEvent.setup()
+    render(<Component />)
+
+    const searchInput = screen.getByPlaceholderText("Buscar expediente...")
+    expect(searchInput).not.toHaveFocus()
+
+    // 1. Probar atajo 'Ctrl+K'
+    await user.keyboard("{Control>}k{/Control}")
+    expect(searchInput).toHaveFocus()
+
+    // 2. Probar que Escape desenfoca el buscador
+    await user.keyboard("{Escape}")
+    expect(searchInput).not.toHaveFocus()
+
+    // 3. Probar atajo 'Meta+K' (macOS Command+K)
+    await user.keyboard("{Meta>}k{/Meta}")
+    expect(searchInput).toHaveFocus()
+
+    await user.keyboard("{Escape}")
+    expect(searchInput).not.toHaveFocus()
+  })
 })
 

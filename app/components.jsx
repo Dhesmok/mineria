@@ -89,6 +89,7 @@ export default function Component() {
   const [isIslandHovered, setIsIslandHovered] = useState(false)
   const [isIslandFocused, setIsIslandFocused] = useState(false)
   const islandAbortRef = useRef(null)
+  const islandInputRef = useRef(null)
 
   const isIslandExpanded =
     (typeof process !== "undefined" && process.env.NODE_ENV === "test") ||
@@ -133,6 +134,18 @@ export default function Component() {
     }
     window.addEventListener("resize", alRedimensionar)
     return () => window.removeEventListener("resize", alRedimensionar)
+  }, [])
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key?.toLowerCase() === "k") {
+        e.preventDefault()
+        setIsIslandFocused(true)
+        islandInputRef.current?.focus()
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeyDown)
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown)
   }, [])
 
   useEffect(() => {
@@ -668,6 +681,7 @@ export default function Component() {
           onClick={() => setIsIslandFocused(true)}
         >
           <input
+            ref={islandInputRef}
             type="text"
             value={islandSearchText}
             onChange={handleIslandSearchChange}
@@ -683,7 +697,7 @@ export default function Component() {
               } else if (e.key === "Enter") {
                 e.preventDefault()
                 if (islandSelectedIndex >= 0 && islandSuggestions[islandSelectedIndex]) {
-                  const sel = islandSuggestions[islandSelectedIndex]
+                   const sel = islandSuggestions[islandSelectedIndex]
                   const code = typeof sel === "string" ? sel : sel?.code
                   if (code) handleSelectIslandExpedient(code)
                 } else if (islandSearchText.trim()) {
@@ -691,6 +705,8 @@ export default function Component() {
                 }
               } else if (e.key === "Escape") {
                 setIslandResultsOpen(false)
+                setIsIslandFocused(false)
+                islandInputRef.current?.blur()
               }
             }}
             placeholder="Buscar expediente..."

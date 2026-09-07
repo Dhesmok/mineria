@@ -71,8 +71,8 @@ const ColorSwatch = ({ layer, state, disabled, onOpen }) => (
       style={{
         backgroundColor: state.fillColor,
         border: `1.5px solid ${state.lineColor}`,
-        opacity: state.on ? Math.max(state.opacity, 0.4) : 0.25,
-        filter: state.on ? "none" : "grayscale(80%)",
+        opacity: state.on ? Math.max(state.opacity, 0.4) : 0.45,
+        filter: state.on ? "none" : "grayscale(35%)",
       }}
     />
   </button>
@@ -86,22 +86,22 @@ const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
     type="button"
     onClick={onClick}
     aria-pressed={estado === "todo"}
-    className={`flex w-full items-center gap-2 py-1 pr-4 text-left transition-colors hover:bg-zinc-800/40 ${sangria}`}
+    className={`group flex w-full items-center gap-2 py-1.5 pr-4 text-left transition-colors hover:bg-zinc-800/50 ${sangria}`}
   >
     <span
-      className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
+      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
         estado === "nada"
-          ? "border-zinc-700 bg-zinc-900/60 text-transparent"
+          ? "border-zinc-500/80 bg-zinc-900/80 text-transparent group-hover:border-zinc-400"
           : "border-zinc-400 bg-zinc-200 text-zinc-950"
       }`}
     >
-      {estado === "todo" && <Check className="h-2.5 w-2.5" />}
-      {estado === "parte" && <span className="h-[2px] w-[7px] rounded-full bg-zinc-950" />}
+      {estado === "todo" && <Check className="h-3 w-3" />}
+      {estado === "parte" && <span className="h-[2px] w-[8px] rounded-full bg-zinc-950" />}
     </span>
     <span
-      className={`min-w-0 flex-1 truncate text-[11px] transition-colors ${
-        estado === "nada" ? "text-zinc-500 hover:text-zinc-300" : "text-white font-semibold"
-      } ${fuerte ? (estado === "nada" ? "font-medium text-zinc-400" : "font-bold text-white") : ""}`}
+      className={`min-w-0 flex-1 truncate text-xs transition-colors ${
+        estado === "nada" ? "text-zinc-300 group-hover:text-white" : "text-white font-semibold"
+      } ${fuerte ? (estado === "nada" ? "font-medium text-zinc-200" : "font-bold text-white") : ""}`}
     >
       {label}
     </span>
@@ -267,12 +267,12 @@ const LayerRow = ({
   <div
     ref={(node) => registerRow(layer.key, node)}
     onClick={() => !layer.pending && onToggle(layer.key)}
-    className={`group flex h-[38px] cursor-pointer items-center gap-2 border-b border-zinc-800/40 px-3 transition-all ${
+    className={`group flex h-[40px] cursor-pointer items-center gap-2 border-b border-zinc-800/50 px-3 transition-all ${
       dragging
-        ? "bg-zinc-800/70 opacity-60"
+        ? "bg-zinc-800/70 opacity-70"
         : state.on
-        ? "bg-zinc-800/50 hover:bg-zinc-800/70 text-white"
-        : "opacity-60 hover:opacity-100 hover:bg-zinc-900/30"
+        ? "bg-zinc-800/60 hover:bg-zinc-800/80 text-white"
+        : "text-zinc-300 hover:bg-zinc-800/40 hover:text-white"
     }`}
     style={draggable ? { borderLeft: `3px solid ${area.color}`, paddingLeft: "10px" } : undefined}
   >
@@ -314,7 +314,7 @@ const LayerRow = ({
           ? "font-semibold text-white tracking-tight"
           : layer.pending
           ? "cursor-not-allowed text-zinc-600"
-          : "text-zinc-400 group-hover:text-zinc-200"
+          : "text-zinc-300 group-hover:text-white"
       }`}
     >
       {layer.label}
@@ -500,7 +500,7 @@ export const LayerPanel = ({
           ))}
         </div>
         <span className="text-[11px] font-mono text-zinc-400">
-          {activeCount === 1 ? "1 encendida" : `${activeCount} encendidas`}
+          {activeCount === 1 ? "1 activada" : `${activeCount} activadas`}
         </span>
       </div>
 
@@ -508,9 +508,12 @@ export const LayerPanel = ({
         {onlyActive ? (
           // ───────────── Activas: lista plana y ordenable ─────────────
           activeCount === 0 ? (
-            <p className="px-4 py-6 text-center text-xs text-zinc-500">
-              Enciende una capa para verla aquí.
-            </p>
+            <div className="px-4 py-8 text-center">
+              <p className="text-xs font-medium text-zinc-300">No hay capas activadas.</p>
+              <p className="mt-1.5 text-[11px] text-zinc-400">
+                Explora &ldquo;Todas&rdquo; para añadir información al mapa.
+              </p>
+            </div>
           ) : (
             <>
               <p className="border-b border-zinc-800/50 bg-zinc-950/60 px-4 py-2 text-[11px] leading-tight text-zinc-400">
