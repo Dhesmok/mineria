@@ -249,10 +249,14 @@ describe("createOverlayStyle", () => {
     const style = createOverlayStyle()
     expect(style.sources["sgc-src-geologiaNacional"]).toBeDefined()
     expect(style.sources["anh-src-tierras"]).toBeDefined()
-    expect(style.sources["plancha-src"]).toBeDefined()
     expect(layerById(style, "sgc-geologiaNacional")).toBeDefined()
     expect(layerById(style, "anh-tierras")).toBeDefined()
-    expect(layerById(style, "plancha-capa")).toBeDefined()
+  })
+
+  it("declara la fuente y capa de la plancha en el mapa base para compatibilidad móvil directa", () => {
+    const base = createBaseStyle()
+    expect(base.sources["plancha-src"]).toBeDefined()
+    expect(layerById(base, "plancha-capa")).toBeDefined()
   })
 
   it("y el de abajo no las lleva: un identificador, un mapa", () => {

@@ -3,9 +3,9 @@ import { Map as MapLibreMap } from "maplibre-gl"
 import {
   createOverlayStyle,
   MAX_ZOOM,
-  PLANCHA_LAYER_ID,
   TERRAIN_SOURCE_ID,
 } from "../../utils/mapStyles"
+import { SGC_LAYERS, sgcLayerId } from "../../utils/sgcLayers"
 import { PITCH_MAX } from "./useTerrainGL"
 
 /**
@@ -81,8 +81,9 @@ export const useDualMapSyncGL = (
     // valor del estado**: antes se volvía a llamar con el mismo objeto, React no
     // repintaba, y el aviso no llegaba nunca. La señal es `styledata` y no
     // `load`, que con una fuente lenta puede no llegar jamás.
+    const overlayReadyLayerId = sgcLayerId(SGC_LAYERS[0].key)
     const alEstarListo = () => {
-      if (canceled || !overlayMap.getLayer(PLANCHA_LAYER_ID)) return
+      if (canceled || !overlayMap.getLayer(overlayReadyLayerId)) return
       overlayMap.off("styledata", alEstarListo)
       setOverlayMapInstance(overlayMap)
     }

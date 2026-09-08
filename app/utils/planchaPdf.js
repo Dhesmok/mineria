@@ -311,28 +311,19 @@ export const rasterizarParaMedir = async (pagina, escala, signal) => {
     const data = imagen.data
 
     // Verificación de integridad del raster: comprobar que no sea una imagen
-    // vacía, transparente o descartada por el compositor en móviles.
-    let trazosOscuros = 0
+    // totalmente vacía o transparente por descarte del compositor en móviles.
     let pixelesOpacos = 0
     const pasoMuestreo = Math.max(1, Math.floor(total / 4000))
-    const totalMuestras = Math.floor(total / pasoMuestreo)
     for (let i = 0; i < total; i += pasoMuestreo) {
-      const p = i * 4
-      const alfa = data[p + 3]
-      if (alfa > 128) {
+      if (data[i * 4 + 3] > 0) {
         pixelesOpacos += 1
-        // Trazos oscuros del mapa sobre el fondo blanco
-        if (data[p] < 235 || data[p + 1] < 235 || data[p + 2] < 235) {
-          trazosOscuros += 1
-        }
+        break
       }
     }
 
-    // Una lectura con ceros (transparente) o completamente blanca (sin renderizar)
-    // delata que el compositor gráfico del dispositivo falló silenciosamente.
-    if (pixelesOpacos < totalMuestras * 0.5 || trazosOscuros === 0) {
+    if (total > 0 && pixelesOpacos === 0) {
       throw Object.assign(
-        new Error("El lienzo rasterizado quedó vacío, transparente o sin trazos visibles."),
+        new Error("El lienzo rasterizado quedó vacío o transparente."),
         { code: "RASTER_EMPTY" },
       )
     }

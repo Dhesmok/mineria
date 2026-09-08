@@ -76,6 +76,11 @@ self.addEventListener("fetch", (event) => {
   // Ignorar peticiones que no sean GET
   if (event.request.method !== "GET") return
 
+  // Las planchas geológicas en PDF son archivos pesados (30-60 MB) que deben transmitirse
+  // directamente sin pasar por la caché del Service Worker ni clonarse en memoria,
+  // evitando agotar cuotas de almacenamiento y bloqueos en dispositivos móviles.
+  if (url.pathname.startsWith("/api/plancha")) return
+
   // 1. Teselas de mapa (raster, vector, DEM elevation) -> CacheFirst con fallback a red
   if (
     url.hostname.includes("tile") ||

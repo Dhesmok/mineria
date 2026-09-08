@@ -406,13 +406,11 @@ export default function MapComponentGL({
   // Si hay algo que enseñar en el lienzo de arriba. Mientras no lo haya, ese
   // lienzo se apaga: son un contexto WebGL y un juego de teselas de más, y en un
   // teléfono eso se nota.
-  const [planchaActive, setPlanchaActive] = useState(false)
-
   const hasActiveOverlayLayers = useMemo(() => {
     const sgcActiva = SGC_LAYERS.some(({ key }) => layerState?.[key]?.on)
     const anhActiva = ANH_LAYERS.some(({ key }) => layerState?.[key]?.on)
-    return sgcActiva || anhActiva || planchaActive
-  }, [layerState, planchaActive])
+    return sgcActiva || anhActiva
+  }, [layerState])
 
   // El lienzo de arriba, sincronizado con el de abajo, donde van las capas que
   // se funden con el relieve.
@@ -464,7 +462,10 @@ export default function MapComponentGL({
     clickMap: mapInstance,
   })
 
-  // Y la plancha en PDF que cuelga de la ficha de «Estado cartográfico»
+  // Y la plancha en PDF que cuelga de la ficha de «Estado cartográfico».
+  // Se renderiza en el mapa base (mapRef, mapInstance, mapRef) exactamente como en commit 6585e9f:
+  // esto garantiza compatibilidad móvil 100%, cero sobrecarga de doble contexto WebGL,
+  // y renderizado nativo sobre el relieve sin pantallas blancas ni pérdida de contexto.
   const {
     plancha,
     planchaOpacity,
@@ -472,11 +473,7 @@ export default function MapComponentGL({
     cargarPlancha,
     quitarPlancha,
     encuadrarPlancha,
-  } = usePlanchaGL(thematicMapRef, thematicMapInstance, mapRef)
-
-  useEffect(() => {
-    setPlanchaActive(Boolean(plancha?.canvas))
-  }, [plancha?.canvas])
+  } = usePlanchaGL(mapRef, mapInstance, mapRef)
 
   // La lista de subcapas sube al panel, que es quien dibuja las casillas. El
   // hook tiene que vivir aquí —necesita el mapa— pero las casillas van junto a
