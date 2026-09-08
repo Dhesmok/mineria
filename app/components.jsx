@@ -569,41 +569,6 @@ export default function Component() {
                   </button>
                 </div>
 
-                {/* 2. Fusión de capas */}
-                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-[0.08em]">
-                      Fusión de capas
-                    </span>
-                  </div>
-                  <div className="flex rounded-xl border border-zinc-800/90 p-1 bg-zinc-900/80 text-[11px] gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setBlendMode("multiply")}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        blendMode === "multiply"
-                          ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
-                          : "text-zinc-400 hover:text-zinc-200"
-                      }`}
-                      title="Multiplicar: funde con relieve y mapa base"
-                    >
-                      Multiplicar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setBlendMode("normal")}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        blendMode === "normal"
-                          ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
-                          : "text-zinc-400 hover:text-zinc-200"
-                      }`}
-                      title="Normal: transparencia simple"
-                    >
-                      Normal
-                    </button>
-                  </div>
-                </div>
-
                 {/* 3. Medición y Captura */}
                 <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
                   <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block mb-2">
@@ -971,39 +936,6 @@ export default function Component() {
                 </div>
                 <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
               </button>
-            </div>
-
-            {/* 2. Fusión de capas */}
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-[0.08em]">
-                  Fusión de capas
-                </span>
-              </div>
-              <div className="flex rounded-xl border border-zinc-800/90 p-1 bg-zinc-900/80 text-xs gap-1">
-                <button
-                  type="button"
-                  onClick={() => setBlendMode("multiply")}
-                  className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                    blendMode === "multiply"
-                      ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
-                      : "text-zinc-400"
-                  }`}
-                >
-                  Multiplicar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBlendMode("normal")}
-                  className={`flex-1 py-2.5 rounded-lg text-xs font-medium transition-all ${
-                    blendMode === "normal"
-                      ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/70"
-                      : "text-zinc-400"
-                  }`}
-                >
-                  Normal
-                </button>
-              </div>
             </div>
 
             {/* 3. Medición */}

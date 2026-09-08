@@ -10,7 +10,6 @@ import { useTerrainRasterGL } from "./hooks/map/useTerrainRasterGL"
 import { useSgcLayersGL } from "./hooks/map/useSgcLayersGL"
 import { useAnhLayersGL } from "./hooks/map/useAnhLayersGL"
 import { usePlanchaGL } from "./hooks/map/usePlanchaGL"
-import { useDualMapSyncGL } from "./hooks/map/useDualMapSyncGL"
 import { useTerrainProfileGL } from "./hooks/map/useTerrainProfileGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
@@ -99,7 +98,7 @@ export default function MapComponentGL({
   onLayerData,
   onSgcState,
   panelOpen = false,
-  blendMode = "multiply",
+  _blendMode = "multiply",
   onBlendModeChange: _onBlendModeChange,
   onBlockModelChange,
 }) {
@@ -108,7 +107,6 @@ export default function MapComponentGL({
   // podía apoderarse del div equivocado. Se deja por referencia porque además
   // es lo correcto en React: el id es un nombre global y la referencia no.
   const containerRef = useRef(null)
-  const overlayContainerRef = useRef(null)
   const mapRef = useRef(null)
   const [mapInstance, setMapInstance] = useState(null)
   const [error, setError] = useState(null)
@@ -403,39 +401,10 @@ export default function MapComponentGL({
     }
   }, [])
 
-  // Si hay algo que enseñar en el lienzo de arriba. Mientras no lo haya, ese
-  // lienzo se apaga: son un contexto WebGL y un juego de teselas de más, y en un
-  // teléfono eso se nota.
-  const hasActiveOverlayLayers = useMemo(() => {
-    const sgcActiva = SGC_LAYERS.some(({ key }) => layerState?.[key]?.on)
-    const anhActiva = ANH_LAYERS.some(({ key }) => layerState?.[key]?.on)
-    return sgcActiva || anhActiva
-  }, [layerState])
-
-  // El lienzo de arriba, sincronizado con el de abajo, donde van las capas que
-  // se funden con el relieve.
-  const { overlayMapRef, overlayMapInstance } = useDualMapSyncGL(
-    mapRef,
-    mapInstance,
-    overlayContainerRef,
-    { is3D, exaggeration, hasActiveOverlayLayers },
-  )
-
-  // Las capas temáticas viven **solo** en el mapa de arriba, y no hay respaldo
-  // al de abajo. Lo hubo, y era peor que no tenerlo: mientras el de arriba
-  // terminaba de construirse, los hooks le colgaban las capas al de abajo —que
-  // llevaba una copia con los mismos identificadores—, la dibujaba sin fundir y
-  // ahí se quedaba, congelada en el primer encuadre y por debajo de la buena.
-  // Con un solo destino, lo peor que pasa mientras tanto es que no se dibuje
-  // nada, que es un segundo y se arregla solo.
-  //
-  // `overlayMapRef` se pasa siempre; quien decide si hay mapa es la instancia,
-  // que es la que React sabe vigilar. Una referencia no dispara un repintado, y
-  // leerla al pintar dejaba a los hooks mirando el mapa de la vuelta anterior.
-  const thematicMapRef = overlayMapRef
-  const thematicMapInstance = overlayMapInstance
-
-  // Las de geología del SGC sobre el mapa temático superpuesto con fusión
+  // Las capas temáticas (Geología del SGC e Hidrocarburos de la ANH) se montan
+  // directamente sobre el mapa base único (mapRef, mapInstance).
+  // Esto elimina el segundo mapa/lienzo WebGL superpuesto, suprimiendo la sobrecarga
+  // de memoria en dispositivos móviles y evitando cuelgues o pantallas blancas.
   const {
     sgcSubLayers,
     sgcChosenSub,
@@ -444,12 +413,11 @@ export default function MapComponentGL({
     sgcFeatureInfo,
     sgcFieldInfo,
     clearSgcFeatureInfo,
-  } = useSgcLayersGL(thematicMapRef, thematicMapInstance, layerState, {
+  } = useSgcLayersGL(mapRef, mapInstance, layerState, {
     enabled: !queryingTerrain,
     clickMap: mapInstance,
   })
 
-  // Las de hidrocarburos de la ANH sobre el mapa temático superpuesto con fusión
   const {
     subLayers: anhSubLayers,
     chosenSub: anhChosenSub,
@@ -457,7 +425,7 @@ export default function MapComponentGL({
     legends: anhLegends,
     featureInfo: anhFeatureInfo,
     clearFeatureInfo: clearAnhFeatureInfo,
-  } = useAnhLayersGL(thematicMapRef, thematicMapInstance, layerState, {
+  } = useAnhLayersGL(mapRef, mapInstance, layerState, {
     enabled: !queryingTerrain,
     clickMap: mapInstance,
   })
@@ -856,16 +824,6 @@ export default function MapComponentGL({
           ref={containerRef}
           className={`absolute inset-0 h-full w-full z-0 ${is3D ? "mode-3d" : "mode-2d"}`}
         />
-        <div
-          className={`pointer-events-none absolute inset-0 z-[1] h-full w-full ${
-            hasActiveOverlayLayers ? "opacity-100 visible" : "opacity-0 invisible"
-          }`}
-          style={{
-            mixBlendMode: blendMode === "multiply" ? "multiply" : "normal",
-          }}
-        >
-          <div ref={overlayContainerRef} className="h-full w-full" />
-        </div>
 
         {/* Capa interactiva para dibujar el rectángulo del bloque 3D */}
         {isDrawingBox && (
@@ -1088,14 +1046,12 @@ export default function MapComponentGL({
                 setBlockModelOpen(false)
                 requestAnimationFrame(() => {
                   mapRef.current?.resize()
-                  overlayMapRef.current?.resize()
                 })
               } else {
                 if (selectedRectangle) {
                   setBlockModelOpen(true)
                   requestAnimationFrame(() => {
                     mapRef.current?.resize()
-                    overlayMapRef.current?.resize()
                   })
                 } else {
                   handleStartDrawBox()
@@ -1336,9 +1292,9 @@ export default function MapComponentGL({
       {exportandoImagen && (
         <ImageExport
           map={mapInstance}
-          overlayMap={overlayMapInstance}
-          blendMode={blendMode}
-          hasActiveOverlayLayers={hasActiveOverlayLayers}
+          overlayMap={null}
+          blendMode="normal"
+          hasActiveOverlayLayers={false}
           crs={crsById(coordinateSystem)}
           layerNames={[
             ...ANM_LAYERS.filter(({ key }) => layerState[key]?.on).map((l) => l.label),
@@ -1442,7 +1398,6 @@ export default function MapComponentGL({
               setBlockModelOpen(false)
               requestAnimationFrame(() => {
                 mapRef.current?.resize()
-                overlayMapRef.current?.resize()
               })
             }}
             rectangle={selectedRectangle}
@@ -1461,7 +1416,6 @@ export default function MapComponentGL({
               setSplitRatio((r) => (r <= 0.05 ? 0.5 : 0.02))
               requestAnimationFrame(() => {
                 mapRef.current?.resize()
-                overlayMapRef.current?.resize()
               })
             }}
           />

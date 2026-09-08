@@ -245,37 +245,18 @@ describe("createOverlayStyle", () => {
     expect(style.sources[TERRAIN_SOURCE_ID]).toBeDefined()
   })
 
-  it("declara las fuentes y capas ráster del SGC y de la ANH", () => {
-    const style = createOverlayStyle()
-    expect(style.sources["sgc-src-geologiaNacional"]).toBeDefined()
-    expect(style.sources["anh-src-tierras"]).toBeDefined()
-    expect(layerById(style, "sgc-geologiaNacional")).toBeDefined()
-    expect(layerById(style, "anh-tierras")).toBeDefined()
+  it("declara las fuentes y capas ráster del SGC y de la ANH en el mapa base único", () => {
+    const base = createBaseStyle()
+    expect(base.sources["sgc-src-geologiaNacional"]).toBeDefined()
+    expect(base.sources["anh-src-tierras"]).toBeDefined()
+    expect(layerById(base, "sgc-geologiaNacional")).toBeDefined()
+    expect(layerById(base, "anh-tierras")).toBeDefined()
   })
 
   it("declara la fuente y capa de la plancha en el mapa base para compatibilidad móvil directa", () => {
     const base = createBaseStyle()
     expect(base.sources["plancha-src"]).toBeDefined()
     expect(layerById(base, "plancha-capa")).toBeDefined()
-  })
-
-  it("y el de abajo no las lleva: un identificador, un mapa", () => {
-    // Estuvieron en los dos estilos a la vez, con los mismos identificadores, y
-    // eso no es una copia inofensiva: el hook que les pone la imagen le apunta a
-    // uno o a otro según el momento del arranque. La que se quedara con la copia
-    // del mapa de abajo se dibujaba sin fundir y congelada en el primer
-    // encuadre, por debajo de la buena.
-    const base = createBaseStyle()
-    const arriba = createOverlayStyle()
-
-    arriba.layers.forEach(({ id }) => {
-      expect(layerById(base, id)).toBeUndefined()
-    })
-    Object.keys(arriba.sources)
-      .filter((id) => id !== TERRAIN_SOURCE_ID)
-      .forEach((id) => {
-        expect(base.sources[id]).toBeUndefined()
-      })
   })
 })
 

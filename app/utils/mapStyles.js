@@ -365,7 +365,11 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     ...BASEMAP_SOURCES,
     [TERRAIN_SOURCE_ID]: TERRAIN_SOURCE,
     [DERIVATIVE_SOURCE_ID]: DERIVATIVE_SOURCE,
+    ...sgcSources(),
+    ...anhSources(),
     ...planchaSource(),
+    ...sgcAttributionSource(),
+    ...anhAttributionSource(),
     ...anmSources(),
   },
   layers: [
@@ -375,12 +379,11 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
     { id: "fondo-neutro", type: "background", paint: { "background-color": "#eef2f6" } },
     ...basemapLayers(initialBaseLayer),
     hillshadeLayer(),
+    ...sgcLayers(),
+    ...anhLayers(),
     planchaLayer(),
-    // Aquí estaban también las del SGC y las de la ANH. Se fueron al estilo de
-    // abajo, que es el del lienzo superpuesto, y **no pueden estar en los dos**:
-    // los identificadores son los mismos. Un identificador, un mapa.
-    // La plancha vive en este mapa base: así los teléfonos móviles no necesitan
-    // encender un segundo contexto WebGL para verla y se proyecta directo sobre el relieve 3D.
+    sgcAttributionLayer(),
+    anhAttributionLayer(),
     derivativeLayer(),
     ...anmLayers(),
     ...searchLayers(),
@@ -388,13 +391,7 @@ export const createBaseStyle = (initialBaseLayer = DEFAULT_BASEMAP) => ({
 })
 
 /**
- * Estilo para el lienzo superpuesto de fusión temática (Geología SGC, Hidrocarburos ANH).
- *
- * Se usa en el mapa superior con `mix-blend-mode: multiply` (o normal).
- * CRÍTICO:
- * 1. NO lleva capa de fondo (`background`) para que el canvas de WebGL sea 100% transparente.
- * 2. Incluye la fuente de terreno 3D (`terrain-rgb`) para sincronizarse con la malla de elevación en 3D.
- * 3. Declara las fuentes y capas ráster de SGC y ANH.
+ * Estilo para capas superpuestas en un segundo lienzo (conservado por compatibilidad).
  */
 export const createOverlayStyle = () => ({
   version: 8,
