@@ -63,7 +63,15 @@ const metrosDeResiduo = (residual, size, canvas) => {
   return (residual * size[0]) / anchoPx
 }
 
-export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuitar, onCancelar }) => {
+export const PlanchaPanel = ({
+  plancha,
+  opacity,
+  onOpacity,
+  onEncuadrar,
+  onQuitar,
+  onCancelar,
+  onCambiarResolucion,
+}) => {
   if (!plancha) return null
 
   const cargando = Boolean(plancha.cargando)
@@ -98,11 +106,11 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
 
           {/* Etapas discretas del pipeline */}
           <div className="flex justify-between text-[9px] uppercase tracking-wider text-slate-400">
-            <span className={plancha.progreso?.etapa === "descarga" ? "font-semibold text-blue-600" : ""}>Descarga</span>
-            <span className={plancha.progreso?.etapa === "abriendo" || plancha.progreso?.etapa === "medida" ? "font-semibold text-blue-600" : ""}>Medida</span>
-            <span className={plancha.progreso?.etapa === "georreferenciacion" ? "font-semibold text-blue-600" : ""}>Ajuste</span>
-            <span className={plancha.progreso?.etapa === "recorte" ? "font-semibold text-blue-600" : ""}>Recorte HD</span>
-            <span className={plancha.progreso?.etapa === "mapa" ? "font-semibold text-blue-600" : ""}>Mapa</span>
+            <span className={plancha.progreso?.porcentaje >= 10 ? "font-bold text-blue-600" : ""}>Descarga</span>
+            <span className={plancha.progreso?.porcentaje >= 52 ? "font-bold text-blue-600" : ""}>Medida</span>
+            <span className={plancha.progreso?.porcentaje >= 68 ? "font-bold text-blue-600" : ""}>Gauss</span>
+            <span className={plancha.progreso?.porcentaje >= 82 ? "font-bold text-blue-600" : ""}>Recorte</span>
+            <span className={plancha.progreso?.porcentaje >= 96 ? "font-bold text-blue-600" : ""}>Visor</span>
           </div>
 
           <div className="flex justify-end pt-1">
@@ -118,15 +126,13 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
       )}
 
       {fallo && (
-        <div className="space-y-2">
-          <p className="flex gap-1.5 text-[11px] leading-snug text-amber-700">
-            <AlertTriangle className="mt-[1px] h-3.5 w-3.5 shrink-0" />
+        <div className="space-y-1 py-1">
+          <div className="flex items-start gap-1.5 text-[11px] font-medium text-red-600">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{fallo}</span>
-          </p>
-          {/* Y con qué números falló. Es feo y es a propósito: cada hoja del SGC
-              está hecha con un programa distinto de una época distinta, así que
-              la siguiente que no se coloque fallará por algo que no se ha visto
-              todavía. Esta línea es lo que permite arreglarla sin tener el
+          </div>
+          {/* El número de la plancha, el tamaño del archivo o el residuo con el
+              que falló: sin ellos es imposible depurar una hoja rota sin tener el
               archivo delante. */}
           {plancha.detalle && (
             <p className="pl-5 text-[10px] leading-snug text-slate-400">{plancha.detalle}</p>
@@ -163,6 +169,35 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
               {Math.round((opacity ?? 1) * 100)}%
             </span>
           </div>
+
+          {onCambiarResolucion && (
+            <div className="flex items-center justify-between border-t border-zinc-800 pt-2 text-[10px]">
+              <span className="text-[10px] uppercase tracking-wide text-zinc-400">Calidad</span>
+              <div className="flex gap-1">
+                {[
+                  { id: "baja", valor: 1800, etiqueta: "Baja (1.8k)" },
+                  { id: "media", valor: 2500, etiqueta: "Media (2.5k)" },
+                  { id: "alta", valor: 3000, etiqueta: "Alta (3k)" },
+                ].map((opc) => {
+                  const activa = (plancha.resolucion ?? 2500) === opc.valor
+                  return (
+                    <button
+                      key={opc.id}
+                      type="button"
+                      onClick={() => onCambiarResolucion(opc.valor)}
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                        activa
+                          ? "bg-blue-600 font-semibold text-white shadow-xs"
+                          : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                      }`}
+                    >
+                      {opc.etiqueta}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <dl className="space-y-[3px] border-t border-zinc-800 pt-2 text-[10px] leading-tight text-zinc-400">
             <Dato nombre="Origen" valor={plancha.crs?.label} />

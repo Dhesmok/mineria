@@ -69,10 +69,32 @@ export const esDispositivoMovil = () => {
  * Es más que suficiente para detectar la cuadrícula (líneas cada 5 km) y previene
  * que el proceso de Chrome Android sea terminado por falta de memoria (OOM killer).
  */
-export const calcularEscalaMedida = (tamano, { intento = 1 } = {}) => {
+export const RESOLUCIONES_PLANCHA = {
+  baja: 1800,
+  media: 2500,
+  alta: 3000,
+}
+
+export const normalizarResolucion = (valor) => {
+  if (typeof valor === "number" && Number.isFinite(valor) && valor > 0) {
+    return Math.min(4000, Math.max(1000, Math.round(valor)))
+  }
+  if (typeof valor === "string" && RESOLUCIONES_PLANCHA[valor.toLowerCase()]) {
+    return RESOLUCIONES_PLANCHA[valor.toLowerCase()]
+  }
+  return 2500
+}
+
+export const calcularEscalaMedida = (tamano, { intento = 1, resolucion = 2500 } = {}) => {
   const esMovil = esDispositivoMovil()
-  const anchoObjetivo = esMovil ? (intento > 1 ? 1400 : 2500) : (intento > 1 ? 2000 : ANCHO_MEDIDA)
-  const maxPixeles = esMovil ? (intento > 1 ? 2000000 : 5000000) : (intento > 1 ? 4000000 : 7500000)
+  const resObjetivo = normalizarResolucion(resolucion)
+  const anchoObjetivo =
+    intento > 1
+      ? Math.min(1400, Math.round(resObjetivo * 0.55))
+      : esMovil
+        ? resObjetivo
+        : Math.max(ANCHO_MEDIDA, resObjetivo)
+  const maxPixeles = Math.min(7500000, Math.round(anchoObjetivo * anchoObjetivo * 0.8))
 
   // Validar dominio de entrada numérico y finito estrictamente positivo sin coerción de tipos
   const w = tamano?.width
@@ -340,7 +362,7 @@ export const rasterizarParaMedir = async (pagina, escala, signal) => {
   }
 }
 
-export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {}) => {
+export const prepararPlancha = async (archivo, cerca, { signal, onProgress, resolucion = 2500 } = {}) => {
   if (signal?.aborted) throw cancelado()
   const reloj = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
   const tiempos = {}
@@ -355,8 +377,9 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
     const inicioMedida = reloj()
     const tamano = pagina.getViewport({ scale: 1 })
     const esMovil = esDispositivoMovil()
+    const resObjetivo = normalizarResolucion(resolucion)
 
-    const escala1 = calcularEscalaMedida(tamano, { intento: 1 })
+    const escala1 = calcularEscalaMedida(tamano, { intento: 1, resolucion: resObjetivo })
     if (escala1 <= 0) {
       return {
         ok: false,
@@ -365,8 +388,6 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
       }
     }
 
-    // Intentar rasterizar con el presupuesto adaptativo (1400 px en móvil / 3000 px en escritorio).
-    // Solo si es móvil y ocurrió un fallo recuperable de contexto/memoria, reintentar a 1000 px.
     try {
       raster = await rasterizarParaMedir(pagina, escala1, signal)
     } catch (primerFallo) {
@@ -377,7 +398,11 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
         console.warn("Reintentando rasterizar plancha a resolución de emergencia...", primerFallo?.message)
         await respirar(signal)
         try {
-          raster = await rasterizarParaMedir(pagina, calcularEscalaMedida(tamano, { intento: 2 }), signal)
+          raster = await rasterizarParaMedir(
+            pagina,
+            calcularEscalaMedida(tamano, { intento: 2, resolucion: resObjetivo }),
+            signal,
+          )
         } catch (segundoFallo) {
           if (segundoFallo?.name === "AbortError" || signal?.aborted) throw segundoFallo
           return {
@@ -440,7 +465,7 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
       }
     }
     tiempos.recorte = Math.round(reloj() - inicioRecorte)
-    return { ...geo, canvas: recorte.canvas, escala: recorte.escala, tiempos }
+    return { ...geo, canvas: recorte.canvas, escala: recorte.escala, resolucion: resObjetivo, tiempos }
   } finally {
     if (raster?.canvas) {
       raster.canvas.width = 1

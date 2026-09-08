@@ -1016,6 +1016,16 @@ export default function MapComponentGL({
           onEncuadrar={encuadrarPlancha}
           onQuitar={quitarPlancha}
           onCancelar={quitarPlancha}
+          onCambiarResolucion={(nuevaResolucion) => {
+            if (plancha?.url) {
+              cargarPlancha({
+                url: plancha.url,
+                titulo: plancha.titulo,
+                cerca: plancha.cerca,
+                resolucion: nuevaResolucion,
+              })
+            }
+          }}
         />
 
         {/* La función diferenciadora: dibujar un polígono y salir con los

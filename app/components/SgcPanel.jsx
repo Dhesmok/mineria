@@ -94,28 +94,62 @@ const Atributo = ({ field, value }) => (
  * Sale solo si la ficha trae un PDF: una plancha sin cartografía publicada no
  * tiene ninguno, y un botón que no se puede pulsar informa peor que ningún botón.
  */
+const OPCIONES_RESOLUCION = [
+  { id: "baja", valor: 1800, etiqueta: "Baja", px: "1.800 px" },
+  { id: "media", valor: 2500, etiqueta: "Media", px: "2.500 px" },
+  { id: "alta", valor: 3000, etiqueta: "Alta", px: "3.000 px" },
+]
+
 const PonerPlancha = ({ resultado, lngLat, onCargar, onDismiss }) => {
   const url = onCargar ? planchaPdfFrom(resultado.attributes) : null
+  const [resolucion, setResolucion] = useState(2500)
   if (!url) return null
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        onCargar({
-          url,
-          titulo: [sgcLayerByKey(resultado.layerKey)?.label, resultado.value]
-            .filter(Boolean)
-            .join(" · "),
-          cerca: lngLat,
-        })
-        onDismiss?.()
-      }}
-      className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-2 py-1.5 text-[11px] font-semibold text-white transition-colors shadow-sm"
-    >
-      <MapIcon className="h-3.5 w-3.5" />
-      Poner la plancha sobre el mapa
-    </button>
+    <div className="mb-2.5 rounded-xl border border-zinc-700/80 bg-zinc-900/90 p-2 shadow-sm">
+      <div className="mb-1.5 flex items-center justify-between text-[10px] text-zinc-400">
+        <span className="font-medium text-zinc-300">Resolución</span>
+        <span className="tabular-nums text-zinc-400">{resolucion.toLocaleString()} px</span>
+      </div>
+      <div className="mb-2 grid grid-cols-3 gap-1 rounded-lg bg-zinc-800/80 p-0.5">
+        {OPCIONES_RESOLUCION.map((opc) => {
+          const activa = resolucion === opc.valor
+          return (
+            <button
+              key={opc.id}
+              type="button"
+              onClick={() => setResolucion(opc.valor)}
+              className={`rounded-md py-1 text-center transition-all ${
+                activa
+                  ? "bg-blue-600 font-semibold text-white shadow-sm"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <div className="text-[10px]">{opc.etiqueta}</div>
+              <div className="text-[9px] opacity-75">{opc.px}</div>
+            </button>
+          )
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          onCargar({
+            url,
+            titulo: [sgcLayerByKey(resultado.layerKey)?.label, resultado.value]
+              .filter(Boolean)
+              .join(" · "),
+            cerca: lngLat,
+            resolucion,
+          })
+          onDismiss?.()
+        }}
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-blue-500/50 bg-blue-600 hover:bg-blue-500 px-2 py-1.5 text-[11px] font-semibold text-white transition-colors shadow-sm"
+      >
+        <MapIcon className="h-3.5 w-3.5" />
+        Poner la plancha sobre el mapa
+      </button>
+    </div>
   )
 }
 

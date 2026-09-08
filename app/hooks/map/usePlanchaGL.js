@@ -127,13 +127,16 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
    * @param {[number,number]} peticion.cerca dónde se tocó, para elegir el origen
    */
   const cargar = useCallback(
-    async ({ url, titulo, cerca }) => {
+    async ({ url, titulo, cerca, resolucion = 2500 }) => {
       cancelar.current?.abort()
       const control = new AbortController()
       cancelar.current = control
       setPlancha({
         cargando: true,
         titulo,
+        url,
+        cerca,
+        resolucion,
         progreso: { etapa: "descarga", porcentaje: 5, detalle: "Iniciando descarga del PDF..." },
       })
 
@@ -252,6 +255,7 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           // plancha que ya nadie iba a ver.
           resultado = await prepararPlancha(archivo, cerca, {
             signal: control.signal,
+            resolucion,
             onProgress: (progreso) => {
               setPlancha((prev) => (prev?.cargando ? { ...prev, progreso } : prev))
             },
@@ -265,6 +269,8 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           setPlancha({
             titulo,
             url,
+            cerca,
+            resolucion,
             error: "El PDF llegó incompleto o el navegador no pudo abrirlo.",
             detalle: `${formatearTamano(archivo?.byteLength ?? 0)} recibidos`,
           })
@@ -284,6 +290,8 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
             // sirve para arreglarlo.
             detalle: resultado.detail,
             url,
+            cerca,
+            resolucion,
           })
           return
         }
@@ -291,7 +299,7 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
         const map = mapRef.current
         const fuente = map?.getSource?.(PLANCHA_SOURCE_ID)
         if (!fuente?.updateImage) {
-          setPlancha({ titulo, error: "El mapa todavía no está listo.", url })
+          setPlancha({ titulo, error: "El mapa todavía no está listo.", url, cerca, resolucion })
           return
         }
         setPlancha((prev) =>
@@ -312,6 +320,8 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
         setPlancha({
           titulo,
           url,
+          cerca,
+          resolucion: resultado.resolucion ?? resolucion,
           ...resultado,
           // El tiempo de red se mide aquí, que es el único sitio que lo sabe; el
           // resto lo trae `prepararPlancha`. Juntos son lo que el panel enseña.
