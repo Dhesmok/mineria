@@ -475,8 +475,8 @@ export default function MapComponentGL({
   } = usePlanchaGL(thematicMapRef, thematicMapInstance, mapRef)
 
   useEffect(() => {
-    setPlanchaActive(Boolean(plancha?.canvas || plancha?.cargando))
-  }, [plancha?.canvas, plancha?.cargando])
+    setPlanchaActive(Boolean(plancha?.canvas))
+  }, [plancha?.canvas])
 
   // La lista de subcapas sube al panel, que es quien dibuja las casillas. El
   // hook tiene que vivir aquí —necesita el mapa— pero las casillas van junto a
@@ -765,18 +765,36 @@ export default function MapComponentGL({
         map.resize()
       } catch {}
 
-      const agregarEscala = () => {
+      // Barra de escala enganchada de forma defensiva para evitar trampas de matrices no inicializadas (trampa nº 25)
+      let escalaAgregada = false
+      const agregarEscalaSegura = () => {
+        if (escalaAgregada || !montado.mapa) return
         try {
+          const container = map.getContainer()
+          if (!container || container.clientWidth <= 0 || container.clientHeight <= 0) return
           map.resize()
-          map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
+          if (!map.transform?.pixelsToGLUnits) return
+
+          const controlEscala = new ScaleControl({ unit: "metric" })
+          // Proteger _onMove interno contra excepciones durante redimensionamientos o rotación en móviles
+          const originalOnMove = controlEscala._onMove?.bind(controlEscala)
+          if (originalOnMove) {
+            controlEscala._onMove = () => {
+              try {
+                if (map?.transform?.pixelsToGLUnits) {
+                  originalOnMove()
+                }
+              } catch {}
+            }
+          }
+          map.addControl(controlEscala, "bottom-left")
+          escalaAgregada = true
         } catch {}
       }
 
-      try {
-        map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left")
-      } catch {
-        map.once("styledata", agregarEscala)
-      }
+      map.once("load", agregarEscalaSegura)
+      map.once("styledata", agregarEscalaSegura)
+      map.once("render", agregarEscalaSegura)
 
       mapRef.current = map
       montado.mapa = map
@@ -842,10 +860,11 @@ export default function MapComponentGL({
           className={`absolute inset-0 h-full w-full z-0 ${is3D ? "mode-3d" : "mode-2d"}`}
         />
         <div
-          className="pointer-events-none absolute inset-0 z-[1] h-full w-full"
+          className={`pointer-events-none absolute inset-0 z-[1] h-full w-full ${
+            hasActiveOverlayLayers ? "opacity-100 visible" : "opacity-0 invisible"
+          }`}
           style={{
             mixBlendMode: blendMode === "multiply" ? "multiply" : "normal",
-            display: hasActiveOverlayLayers ? "block" : "none",
           }}
         >
           <div ref={overlayContainerRef} className="h-full w-full" />

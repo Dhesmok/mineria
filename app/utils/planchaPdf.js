@@ -42,14 +42,37 @@ export const ANCHO_MEDIDA = 3000
 /**
  * Presupuesto de resolución para la pasada de medida.
  *
- * En escritorio 3000 px da una resolución óptima. En móviles (< 768 px) se
- * limita a 1600 px y un tope estricto de 2 Megapíxeles para evitar que el proceso
- * GPU/Skia de Android colapse por memoria (OOM) y pierda el contexto del lienzo.
+/**
+ * Detecta si el dispositivo es móvil o táctil para ajustar presupuestos de memoria gráfica.
+ *
+ * Considera móviles en vertical u horizontal (landscape), tablets y navegadores móviles
+ * independientemente del ancho reportado por la ventana o densidad de píxeles.
+ */
+export const esDispositivoMovil = () => {
+  if (typeof window === "undefined") return false
+  const ancho = typeof window.innerWidth === "number" ? window.innerWidth : 1280
+  const alto = typeof window.innerHeight === "number" ? window.innerHeight : 800
+  const esPantallaPequena = Math.min(ancho, alto) < 768
+  const tieneTouch =
+    typeof navigator !== "undefined" && (navigator.maxTouchPoints > 0 || "ontouchstart" in window)
+  const esUserAgentMovil =
+    typeof navigator !== "undefined" &&
+    /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  return Boolean(esUserAgentMovil || (tieneTouch && esPantallaPequena) || ancho < 768)
+}
+
+/**
+ * Cuántos píxeles de ancho darle a la primera pasada de la plancha.
+ *
+ * En escritorio 3000 px da una resolución óptima. En móviles se limita a 1000 px
+ * (presupuesto ~0.85 MP) en primer intento y 800 px (~0.6 MP) en segundo intento.
+ * Es más que suficiente para detectar la cuadrícula (líneas cada 5 km) y previene
+ * que el proceso de Chrome Android sea terminado por falta de memoria (OOM killer).
  */
 export const calcularEscalaMedida = (tamano, { intento = 1 } = {}) => {
-  const esMovil = typeof window !== "undefined" && window.innerWidth < 768
-  const anchoObjetivo = esMovil ? (intento > 1 ? 1200 : 1600) : ANCHO_MEDIDA
-  const maxPixeles = esMovil ? (intento > 1 ? 1440000 : 2000000) : 7500000
+  const esMovil = esDispositivoMovil()
+  const anchoObjetivo = esMovil ? (intento > 1 ? 800 : 1000) : (intento > 1 ? 2000 : ANCHO_MEDIDA)
+  const maxPixeles = esMovil ? (intento > 1 ? 600000 : 850000) : (intento > 1 ? 4000000 : 7500000)
 
   // Validar dominio de entrada numérico y finito estrictamente positivo sin coerción de tipos
   const w = tamano?.width
@@ -168,6 +191,10 @@ const respirar = (signal) =>
 
 let limiteTexturaCache = null
 
+export const _resetLimiteTexturaCache = () => {
+  limiteTexturaCache = null
+}
+
 /**
  * Lo más ancho que la tarjeta acepta como textura, sin pasarse del tope.
  *
@@ -179,15 +206,13 @@ let limiteTexturaCache = null
  * expulse el contexto WebGL de MapLibre (trampa de WebGL context lost en móviles).
  */
 export const anchoMaximoDeTextura = (max = ANCHO_MAXIMO) => {
-  if (limiteTexturaCache !== null) {
-    return Math.min(limiteTexturaCache, max)
+  const esMovil = esDispositivoMovil()
+
+  if (limiteTexturaCache !== null && limiteTexturaCache.esMovil === esMovil) {
+    return Math.min(limiteTexturaCache.hardware, max)
   }
 
-  const esMovil =
-    typeof window !== "undefined" &&
-    (window.innerWidth < 768 || (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0))
-  const topeSeguro = esMovil ? 2048 : max
-
+  const fallback = esMovil ? 2048 : ANCHO_MAXIMO
   try {
     const lienzo = document.createElement("canvas")
     const gl = lienzo.getContext("webgl2") ?? lienzo.getContext("webgl")
@@ -195,11 +220,12 @@ export const anchoMaximoDeTextura = (max = ANCHO_MAXIMO) => {
     gl?.getExtension("WEBGL_lose_context")?.loseContext()
     lienzo.width = 0
     lienzo.height = 0
-    limiteTexturaCache = Number.isFinite(limite) ? Math.min(limite, topeSeguro) : topeSeguro
-    return limiteTexturaCache
+    const hardware = Number.isFinite(limite) ? (esMovil ? Math.min(limite, 2048) : limite) : fallback
+    limiteTexturaCache = { hardware, esMovil }
+    return Math.min(hardware, max)
   } catch {
-    limiteTexturaCache = topeSeguro
-    return limiteTexturaCache
+    limiteTexturaCache = { hardware: fallback, esMovil }
+    return Math.min(fallback, max)
   }
 }
 
@@ -333,7 +359,7 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
     onProgress?.({ etapa: "medida", porcentaje: 52, detalle: "Midiendo cuadrícula y extrayendo textos..." })
     const inicioMedida = reloj()
     const tamano = pagina.getViewport({ scale: 1 })
-    const esMovil = typeof window !== "undefined" && window.innerWidth < 768
+    const esMovil = esDispositivoMovil()
 
     const escala1 = calcularEscalaMedida(tamano, { intento: 1 })
     if (escala1 <= 0) {
@@ -344,8 +370,8 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
       }
     }
 
-    // Intentar rasterizar con el presupuesto adaptativo (1600 px en móvil / 3000 px en escritorio).
-    // Solo si es móvil y ocurrió un fallo recuperable de contexto/memoria, reintentar a 1200 px.
+    // Intentar rasterizar con el presupuesto adaptativo (1000 px en móvil / 3000 px en escritorio).
+    // Solo si es móvil y ocurrió un fallo recuperable de contexto/memoria, reintentar a 800 px.
     let raster
     try {
       raster = await rasterizarParaMedir(pagina, escala1, signal)
@@ -398,6 +424,8 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
       height: raster.alto,
       cerca,
     })
+    // Liberar inmediatamente el búfer de luminancia (ocupa megas de memoria) antes de generar el recorte HD
+    raster.gris = null
     tiempos.geo = Math.round(reloj() - inicioGeo)
     if (!geo.ok) return { ...geo, tiempos }
 

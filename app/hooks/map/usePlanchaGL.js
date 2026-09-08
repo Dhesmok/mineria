@@ -178,8 +178,8 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           // dejó sin diagnosticar el fallo de la duración de la función.
           if (!respuesta.ok) throw new FalloDeRed((await respuesta.text()).trim())
 
-          const totalBytes = Number(respuesta.headers.get("content-length") ?? 0)
-          const reader = respuesta.body?.getReader()
+          const totalBytes = Number(respuesta.headers?.get?.("content-length") ?? 0)
+          const reader = respuesta.body?.getReader?.()
           if (!reader) {
             archivo = await respuesta.arrayBuffer()
           } else {
@@ -217,6 +217,7 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
               buffer.set(chunk, offset)
               offset += chunk.length
             }
+            chunks.length = 0 // Liberar inmediatamente todos los trozos del stream
             archivo = buffer.buffer
           }
         } catch (fallo) {
