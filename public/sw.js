@@ -1,9 +1,9 @@
 // Service Worker para Visor Geológico y Minero - PWA / Caching Offline
 
 const CACHE_NAMES = {
-  STATIC: "visor-static-v1",
-  TILES: "visor-tiles-v1",
-  DATA: "visor-data-v1",
+  STATIC: "visor-static-v2",
+  TILES: "visor-tiles-v2",
+  DATA: "visor-data-v2",
 }
 
 const STATIC_ASSETS = [

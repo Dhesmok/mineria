@@ -71,8 +71,8 @@ export const esDispositivoMovil = () => {
  */
 export const calcularEscalaMedida = (tamano, { intento = 1 } = {}) => {
   const esMovil = esDispositivoMovil()
-  const anchoObjetivo = esMovil ? (intento > 1 ? 800 : 1000) : (intento > 1 ? 2000 : ANCHO_MEDIDA)
-  const maxPixeles = esMovil ? (intento > 1 ? 600000 : 850000) : (intento > 1 ? 4000000 : 7500000)
+  const anchoObjetivo = esMovil ? (intento > 1 ? 1000 : 1400) : (intento > 1 ? 2000 : ANCHO_MEDIDA)
+  const maxPixeles = esMovil ? (intento > 1 ? 900000 : 1800000) : (intento > 1 ? 4000000 : 7500000)
 
   // Validar dominio de entrada numérico y finito estrictamente positivo sin coerción de tipos
   const w = tamano?.width
@@ -262,6 +262,7 @@ export const rasterizarParaMedir = async (pagina, escala, signal) => {
   lienzo.width = ancho
   lienzo.height = alto
 
+  let exitoso = false
   try {
     const pincel = lienzo.getContext("2d", { willReadFrequently: true })
     if (!pincel || pincel.isContextLost?.()) {
@@ -329,11 +330,13 @@ export const rasterizarParaMedir = async (pagina, escala, signal) => {
     }
 
     const gris = luminancia(data, total)
-    return { gris, vista, escala, ancho, alto }
+    exitoso = true
+    return { gris, vista, escala, ancho, alto, canvas: lienzo }
   } finally {
-    // Garantizar liberación de memoria tanto en éxito como en fallo o cancelación
-    lienzo.width = 1
-    lienzo.height = 1
+    if (!exitoso) {
+      lienzo.width = 1
+      lienzo.height = 1
+    }
   }
 }
 
@@ -341,6 +344,7 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
   if (signal?.aborted) throw cancelado()
   const reloj = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
   const tiempos = {}
+  let raster = null
   onProgress?.({ etapa: "abriendo", porcentaje: 42, detalle: "Abriendo documento PDF..." })
   const pdf = await cargarPdfjs()
   const documento = await pdf.getDocument({ data: archivo }).promise
@@ -361,9 +365,8 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
       }
     }
 
-    // Intentar rasterizar con el presupuesto adaptativo (1000 px en móvil / 3000 px en escritorio).
-    // Solo si es móvil y ocurrió un fallo recuperable de contexto/memoria, reintentar a 800 px.
-    let raster
+    // Intentar rasterizar con el presupuesto adaptativo (1400 px en móvil / 3000 px en escritorio).
+    // Solo si es móvil y ocurrió un fallo recuperable de contexto/memoria, reintentar a 1000 px.
     try {
       raster = await rasterizarParaMedir(pagina, escala1, signal)
     } catch (primerFallo) {
@@ -423,10 +426,27 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
     await respirar(signal)
     onProgress?.({ etapa: "recorte", porcentaje: 82, detalle: "Generando imagen de alta fidelidad..." })
     const inicioRecorte = reloj()
-    const recorte = await recortarMapa(pagina, geo, raster.escala, { signal })
+    let recorte
+    try {
+      recorte = await recortarMapa(pagina, geo, raster.escala, {
+        signal,
+        canvasMedida: raster.canvas,
+      })
+    } finally {
+      if (raster?.canvas) {
+        raster.canvas.width = 1
+        raster.canvas.height = 1
+        raster.canvas = null
+      }
+    }
     tiempos.recorte = Math.round(reloj() - inicioRecorte)
     return { ...geo, canvas: recorte.canvas, escala: recorte.escala, tiempos }
   } finally {
+    if (raster?.canvas) {
+      raster.canvas.width = 1
+      raster.canvas.height = 1
+      raster.canvas = null
+    }
     // Cerrar el documento libera el worker y la memoria del PDF, que en una
     // plancha son decenas de megas.
     await documento.destroy()
@@ -436,21 +456,50 @@ export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {
 /**
  * Dibuja **solo** el rectángulo del mapa, a la mayor resolución razonable.
  *
- * El truco es la matriz que se le pasa a `render`: pdf.js dibuja la página
- * entera en el sistema de la vista, y esa matriz la corre para que la esquina del
- * marco caiga en el origen del lienzo. Así el lienzo mide lo que el recorte y no
- * lo que la hoja.
+ * En dispositivos móviles, utiliza directamente el lienzo de la pasada de medida
+ * (`canvasMedida`) mediante un recorte rápido `drawImage` en 2D. Esto evita una
+ * segunda invocación pesada de `pagina.render()`, eliminando por completo los
+ * picos de memoria (OOM kill / pestaña cerrada) al llegar al 82%.
+ *
+ * En ordenadores de escritorio, renderiza el mapa en alta resolución con la matriz
+ * de transformación que traslada la esquina del marco al origen del lienzo.
  */
-export const recortarMapa = async (pagina, geo, escalaMedida, { signal } = {}) => {
+export const recortarMapa = async (pagina, geo, escalaMedida, { signal, canvasMedida = null } = {}) => {
   if (signal?.aborted) throw cancelado()
 
   const { left, right, top, bottom } = geo.frame
-  const anchoMedida = right - left
-  const altoMedida = bottom - top
+  const anchoMedida = Math.max(1, Math.round(right - left))
+  const altoMedida = Math.max(1, Math.round(bottom - top))
+  const esMovil = esDispositivoMovil()
 
+  // Ruta móvil: recorte directo en 2D a partir del canvas de medición existente
+  if (esMovil && canvasMedida) {
+    const srcX = Math.max(0, Math.round(left))
+    const srcY = Math.max(0, Math.round(top))
+    const srcW = Math.min(anchoMedida, Math.max(1, canvasMedida.width - srcX))
+    const srcH = Math.min(altoMedida, Math.max(1, canvasMedida.height - srcY))
+
+    const lienzo = document.createElement("canvas")
+    lienzo.width = srcW
+    lienzo.height = srcH
+
+    const pincel = lienzo.getContext("2d")
+    if (!pincel || pincel.isContextLost?.()) {
+      throw Object.assign(new Error("No se pudo inicializar el lienzo para recortar el mapa en móvil."), {
+        code: "CONTEXT_LOST",
+      })
+    }
+    pincel.fillStyle = "#ffffff"
+    pincel.fillRect(0, 0, lienzo.width, lienzo.height)
+    pincel.drawImage(canvasMedida, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH)
+
+    return { canvas: lienzo, escala: escalaMedida }
+  }
+
+  // Ruta escritorio: renderizado vectorial en alta fidelidad hasta el límite de textura
   const tope = anchoMaximoDeTextura()
   const aumento = Math.min(tope / anchoMedida, tope / altoMedida)
-  const escala = escalaMedida * Math.max(1, aumento)
+  const escala = escalaMedida * aumento
 
   const vista = pagina.getViewport({ scale: escala })
   const proporcion = escala / escalaMedida

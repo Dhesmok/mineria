@@ -49,6 +49,12 @@ const MENSAJES = {
   "lienzo-fallido": "El dispositivo no pudo procesar la imagen del mapa.",
 }
 
+const formatearTamano = (bytes) => {
+  if (!bytes || bytes <= 0) return "0 KB"
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1e6).toFixed(1)} MB`
+}
+
 /**
  * @param {Object} mapRef mapa donde se **dibuja** la plancha (el lienzo de arriba)
  * @param {Object} mapInstance ese mismo mapa, como estado, para saber cuándo existe
@@ -220,6 +226,9 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
             chunks.length = 0 // Liberar inmediatamente todos los trozos del stream
             archivo = buffer.buffer
           }
+          if (!archivo || archivo.byteLength === 0) {
+            throw new FalloDeRed("El archivo recibido está incompleto o vacío.")
+          }
         } catch (fallo) {
           if (fallo instanceof FalloDeRed || fallo?.name === "AbortError") throw fallo
           // Aquí llega la conexión que se corta a mitad de la descarga, que es
@@ -228,7 +237,7 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           throw new FalloDeRed("La descarga se cortó antes de terminar.")
         }
         const descarga = Date.now() - arrancado
-        dondeIba = `${(archivo.byteLength / 1e6).toFixed(1)} MB bajados en ${Math.round(descarga / 1000)} s`
+        dondeIba = `${formatearTamano(archivo.byteLength)} bajados en ${Math.round(descarga / 1000)} s`
         fase = "dibujando el PDF"
         // Solo se calla si lo que abortó fue **otra petición**: esa ya puso su
         // propio «cargando» y escribirle encima sería enseñar el fallo de algo
@@ -257,7 +266,7 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
             titulo,
             url,
             error: "El PDF llegó incompleto o el navegador no pudo abrirlo.",
-            detalle: `${(archivo.byteLength / 1e6).toFixed(1)} MB recibidos`,
+            detalle: `${formatearTamano(archivo?.byteLength ?? 0)} recibidos`,
           })
           return
         }

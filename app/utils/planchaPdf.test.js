@@ -146,6 +146,7 @@ describe("ciclo de vida y limpieza de recursos (recortarMapa y rasterizarParaMed
     mock2d = {
       fillStyle: "",
       fillRect: jest.fn(),
+      drawImage: jest.fn(),
       getImageData: jest.fn((x, y, w, h) => {
         const total = (w || 100) * (h || 100)
         const arr = new Uint8ClampedArray(total * 4)
@@ -350,7 +351,7 @@ describe("ciclo de vida y limpieza de recursos (recortarMapa y rasterizarParaMed
     expect(createdCanvases[0].height).toBe(1)
   })
 
-  test("rasterizarParaMedir: en render exitoso retira listener y reduce lienzo temporal a 1x1", async () => {
+  test("rasterizarParaMedir: en render exitoso retira listener y preserva canvas para recorte", async () => {
     const controller = new AbortController()
     const removeListenerSpy = jest.spyOn(controller.signal, "removeEventListener")
 
@@ -369,10 +370,28 @@ describe("ciclo de vida y limpieza de recursos (recortarMapa y rasterizarParaMed
     const resultado = await rasterizarParaMedir(mockPagina, 1, controller.signal)
     expect(resultado.ancho).toBe(400)
     expect(resultado.alto).toBe(300)
+    expect(resultado.canvas).toBeDefined()
     expect(removeListenerSpy).toHaveBeenCalledWith("abort", expect.any(Function))
     expect(createdCanvases.length).toBe(1)
-    expect(createdCanvases[0].width).toBe(1)
-    expect(createdCanvases[0].height).toBe(1)
+    expect(createdCanvases[0].width).toBe(400)
+    expect(createdCanvases[0].height).toBe(300)
+  })
+
+  test("recortarMapa: en móvil con canvasMedida realiza recorte directo 2D sin llamar a pagina.render", async () => {
+    window.innerWidth = 390
+    const mockPagina = {
+      getViewport: jest.fn(),
+      render: jest.fn(),
+    }
+    const mockCanvas = { width: 1000, height: 800 }
+    const geo = {
+      frame: { left: 100, right: 600, top: 150, bottom: 550 },
+    }
+    const res = await recortarMapa(mockPagina, geo, 0.5, { canvasMedida: mockCanvas })
+    expect(mockPagina.render).not.toHaveBeenCalled()
+    expect(res.canvas.width).toBe(500)
+    expect(res.canvas.height).toBe(400)
+    expect(res.escala).toBe(0.5)
   })
 })
 
