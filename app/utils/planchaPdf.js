@@ -71,8 +71,8 @@ export const esDispositivoMovil = () => {
  */
 export const calcularEscalaMedida = (tamano, { intento = 1 } = {}) => {
   const esMovil = esDispositivoMovil()
-  const anchoObjetivo = esMovil ? (intento > 1 ? 1000 : 1400) : (intento > 1 ? 2000 : ANCHO_MEDIDA)
-  const maxPixeles = esMovil ? (intento > 1 ? 900000 : 1800000) : (intento > 1 ? 4000000 : 7500000)
+  const anchoObjetivo = esMovil ? (intento > 1 ? 1200 : 2000) : (intento > 1 ? 2000 : ANCHO_MEDIDA)
+  const maxPixeles = esMovil ? (intento > 1 ? 1440000 : 3000000) : (intento > 1 ? 4000000 : 7500000)
 
   // Validar dominio de entrada numérico y finito estrictamente positivo sin coerción de tipos
   const w = tamano?.width

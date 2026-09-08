@@ -29,7 +29,7 @@ describe("calcularEscalaMedida", () => {
     expect(escala).toBeCloseTo(3000 / 2500, 2)
   })
 
-  test("en móvil (< 768 px) limita a 1600 px y presupuesto de 2 Megapíxeles", () => {
+  test("en móvil (< 768 px) limita a 2000 px y presupuesto de 3 Megapíxeles", () => {
     window.innerWidth = 1280
     const escalaEscritorio = calcularEscalaMedida(dimensionOriginal)
 
@@ -39,8 +39,8 @@ describe("calcularEscalaMedida", () => {
     const altoEsperado = dimensionOriginal.height * escala
     const pixeles = anchoEsperado * altoEsperado
 
-    expect(anchoEsperado).toBeLessThanOrEqual(1600)
-    expect(pixeles).toBeLessThanOrEqual(2000001)
+    expect(anchoEsperado).toBeLessThanOrEqual(2000)
+    expect(pixeles).toBeLessThanOrEqual(3000001)
     expect(escala).toBeLessThan(escalaEscritorio)
   })
 
@@ -69,18 +69,18 @@ describe("calcularEscalaMedida", () => {
       const escala = calcularEscalaMedida(f, { intento: 1 })
       const wEntero = Math.round(f.width * escala)
       const hEntero = Math.round(f.height * escala)
-      expect(wEntero).toBeLessThanOrEqual(1600)
-      expect(wEntero * hEntero).toBeLessThanOrEqual(2000000)
+      expect(wEntero).toBeLessThanOrEqual(2000)
+      expect(wEntero * hEntero).toBeLessThanOrEqual(3000000)
     }
   })
 
-  test("contraejemplo de Astra (40000 x 35000): cumple estrictamente <= 2 MP y <= 1600 px", () => {
+  test("contraejemplo de Astra (40000 x 35000): cumple estrictamente <= 3 MP y <= 2000 px", () => {
     window.innerWidth = 412
     const escala = calcularEscalaMedida({ width: 40000, height: 35000 })
     const w = Math.max(1, Math.round(40000 * escala))
     const h = Math.max(1, Math.round(35000 * escala))
-    expect(w).toBeLessThanOrEqual(1600)
-    expect(w * h).toBeLessThanOrEqual(2000000)
+    expect(w).toBeLessThanOrEqual(2000)
+    expect(w * h).toBeLessThanOrEqual(3000000)
   })
 
   test("contraejemplo astronómico de Astra (40e9 x 35e9): cumple estrictamente sobre dimensiones efectivas", () => {
@@ -89,8 +89,8 @@ describe("calcularEscalaMedida", () => {
     const escala = calcularEscalaMedida(f)
     const w = Math.max(1, Math.round(f.width * escala))
     const h = Math.max(1, Math.round(f.height * escala))
-    expect(w).toBeLessThanOrEqual(1600)
-    expect(w * h).toBeLessThanOrEqual(2000000)
+    expect(w).toBeLessThanOrEqual(2000)
+    expect(w * h).toBeLessThanOrEqual(3000000)
   })
 
   test("desbordamiento aritmético a Infinity (1e200 x 1e200): no colapsa ni devuelve 1", () => {
@@ -100,8 +100,8 @@ describe("calcularEscalaMedida", () => {
     expect(calcularEscalaMedida({ width: 1e200, height: 1e200 })).toBeLessThan(1)
     const effW = Math.max(1, Math.round(1e200 * escala))
     const effH = Math.max(1, Math.round(1e200 * escala))
-    expect(effW).toBeLessThanOrEqual(1600)
-    expect(effW * effH).toBeLessThanOrEqual(2000000)
+    expect(effW).toBeLessThanOrEqual(2000)
+    expect(effW * effH).toBeLessThanOrEqual(3000000)
   })
 
   test("retorna 0 ante dimensiones inválidas, nulas, vacías, negativas, NaN o Infinity", () => {
