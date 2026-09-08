@@ -57,4 +57,23 @@ describe("PlanchaPanel", () => {
     expect(screen.getByText("Se acabó el tiempo dibujando el PDF.")).toBeInTheDocument()
     expect(screen.getByText(/38\.2 MB bajados en 61 s/)).toBeInTheDocument()
   })
+
+  it("enseña la barra de progreso, porcentaje y botón de cancelar mientras carga", () => {
+    const onCancelar = jest.fn()
+    render(
+      <PlanchaPanel
+        plancha={{
+          titulo: "Plancha 132",
+          cargando: true,
+          progreso: { etapa: "descarga", porcentaje: 35, detalle: "8.5 MB de 24.1 MB (35%)" },
+        }}
+        opacity={1}
+        onCancelar={onCancelar}
+      />,
+    )
+
+    expect(screen.getByText("8.5 MB de 24.1 MB (35%)")).toBeInTheDocument()
+    expect(screen.getByText("35%")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument()
+  })
 })

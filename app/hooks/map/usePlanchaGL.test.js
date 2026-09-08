@@ -74,7 +74,9 @@ describe("usePlanchaGL", () => {
     act(() => {
       result.current.cargarPlancha(PETICION)
     })
-    expect(result.current.plancha).toEqual({ cargando: true, titulo: "Plancha 132" })
+    expect(result.current.plancha).toEqual(
+      expect.objectContaining({ cargando: true, titulo: "Plancha 132" }),
+    )
 
     await act(async () => {
       jest.advanceTimersByTime(95000)
@@ -162,7 +164,9 @@ describe("usePlanchaGL", () => {
       result.current.cargarPlancha({ ...PETICION, titulo: "Plancha 133" })
     })
 
-    expect(result.current.plancha).toEqual({ cargando: true, titulo: "Plancha 133" })
+    expect(result.current.plancha).toEqual(
+      expect.objectContaining({ cargando: true, titulo: "Plancha 133" }),
+    )
   })
 
   it("guarda en qué se fue el tiempo cuando sí sale bien", async () => {

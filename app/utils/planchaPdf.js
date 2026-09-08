@@ -166,19 +166,40 @@ const respirar = (signal) =>
     setTimeout(() => (signal?.aborted ? para(cancelado()) : sigue()), 0)
   })
 
-/** Lo más ancho que la tarjeta acepta como textura, sin pasarse del tope. */
+let limiteTexturaCache = null
+
+/**
+ * Lo más ancho que la tarjeta acepta como textura, sin pasarse del tope.
+ *
+ * En móviles acota a 2048 para no saturar el límite estricto de memoria de canvas
+ * (WebKit ~384 MB combinados y 16.7 Mpx) ni agotar la VRAM de GPUs móviles.
+ * En escritorio permite hasta 4096.
+ *
+ * Libera de inmediato el contexto WebGL de prueba para evitar que el navegador
+ * expulse el contexto WebGL de MapLibre (trampa de WebGL context lost en móviles).
+ */
 export const anchoMaximoDeTextura = (max = ANCHO_MAXIMO) => {
-  // En pantallas móviles (< 768px), limitar a 2048 px para prevenir desbordamiento de memoria GPU (VRAM)
-  const limiteDispositivo = typeof window !== "undefined" && window.innerWidth < 768 ? 2048 : max
+  if (limiteTexturaCache !== null) {
+    return Math.min(limiteTexturaCache, max)
+  }
+
+  const esMovil =
+    typeof window !== "undefined" &&
+    (window.innerWidth < 768 || (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0))
+  const topeSeguro = esMovil ? 2048 : max
+
   try {
     const lienzo = document.createElement("canvas")
     const gl = lienzo.getContext("webgl2") ?? lienzo.getContext("webgl")
     const limite = gl?.getParameter(gl.MAX_TEXTURE_SIZE)
-    // Liberar inmediatamente el contexto auxiliar para no agotar los contextos WebGL permitidos por el móvil
     gl?.getExtension("WEBGL_lose_context")?.loseContext()
-    return Number.isFinite(limite) ? Math.min(limite, limiteDispositivo) : limiteDispositivo
+    lienzo.width = 0
+    lienzo.height = 0
+    limiteTexturaCache = Number.isFinite(limite) ? Math.min(limite, topeSeguro) : topeSeguro
+    return limiteTexturaCache
   } catch {
-    return limiteDispositivo
+    limiteTexturaCache = topeSeguro
+    return limiteTexturaCache
   }
 }
 
@@ -195,21 +216,6 @@ const luminancia = (datos, total) => {
   return gris
 }
 
-/**
- * Abre el PDF, lo georreferencia y devuelve el mapa recortado.
- *
- * @param {ArrayBuffer} archivo el PDF entero
- * @param {[number,number]} cerca dónde tocó el usuario, para elegir el origen
- * @param {Object} [opciones]
- * @param {AbortSignal} [opciones.signal] para poder rendirse a medio camino
- * @returns {Promise<{ok:true, canvas:HTMLCanvasElement, ...}|{ok:false, reason:string}>}
- */
-/**
- * Rasteriza la página a la escala indicada y extrae su luminancia para medición.
- *
- * Libera el canvas inmediatamente tras extraer los píxeles y valida que el
- * renderizado no haya quedado vacío ni perdido por colapso del proceso gráfico.
- */
 /**
  * Rasteriza la página a la escala indicada y extrae su luminancia para medición.
  *
@@ -314,15 +320,17 @@ export const rasterizarParaMedir = async (pagina, escala, signal) => {
   }
 }
 
-export const prepararPlancha = async (archivo, cerca, { signal } = {}) => {
+export const prepararPlancha = async (archivo, cerca, { signal, onProgress } = {}) => {
   if (signal?.aborted) throw cancelado()
   const reloj = () => (typeof performance !== "undefined" ? performance.now() : Date.now())
   const tiempos = {}
+  onProgress?.({ etapa: "abriendo", porcentaje: 42, detalle: "Abriendo documento PDF..." })
   const pdf = await cargarPdfjs()
   const documento = await pdf.getDocument({ data: archivo }).promise
   try {
     const pagina = await documento.getPage(1)
     await respirar(signal)
+    onProgress?.({ etapa: "medida", porcentaje: 52, detalle: "Midiendo cuadrícula y extrayendo textos..." })
     const inicioMedida = reloj()
     const tamano = pagina.getViewport({ scale: 1 })
     const esMovil = typeof window !== "undefined" && window.innerWidth < 768
@@ -381,6 +389,7 @@ export const prepararPlancha = async (archivo, cerca, { signal } = {}) => {
         return { text: item.str, x, y }
       })
 
+    onProgress?.({ etapa: "georreferenciacion", porcentaje: 68, detalle: "Calculando coordenadas Gauss y marco..." })
     const inicioGeo = reloj()
     const geo = georeferencePlancha({
       items,
@@ -393,6 +402,7 @@ export const prepararPlancha = async (archivo, cerca, { signal } = {}) => {
     if (!geo.ok) return { ...geo, tiempos }
 
     await respirar(signal)
+    onProgress?.({ etapa: "recorte", porcentaje: 82, detalle: "Generando imagen de alta fidelidad..." })
     const inicioRecorte = reloj()
     const recorte = await recortarMapa(pagina, geo, raster.escala, { signal })
     tiempos.recorte = Math.round(reloj() - inicioRecorte)

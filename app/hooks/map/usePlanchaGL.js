@@ -125,7 +125,11 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
       cancelar.current?.abort()
       const control = new AbortController()
       cancelar.current = control
-      setPlancha({ cargando: true, titulo })
+      setPlancha({
+        cargando: true,
+        titulo,
+        progreso: { etapa: "descarga", porcentaje: 5, detalle: "Iniciando descarga del PDF..." },
+      })
 
       // **Por qué se abortó, no solo si se abortó.** Son dos cosas distintas y
       // este hook las trataba igual: que el usuario pida otra plancha —y
@@ -173,7 +177,48 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           // pudo traer la plancha» que no señalaba a ningún sitio. Fue lo que
           // dejó sin diagnosticar el fallo de la duración de la función.
           if (!respuesta.ok) throw new FalloDeRed((await respuesta.text()).trim())
-          archivo = await respuesta.arrayBuffer()
+
+          const totalBytes = Number(respuesta.headers.get("content-length") ?? 0)
+          const reader = respuesta.body?.getReader()
+          if (!reader) {
+            archivo = await respuesta.arrayBuffer()
+          } else {
+            const chunks = []
+            let bytesCargados = 0
+            let ultimoReporte = 0
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              chunks.push(value)
+              bytesCargados += value.length
+              const ahora = Date.now()
+              // Reportar cada 120 ms para mantener la barra fluida sin saturar el hilo de React
+              if (ahora - ultimoReporte > 120) {
+                ultimoReporte = ahora
+                const mb = (bytesCargados / 1e6).toFixed(1)
+                let pct = 10
+                let detalle = `${mb} MB descargados...`
+                if (totalBytes > 0) {
+                  const mbTotal = (totalBytes / 1e6).toFixed(1)
+                  const fraccion = Math.min(1, bytesCargados / totalBytes)
+                  pct = Math.round(5 + fraccion * 35) // Fase descarga: 5% a 40%
+                  detalle = `${mb} MB de ${mbTotal} MB (${Math.round(fraccion * 100)}%)`
+                }
+                setPlancha((prev) =>
+                  prev?.cargando
+                    ? { ...prev, progreso: { etapa: "descarga", porcentaje: pct, detalle } }
+                    : prev,
+                )
+              }
+            }
+            const buffer = new Uint8Array(bytesCargados)
+            let offset = 0
+            for (const chunk of chunks) {
+              buffer.set(chunk, offset)
+              offset += chunk.length
+            }
+            archivo = buffer.buffer
+          }
         } catch (fallo) {
           if (fallo instanceof FalloDeRed || fallo?.name === "AbortError") throw fallo
           // Aquí llega la conexión que se corta a mitad de la descarga, que es
@@ -195,7 +240,12 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           // varios segundos de cálculo, y sin esto el reloj saltaba mientras
           // tanto sin poder detener nada: el navegador seguía trabajando en una
           // plancha que ya nadie iba a ver.
-          resultado = await prepararPlancha(archivo, cerca, { signal: control.signal })
+          resultado = await prepararPlancha(archivo, cerca, {
+            signal: control.signal,
+            onProgress: (progreso) => {
+              setPlancha((prev) => (prev?.cargando ? { ...prev, progreso } : prev))
+            },
+          })
         } catch (fallo) {
           if (fallo?.name === "AbortError") throw fallo
           // Un PDF que llega incompleto revienta al abrirse, no al descargarse.
@@ -211,7 +261,7 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           return
         }
         // Si llegó hasta aquí, el trabajo está hecho aunque el reloj haya
-        // saltado por los pelos: se enseña la plancha, que es mejor que tirarla.
+          // saltado por los pelos: se enseña la plancha, que es mejor que tirarla.
         if (control.signal.aborted && !porTiempo) return
 
         if (!resultado.ok) {
@@ -234,10 +284,21 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
           setPlancha({ titulo, error: "El mapa todavía no está listo.", url })
           return
         }
+        setPlancha((prev) =>
+          prev?.cargando
+            ? {
+                ...prev,
+                progreso: { etapa: "mapa", porcentaje: 96, detalle: "Sincronizando capa sobre el visor..." },
+              }
+            : prev,
+        )
         // Las esquinas y la imagen en la misma llamada: puestas por separado, hay
         // un fotograma en el que la imagen nueva se dibuja con las esquinas
         // viejas, y la hoja aparece un instante en el sitio de la anterior.
         fuente.updateImage({ image: resultado.canvas, coordinates: resultado.corners })
+        // Asegurar que MapLibre remedida y repinte el lienzo temático de inmediato
+        map?.resize?.()
+        map?.triggerRepaint?.()
         setPlancha({
           titulo,
           url,
@@ -302,6 +363,7 @@ export const usePlanchaGL = (mapRef, mapInstance, cameraRef = mapRef) => {
     setPlanchaOpacity: setOpacity,
     cargarPlancha: cargar,
     quitarPlancha: quitar,
+    cancelarPlancha: quitar,
     encuadrarPlancha: encuadrar,
   }
 }

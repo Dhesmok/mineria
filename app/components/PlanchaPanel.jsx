@@ -63,7 +63,7 @@ const metrosDeResiduo = (residual, size, canvas) => {
   return (residual * size[0]) / anchoPx
 }
 
-export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuitar }) => {
+export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuitar, onCancelar }) => {
   if (!plancha) return null
 
   const cargando = Boolean(plancha.cargando)
@@ -75,13 +75,46 @@ export const PlanchaPanel = ({ plancha, opacity, onOpacity, onEncuadrar, onQuita
       icon={cargando ? Loader2 : Layers}
       collapsible={false}
       closeLabel="Quitar la plancha del mapa"
-      onRequestClose={onQuitar}
+      onRequestClose={onCancelar ?? onQuitar}
     >
       {cargando && (
-        <p className="text-[11px] leading-snug text-slate-500">
-          Trayendo el PDF del SGC y buscándole la cuadrícula. Una plancha pesa
-          decenas de megas: puede tardar.
-        </p>
+        <div className="space-y-2.5 py-1">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-medium text-slate-700">
+              {plancha.progreso?.detalle || "Procesando plancha geológica..."}
+            </span>
+            <span className="text-[10px] font-semibold tabular-nums text-blue-600">
+              {plancha.progreso?.porcentaje ? `${plancha.progreso.porcentaje}%` : ""}
+            </span>
+          </div>
+
+          {/* Barra de progreso animada */}
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200/60">
+            <div
+              className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-300 ease-out"
+              style={{ width: `${Math.max(5, Math.min(100, plancha.progreso?.porcentaje ?? 15))}%` }}
+            />
+          </div>
+
+          {/* Etapas discretas del pipeline */}
+          <div className="flex justify-between text-[9px] uppercase tracking-wider text-slate-400">
+            <span className={plancha.progreso?.etapa === "descarga" ? "font-semibold text-blue-600" : ""}>Descarga</span>
+            <span className={plancha.progreso?.etapa === "abriendo" || plancha.progreso?.etapa === "medida" ? "font-semibold text-blue-600" : ""}>Medida</span>
+            <span className={plancha.progreso?.etapa === "georreferenciacion" ? "font-semibold text-blue-600" : ""}>Ajuste</span>
+            <span className={plancha.progreso?.etapa === "recorte" ? "font-semibold text-blue-600" : ""}>Recorte HD</span>
+            <span className={plancha.progreso?.etapa === "mapa" ? "font-semibold text-blue-600" : ""}>Mapa</span>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={onCancelar ?? onQuitar}
+              className="rounded border border-slate-200 px-2.5 py-0.5 text-[10px] font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
 
       {fallo && (

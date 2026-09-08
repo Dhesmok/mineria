@@ -80,6 +80,7 @@ export const GET = async (request) => {
       status: 200,
       headers: {
         "content-type": "application/pdf",
+        ...(largo > 0 ? { "content-length": String(largo) } : {}),
         "cache-control": `public, max-age=3600, s-maxage=${CACHE}, stale-while-revalidate=${CACHE}`,
         "x-content-type-options": "nosniff",
       },

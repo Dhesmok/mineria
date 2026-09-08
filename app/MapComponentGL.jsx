@@ -475,8 +475,8 @@ export default function MapComponentGL({
   } = usePlanchaGL(thematicMapRef, thematicMapInstance, mapRef)
 
   useEffect(() => {
-    setPlanchaActive(Boolean(plancha?.canvas))
-  }, [plancha?.canvas])
+    setPlanchaActive(Boolean(plancha?.canvas || plancha?.cargando))
+  }, [plancha?.canvas, plancha?.cargando])
 
   // La lista de subcapas sube al panel, que es quien dibuja las casillas. El
   // hook tiene que vivir aquí —necesita el mapa— pero las casillas van junto a
@@ -1041,6 +1041,7 @@ export default function MapComponentGL({
           onOpacity={setPlanchaOpacity}
           onEncuadrar={encuadrarPlancha}
           onQuitar={quitarPlancha}
+          onCancelar={quitarPlancha}
         />
 
         {/* La función diferenciadora: dibujar un polígono y salir con los
