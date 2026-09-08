@@ -71,8 +71,8 @@ export const esDispositivoMovil = () => {
  */
 export const calcularEscalaMedida = (tamano, { intento = 1 } = {}) => {
   const esMovil = esDispositivoMovil()
-  const anchoObjetivo = esMovil ? (intento > 1 ? 1200 : 2000) : (intento > 1 ? 2000 : ANCHO_MEDIDA)
-  const maxPixeles = esMovil ? (intento > 1 ? 1440000 : 3000000) : (intento > 1 ? 4000000 : 7500000)
+  const anchoObjetivo = esMovil ? (intento > 1 ? 1400 : 2500) : (intento > 1 ? 2000 : ANCHO_MEDIDA)
+  const maxPixeles = esMovil ? (intento > 1 ? 2000000 : 5000000) : (intento > 1 ? 4000000 : 7500000)
 
   // Validar dominio de entrada numérico y finito estrictamente positivo sin coerción de tipos
   const w = tamano?.width
@@ -474,14 +474,22 @@ export const recortarMapa = async (pagina, geo, escalaMedida, { signal, canvasMe
 
   // Ruta móvil: recorte directo en 2D a partir del canvas de medición existente
   if (esMovil && canvasMedida) {
+    const tope = anchoMaximoDeTextura()
     const srcX = Math.max(0, Math.round(left))
     const srcY = Math.max(0, Math.round(top))
     const srcW = Math.min(anchoMedida, Math.max(1, canvasMedida.width - srcX))
     const srcH = Math.min(altoMedida, Math.max(1, canvasMedida.height - srcY))
 
+    let escalaDestino = 1
+    if (srcW > tope || srcH > tope) {
+      escalaDestino = Math.min(tope / srcW, tope / srcH)
+    }
+    const dstW = Math.max(1, Math.round(srcW * escalaDestino))
+    const dstH = Math.max(1, Math.round(srcH * escalaDestino))
+
     const lienzo = document.createElement("canvas")
-    lienzo.width = srcW
-    lienzo.height = srcH
+    lienzo.width = dstW
+    lienzo.height = dstH
 
     const pincel = lienzo.getContext("2d")
     if (!pincel || pincel.isContextLost?.()) {
@@ -491,9 +499,9 @@ export const recortarMapa = async (pagina, geo, escalaMedida, { signal, canvasMe
     }
     pincel.fillStyle = "#ffffff"
     pincel.fillRect(0, 0, lienzo.width, lienzo.height)
-    pincel.drawImage(canvasMedida, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH)
+    pincel.drawImage(canvasMedida, srcX, srcY, srcW, srcH, 0, 0, dstW, dstH)
 
-    return { canvas: lienzo, escala: escalaMedida }
+    return { canvas: lienzo, escala: escalaMedida * escalaDestino }
   }
 
   // Ruta escritorio: renderizado vectorial en alta fidelidad hasta el límite de textura
