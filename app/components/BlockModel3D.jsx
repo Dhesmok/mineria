@@ -1670,6 +1670,7 @@ export default function BlockModel3D({
               onClick={onToggleMaximize}
               className="hidden md:flex p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 rounded-md border border-zinc-800 transition-colors"
               title={isMaximized ? "Restaurar tamaño normal" : "Maximizar pantalla completa"}
+              aria-label={isMaximized ? "Restaurar tamaño normal" : "Maximizar pantalla completa"}
             >
               {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>
@@ -1679,6 +1680,7 @@ export default function BlockModel3D({
             onClick={onClose}
             className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-md border border-zinc-800 transition-colors"
             title="Cerrar bloque 3D del terreno"
+            aria-label="Cerrar bloque 3D del terreno"
           >
             <X size={15} />
           </button>
@@ -1786,6 +1788,7 @@ export default function BlockModel3D({
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
               }`}
               title={autoRotate ? "Detener giro continuo" : "Iniciar giro automático"}
+              aria-label={autoRotate ? "Detener giro continuo" : "Iniciar giro automático"}
             >
               <RotateCw size={15} />
             </button>
@@ -1798,6 +1801,7 @@ export default function BlockModel3D({
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
               }`}
               title="Alternar vista de malla de alambre"
+              aria-label="Alternar vista de malla de alambre"
             >
               <Grid size={15} />
             </button>
@@ -1806,6 +1810,7 @@ export default function BlockModel3D({
               onClick={() => setStudioTheme(studioTheme === "dark" ? "light" : "dark")}
               className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
               title={`Cambiar a fondo ${studioTheme === "dark" ? "claro" : "oscuro"}`}
+              aria-label={`Cambiar a fondo ${studioTheme === "dark" ? "claro" : "oscuro"}`}
             >
               <Activity size={15} />
             </button>
@@ -1814,6 +1819,7 @@ export default function BlockModel3D({
               onClick={handleScreenshot}
               className="p-1.5 text-zinc-400 hover:text-sky-400 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
               title="Exportar imagen PNG del bloque 3D"
+              aria-label="Exportar imagen PNG del bloque 3D"
             >
               <Camera size={15} />
             </button>
@@ -1831,6 +1837,7 @@ export default function BlockModel3D({
             <button
               onClick={() => setSelectedPinId(null)}
               className="text-zinc-400 hover:text-zinc-100 p-0.5"
+              aria-label="Cerrar editor de marcador"
             >
               <X size={13} />
             </button>
@@ -1861,6 +1868,7 @@ export default function BlockModel3D({
                   }}
                   className="w-4 h-4 rounded-full border border-white/20 hover:scale-110 transition-transform"
                   style={{ backgroundColor: `#${colorHex.toString(16).padStart(6, "0")}` }}
+                  aria-label={`Seleccionar color #${colorHex.toString(16).padStart(6, "0")}`}
                 />
               ))}
             </div>
@@ -1872,6 +1880,7 @@ export default function BlockModel3D({
               }}
               className="p-1 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition-colors"
               title="Eliminar este pin"
+              aria-label="Eliminar este pin"
             >
               <Trash2 size={14} />
             </button>

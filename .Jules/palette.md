@@ -10,3 +10,9 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+
+## 2024-09-10 - Add aria-label to missing tool-tip icon buttons in BlockModel3D
+
+**Learning:** When tooltips are provided exclusively using the `title` attribute for icon-only buttons, screen reader users might miss the context or accessible name. This is particularly prevalent in toolbars and small action groups in map interfaces like the 3D block model, where space is tight, and icons stand alone (e.g., maximize, delete, change color).
+
+**Action:** Always ensure that an `aria-label` is applied alongside `title` (or replace it entirely depending on the UX pattern) for icon-only buttons to guarantee accessibility across all assistive technologies.
