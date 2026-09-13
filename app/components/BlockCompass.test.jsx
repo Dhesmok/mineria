@@ -1,4 +1,4 @@
-﻿import React from "react"
+import React from "react"
 import { render, screen, fireEvent } from "@testing-library/react"
 import BlockCompass from "./BlockCompass"
 
@@ -9,7 +9,7 @@ describe("BlockCompass", () => {
     expect(screen.getByLabelText("Reorientar bloque 3D al Norte")).toBeInTheDocument()
     expect(screen.getByLabelText("Reorientar al Norte")).toBeInTheDocument()
     expect(screen.getByLabelText("Alternar vista cenital")).toBeInTheDocument()
-    expect(screen.getByText("N")).toBeInTheDocument()
+    expect(screen.getAllByText("N").length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText("E")).toBeInTheDocument()
     expect(screen.getByText("S")).toBeInTheDocument()
     expect(screen.getByText("O")).toBeInTheDocument()

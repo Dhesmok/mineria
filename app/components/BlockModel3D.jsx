@@ -1209,11 +1209,13 @@ export default function BlockModel3D({
 
       const polar = typeof controls.getPolarAngle === "function" ? controls.getPolarAngle() : Math.PI / 4
       const polarDeg = (polar * 180) / Math.PI
-      // Inclinación 3D del gimbal espacial:
+      // Inclinación 3D del gimbal espacial calibrada anti-escorzo:
       // Cuando la cámara mira desde arriba (polar ~0, cenital): tiltX = 0° (plano frontal)
-      // A 45° de elevación: tiltX ~ 45°
-      // Cerca del horizonte (~85°): tiltX se acota en ~66° para máxima estética y legibilidad
-      const tiltX = Math.max(0, Math.min(66, polarDeg * 0.78))
+      // A 45° de elevación: tiltX ~ 25°
+      // Con inclinación extrema del terreno (~85°): tiltX se acota suavemente en ~44°
+      // Esto asegura que la elipse 3D conserve siempre al menos el 72% de su altura vertical,
+      // haciendo que la aguja y la baliza Norte sean 100% legibles sin importar la inclinación.
+      const tiltX = Math.max(0, Math.min(44, polarDeg * 0.52))
 
       if (compassGimbalRef.current) {
         compassGimbalRef.current.style.transform = `rotateX(${tiltX.toFixed(1)}deg)`
@@ -1224,7 +1226,7 @@ export default function BlockModel3D({
       }
 
       if (compassNeedleShadowRef.current) {
-        const shadowDistY = (tiltX / 66) * 6.5
+        const shadowDistY = (tiltX / 44) * 5.0
         compassNeedleShadowRef.current.style.transform = `translateZ(6px) rotateZ(${needleDeg.toFixed(1)}deg) translate(0px, ${shadowDistY.toFixed(1)}px)`
       }
 
@@ -1236,7 +1238,11 @@ export default function BlockModel3D({
         ]
         const cardIdx = Math.round(headingDeg / 22.5) % 16
         const card = cardinals[cardIdx]
-        compassHeadingRef.current.textContent = `${String(headingDeg).padStart(3, "0")}° ${card}`
+
+        // Flecha direccional de rumbo activa
+        const arrows = ["↑", "↗", "↗", "→", "→", "↘", "↘", "↓", "↓", "↙", "↙", "←", "←", "↖", "↖", "↑"]
+        const arrow = arrows[cardIdx] || "↑"
+        compassHeadingRef.current.textContent = `${arrow} ${String(headingDeg).padStart(3, "0")}° ${card}`
       }
 
       if (compassPitchRef.current) {
