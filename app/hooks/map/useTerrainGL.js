@@ -431,33 +431,87 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     let frame = 0
     let previous = performance.now()
     let lastPublished = 0
-    let isUserDragging = false
+    let lastInteractionTime = 0
+    const GRACE_PERIOD_MS = 300
+
+    const activePointers = new Set()
+
+    const onPointerDown = (e) => {
+      if (e.pointerId !== undefined) {
+        activePointers.add(e.pointerId)
+      } else if (e.buttons > 0) {
+        activePointers.add("mouse")
+      }
+      lastInteractionTime = performance.now()
+    }
+
+    const onPointerUp = (e) => {
+      if (e.pointerId !== undefined) {
+        activePointers.delete(e.pointerId)
+      } else {
+        activePointers.clear()
+      }
+      lastInteractionTime = performance.now()
+    }
+
+    const onTouchStart = (e) => {
+      if (e.touches) {
+        for (let i = 0; i < e.touches.length; i++) {
+          activePointers.add(e.touches[i].identifier)
+        }
+      }
+      lastInteractionTime = performance.now()
+    }
+
+    const onTouchEnd = (e) => {
+      if (e.touches && e.touches.length === 0) {
+        activePointers.clear()
+      }
+      lastInteractionTime = performance.now()
+    }
+
+    const onGestureStart = () => {
+      lastInteractionTime = performance.now()
+    }
+
+    const onGestureEnd = () => {
+      lastInteractionTime = performance.now()
+    }
 
     const canvas = mapInstance.getCanvas?.()
 
-    const onPointerDown = (e) => {
-      // Si el usuario pulsa para arrastrar el mapa manualmente, pausamos el giro temporalmente
-      if (e.buttons > 0) {
-        isUserDragging = true
-      }
-    }
-
-    const onPointerUp = () => {
-      isUserDragging = false
-      previous = performance.now()
-    }
-
     if (canvas) {
-      canvas.addEventListener("pointerdown", onPointerDown, { passive: true })
-      canvas.addEventListener("touchstart", onPointerDown, { passive: true })
+      canvas.addEventListener?.("pointerdown", onPointerDown, { passive: true })
+      canvas.addEventListener?.("touchstart", onTouchStart, { passive: true })
     }
     window.addEventListener("pointerup", onPointerUp, { passive: true })
     window.addEventListener("mouseup", onPointerUp, { passive: true })
-    window.addEventListener("touchend", onPointerUp, { passive: true })
+    window.addEventListener("touchend", onTouchEnd, { passive: true })
     window.addEventListener("pointercancel", onPointerUp, { passive: true })
+    window.addEventListener("touchcancel", onTouchEnd, { passive: true })
+
+    mapInstance.on?.("dragstart", onGestureStart)
+    mapInstance.on?.("dragend", onGestureEnd)
+    mapInstance.on?.("rotatestart", onGestureStart)
+    mapInstance.on?.("rotateend", onGestureEnd)
+    mapInstance.on?.("pitchstart", onGestureStart)
+    mapInstance.on?.("pitchend", onGestureEnd)
+    mapInstance.on?.("zoomstart", onGestureStart)
+    mapInstance.on?.("zoomend", onGestureEnd)
 
     const step = (now) => {
-      if (isUserDragging) {
+      const isDragging =
+        activePointers.size > 0 ||
+        mapInstance.dragRotate?.isActive?.() ||
+        mapInstance.dragPan?.isActive?.()
+
+      if (isDragging) {
+        lastInteractionTime = now
+      }
+
+      const isInteracting = isDragging || now - lastInteractionTime < GRACE_PERIOD_MS
+
+      if (isInteracting) {
         previous = now
         frame = requestAnimationFrame(step)
         return
@@ -484,13 +538,23 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     return () => {
       cancelAnimationFrame(frame)
       if (canvas) {
-        canvas.removeEventListener("pointerdown", onPointerDown)
-        canvas.removeEventListener("touchstart", onPointerDown)
+        canvas.removeEventListener?.("pointerdown", onPointerDown)
+        canvas.removeEventListener?.("touchstart", onTouchStart)
       }
       window.removeEventListener("pointerup", onPointerUp)
       window.removeEventListener("mouseup", onPointerUp)
-      window.removeEventListener("touchend", onPointerUp)
+      window.removeEventListener("touchend", onTouchEnd)
       window.removeEventListener("pointercancel", onPointerUp)
+      window.removeEventListener("touchcancel", onTouchEnd)
+
+      mapInstance.off?.("dragstart", onGestureStart)
+      mapInstance.off?.("dragend", onGestureEnd)
+      mapInstance.off?.("rotatestart", onGestureStart)
+      mapInstance.off?.("rotateend", onGestureEnd)
+      mapInstance.off?.("pitchstart", onGestureStart)
+      mapInstance.off?.("pitchend", onGestureEnd)
+      mapInstance.off?.("zoomstart", onGestureStart)
+      mapInstance.off?.("zoomend", onGestureEnd)
 
       setBearing(mapInstance.getBearing())
     }
@@ -551,8 +615,8 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     }
   }, [mapInstance])
 
-  // Evitar que el clic derecho abra el menú contextual y deje trabado el giro 3D (dragRotate),
-  // y asegurar que si se mueve el ratón sin botones pulsados, MapLibre no quede "pegado".
+  // Evitar que el clic derecho sobre el canvas abra el menú contextual del navegador
+  // y deje trabado el giro 3D (dragRotate).
   useEffect(() => {
     if (!mapInstance) return
     const canvas = mapInstance.getCanvas?.()
@@ -562,27 +626,10 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       e.preventDefault()
     }
 
-    const onGlobalPointerMove = (e) => {
-      if (e.buttons === 0) {
-        if (mapInstance.dragRotate?.isActive?.() || mapInstance.dragPan?.isActive?.()) {
-          canvas.dispatchEvent(
-            new MouseEvent("mouseup", {
-              bubbles: true,
-              cancelable: true,
-              clientX: e.clientX,
-              clientY: e.clientY,
-            }),
-          )
-        }
-      }
-    }
-
-    canvas?.addEventListener?.("contextmenu", onContextMenu)
-    window.addEventListener("pointermove", onGlobalPointerMove, { passive: true })
+    canvas.addEventListener?.("contextmenu", onContextMenu)
 
     return () => {
-      canvas?.removeEventListener?.("contextmenu", onContextMenu)
-      window.removeEventListener("pointermove", onGlobalPointerMove)
+      canvas.removeEventListener?.("contextmenu", onContextMenu)
     }
   }, [mapInstance])
 
