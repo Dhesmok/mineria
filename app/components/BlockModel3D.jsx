@@ -950,8 +950,10 @@ export default function BlockModel3D({
   const [selectedPinId, setSelectedPinId] = useState(null)
   const [editingPinText, setEditingPinText] = useState("")
 
-  // Referencias para la brújula 3D HUD (actualizaciones directas a 60 fps)
+  // Referencias para la brújula 3D espacial (actualizaciones directas a 60 fps)
+  const compassGimbalRef = useRef(null)
   const compassDiscRef = useRef(null)
+  const compassNeedleShadowRef = useRef(null)
   const compassHeadingRef = useRef(null)
   const compassPitchRef = useRef(null)
   const compassAlignedBadgeRef = useRef(null)
@@ -1205,8 +1207,25 @@ export default function BlockModel3D({
       const needleRad = azimuth - rotY
       const needleDeg = (needleRad * 180) / Math.PI
 
+      const polar = typeof controls.getPolarAngle === "function" ? controls.getPolarAngle() : Math.PI / 4
+      const polarDeg = (polar * 180) / Math.PI
+      // Inclinación 3D del gimbal espacial:
+      // Cuando la cámara mira desde arriba (polar ~0, cenital): tiltX = 0° (plano frontal)
+      // A 45° de elevación: tiltX ~ 45°
+      // Cerca del horizonte (~85°): tiltX se acota en ~66° para máxima estética y legibilidad
+      const tiltX = Math.max(0, Math.min(66, polarDeg * 0.78))
+
+      if (compassGimbalRef.current) {
+        compassGimbalRef.current.style.transform = `rotateX(${tiltX.toFixed(1)}deg)`
+      }
+
       if (compassDiscRef.current) {
-        compassDiscRef.current.style.transform = `rotate(${needleDeg.toFixed(1)}deg)`
+        compassDiscRef.current.style.transform = `translateZ(18px) rotateZ(${needleDeg.toFixed(1)}deg)`
+      }
+
+      if (compassNeedleShadowRef.current) {
+        const shadowDistY = (tiltX / 66) * 6.5
+        compassNeedleShadowRef.current.style.transform = `translateZ(6px) rotateZ(${needleDeg.toFixed(1)}deg) translate(0px, ${shadowDistY.toFixed(1)}px)`
       }
 
       if (compassHeadingRef.current) {
@@ -1221,7 +1240,6 @@ export default function BlockModel3D({
       }
 
       if (compassPitchRef.current) {
-        const polar = typeof controls.getPolarAngle === "function" ? controls.getPolarAngle() : Math.PI / 4
         const pitchDeg = Math.max(0, Math.min(90, Math.round(90 - (polar * 180) / Math.PI)))
         compassPitchRef.current.textContent = `∠ ${pitchDeg}°`
       }
@@ -1838,7 +1856,9 @@ export default function BlockModel3D({
         onResetNorth={resetToNorth}
         onToggleCenital={toggleCenital}
         isCenital={isCenital}
+        gimbalRef={compassGimbalRef}
         discRef={compassDiscRef}
+        needleShadowRef={compassNeedleShadowRef}
         headingRef={compassHeadingRef}
         pitchRef={compassPitchRef}
         alignedBadgeRef={compassAlignedBadgeRef}

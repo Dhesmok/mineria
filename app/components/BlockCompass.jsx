@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import React, { memo } from "react"
 import { Eye, RotateCcw } from "lucide-react"
@@ -6,233 +6,251 @@ import { Eye, RotateCcw } from "lucide-react"
 /**
  * Brújula 3D de Alta Precisión e Instrumentación Aeroespacial / GIS
  *
- * Características de diseño gráfico:
- * - Chasis circular con vidrio oscuro obsidian y desenfoque vítreo (backdrop-blur-xl).
- * - Bisel exterior graduado con ticks de precisión (cada 5° y 15°) y puntos cardinales N, E, S, O.
- * - Rosa de los vientos / aguja facetada 3D con reflejo especular e iluminación simulada.
- * - Marcador de índice fijo superior (caret de proa a las 12h).
- * - Píldora HUD de telemetría en tiempo real: rumbo numérico (000°-359°), cuadrante (N, NE, etc.) e inclinación (∠ pitch).
- * - Acciones interactivas: Clic para reorientar al Norte, botón para alternar vista Cenital (90°).
+ * Construcción espacial 3D multicapa:
+ * - Escenario con perspectiva 3D (perspective: 750px) y preservación tridimensional (preserve-3d).
+ * - Gimbal aeroespacial que inclina el instrumento en 3D (rotateX) sincronizado con el cabeceo (pitch) de la cámara.
+ * - Cilindro con profundidad física Z (-14px a +28px):
+ *   * Base y sombra profunda: translateZ(-14px)
+ *   * Pared cilíndrica de titanio: translateZ(-8px)
+ *   * Bisel exterior moleteado: translateZ(0px)
+ *   * Plato del dial con ranuras radiales: translateZ(4px)
+ *   * Sombra dinámica arrojada por la aguja: translateZ(6px) con paralaje real
+ *   * Aguja 3D facetada flotante: suspendida físicamente en translateZ(18px)
+ *   * Pivote central y microgema rubí: translateZ(24px)
+ *   * Cúpula de cristal de zafiro con brillo curvo: translateZ(28px)
  */
 const BlockCompass = memo(function BlockCompass({
   onResetNorth,
   onToggleCenital,
   isCenital = false,
+  gimbalRef,
   discRef,
+  needleShadowRef,
   headingRef,
   pitchRef,
   alignedBadgeRef,
 }) {
   return (
     <div className="absolute top-14 right-4 z-20 flex flex-col items-center select-none">
-      {/* Contenedor del instrumento circular */}
-      <div className="relative group">
-        {/* Halo de resplandor ambiental interactivo */}
-        <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-rose-500/20 via-sky-500/15 to-rose-500/20 opacity-0 group-hover:opacity-100 blur-md transition-opacity duration-300 pointer-events-none" />
+      {/* Escenario con perspectiva 3D */}
+      <div
+        className="relative group"
+        style={{ perspective: "750px", perspectiveOrigin: "50% 50%" }}
+      >
+        {/* Resplandor ambiental de fondo */}
+        <div className="absolute -inset-2 rounded-full bg-gradient-to-tr from-rose-500/20 via-sky-500/15 to-rose-500/20 opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300 pointer-events-none" />
 
-        {/* Botón principal del dial de la brújula */}
+        {/* Botón táctil principal que contiene el Gimbal 3D */}
         <button
           type="button"
           onClick={() => onResetNorth?.(false)}
           onDoubleClick={() => onToggleCenital?.()}
           title="Brújula 3D · Clic para orientar al Norte (0°) · Doble clic para vista cenital"
           aria-label="Reorientar bloque 3D al Norte"
-          className="relative flex items-center justify-center w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-full bg-zinc-950/85 backdrop-blur-xl border border-zinc-700/60 shadow-[0_8px_28px_-4px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.15)] hover:border-zinc-500/80 active:scale-95 transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/70"
+          className="relative w-[76px] h-[76px] sm:w-[84px] sm:h-[84px] flex items-center justify-center p-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/70 active:scale-95 transition-transform duration-150 cursor-pointer bg-transparent"
         >
-          {/* Marcador de Proa / Índice Superior Fijo (Caret a las 12h) */}
-          <div className="absolute -top-1 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-            <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[6px] border-t-rose-500 drop-shadow-[0_0_4px_rgba(244,63,94,0.8)]" />
+          {/* Caret Superior Fijo de Proa (Marcador de mira a las 12h) */}
+          <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+            <div className="w-0 h-0 border-l-[4.5px] border-l-transparent border-r-[4.5px] border-r-transparent border-t-[7px] border-t-rose-500 drop-shadow-[0_0_5px_rgba(244,63,94,0.9)]" />
           </div>
 
-          {/* Disco Giratorio Vectorial SVG (Sincronizado a 60 fps con Three.js) */}
+          {/* GIMBAL 3D ESPACIAL: Se inclina en 3D (rotateX) con la inclinación del terreno */}
           <div
-            ref={discRef}
-            className="w-full h-full p-1 transition-transform ease-out will-change-transform"
-            style={{ transform: "rotate(0deg)" }}
+            ref={gimbalRef}
+            className="relative w-full h-full rounded-full flex items-center justify-center will-change-transform"
+            style={{
+              transformStyle: "preserve-3d",
+              transform: "rotateX(42deg)",
+              transition: "transform 0.08s ease-out",
+            }}
           >
-            <svg
-              viewBox="0 0 100 100"
-              className="w-full h-full overflow-visible"
-              aria-hidden="true"
+            {/* CAPA 1: Placa de Base y Sombra Profunda 3D (Z = -14px) */}
+            <div
+              className="absolute inset-0 rounded-full bg-black/80 shadow-[0_20px_35px_rgba(0,0,0,0.85)] border border-zinc-900 pointer-events-none"
+              style={{ transform: "translateZ(-14px)" }}
+            />
+
+            {/* CAPA 2: Pared Cilíndrica Inferior (Z = -8px) con degradado metálico */}
+            <div
+              className="absolute inset-[1px] rounded-full bg-gradient-to-b from-zinc-800 via-zinc-900 to-black border border-zinc-700/50 shadow-inner pointer-events-none"
+              style={{ transform: "translateZ(-8px)" }}
+            />
+
+            {/* CAPA 3: Bisel Exterior con Moleteado (Z = 0px) */}
+            <div
+              className="absolute inset-[2px] rounded-full bg-zinc-950/90 backdrop-blur-xl border border-zinc-700/70 shadow-[inset_0_1px_2px_rgba(255,255,255,0.2)] pointer-events-none"
+              style={{ transform: "translateZ(0px)" }}
+            />
+
+            {/* CAPA 4: Plato del Dial y Marcaciones Horarias (Z = 4px) */}
+            <div
+              className="absolute inset-[3px] rounded-full overflow-hidden pointer-events-none"
+              style={{ transform: "translateZ(4px)" }}
             >
-              <defs>
-                {/* Degradado radial para fondo del dial */}
-                <radialGradient id="compassDialBg" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#18181b" stopOpacity="0.4" />
-                  <stop offset="70%" stopColor="#09090b" stopOpacity="0.8" />
-                  <stop offset="100%" stopColor="#000000" stopOpacity="0.95" />
-                </radialGradient>
+              <svg viewBox="0 0 100 100" className="w-full h-full">
+                <defs>
+                  <radialGradient id="dialInnerFace" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#1c1917" stopOpacity="0.6" />
+                    <stop offset="65%" stopColor="#09090b" stopOpacity="0.9" />
+                    <stop offset="100%" stopColor="#000000" stopOpacity="1" />
+                  </radialGradient>
+                </defs>
+                <circle cx="50" cy="50" r="46" fill="url(#dialInnerFace)" stroke="#3f3f46" strokeWidth="0.5" />
+                <circle cx="50" cy="50" r="37" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" strokeDasharray="1 2" />
 
-                {/* Brillo especular metálico para bisel */}
-                <linearGradient id="metalBezel" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#52525b" />
-                  <stop offset="50%" stopColor="#27272a" />
-                  <stop offset="100%" stopColor="#71717a" />
-                </linearGradient>
+                {/* Marcas perimetrales graduadas cada 15° y 45° */}
+                {Array.from({ length: 24 }).map((_, idx) => {
+                  const deg = idx * 15
+                  const isCardinal = deg % 90 === 0
+                  const isInter = deg % 45 === 0 && !isCardinal
+                  const y1 = isCardinal ? 6 : isInter ? 8 : 10
+                  const y2 = 12
+                  const width = isCardinal ? 1.6 : isInter ? 1.0 : 0.6
+                  const color = isCardinal
+                    ? deg === 0
+                      ? "#f43f5e"
+                      : "#e4e4e7"
+                    : isInter
+                    ? "rgba(255,255,255,0.6)"
+                    : "rgba(255,255,255,0.25)"
 
-                {/* Facetas de la aguja Norte */}
-                <linearGradient id="facetNorthLeft" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#f43f5e" />
-                  <stop offset="100%" stopColor="#fb7185" />
-                </linearGradient>
-                <linearGradient id="facetNorthRight" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#9f1239" />
-                  <stop offset="100%" stopColor="#be123c" />
-                </linearGradient>
+                  return (
+                    <line
+                      key={deg}
+                      x1="50"
+                      y1={y1}
+                      x2="50"
+                      y2={y2}
+                      stroke={color}
+                      strokeWidth={width}
+                      strokeLinecap="round"
+                      transform={`rotate(${deg} 50 50)`}
+                    />
+                  )
+                })}
 
-                {/* Facetas de la aguja Sur */}
-                <linearGradient id="facetSouthLeft" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#e2e8f0" />
-                  <stop offset="100%" stopColor="#f8fafc" />
-                </linearGradient>
-                <linearGradient id="facetSouthRight" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#475569" />
-                  <stop offset="100%" stopColor="#64748b" />
-                </linearGradient>
-
-                {/* Filtro de sombra profunda para dar volumen 3D a la aguja */}
-                <filter id="needleShadow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feDropShadow dx="0" dy="1.5" stdDeviation="1.8" floodColor="#000000" floodOpacity="0.65" />
-                </filter>
-              </defs>
-
-              {/* Fondo del dial */}
-              <circle cx="50" cy="50" r="46" fill="url(#compassDialBg)" stroke="url(#metalBezel)" strokeWidth="0.75" />
-
-              {/* Anillo de precisión interior */}
-              <circle cx="50" cy="50" r="37.5" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" strokeDasharray="1 2" />
-
-              {/* Marcas perimetrales graduadas cada 15° */}
-              {Array.from({ length: 24 }).map((_, idx) => {
-                const deg = idx * 15
-                const isCardinal = deg % 90 === 0
-                const isInter = deg % 45 === 0 && !isCardinal
-                const y1 = isCardinal ? 6 : isInter ? 8 : 10
-                const y2 = 12
-                const width = isCardinal ? 1.6 : isInter ? 1.0 : 0.6
-                const color = isCardinal
-                  ? deg === 0
-                    ? "#f43f5e"
-                    : "#e4e4e7"
-                  : isInter
-                  ? "rgba(255,255,255,0.6)"
-                  : "rgba(255,255,255,0.25)"
-
-                return (
-                  <line
-                    key={deg}
-                    x1="50"
-                    y1={y1}
-                    x2="50"
-                    y2={y2}
-                    stroke={color}
-                    strokeWidth={width}
-                    strokeLinecap="round"
-                    transform={`rotate(${deg} 50 50)`}
-                  />
-                )
-              })}
-
-              {/* Letras Cardinales (N, E, S, O) con orientación vertical legible */}
-              {/* NORTE */}
-              <g transform="translate(50, 19)">
-                <text
-                  x="0"
-                  y="0"
-                  fill="#f43f5e"
-                  fontSize="8.5"
-                  fontWeight="800"
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontFamily="system-ui, -apple-system, sans-serif"
-                  style={{ filter: "drop-shadow(0 0 4px rgba(244,63,94,0.6))" }}
-                >
+                {/* Puntos Cardinales */}
+                <text x="50" y="20" fill="#f43f5e" fontSize="9" fontWeight="800" textAnchor="middle" dominantBaseline="central">
                   N
                 </text>
-              </g>
-
-              {/* ESTE */}
-              <g transform="translate(81, 50)">
-                <text
-                  x="0"
-                  y="0"
-                  fill="#a1a1aa"
-                  fontSize="7"
-                  fontWeight="700"
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontFamily="system-ui, -apple-system, sans-serif"
-                >
+                <text x="80" y="50" fill="#a1a1aa" fontSize="7.5" fontWeight="700" textAnchor="middle" dominantBaseline="central">
                   E
                 </text>
-              </g>
-
-              {/* SUR */}
-              <g transform="translate(50, 81)">
-                <text
-                  x="0"
-                  y="0"
-                  fill="#a1a1aa"
-                  fontSize="7"
-                  fontWeight="700"
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontFamily="system-ui, -apple-system, sans-serif"
-                >
+                <text x="50" y="80" fill="#a1a1aa" fontSize="7.5" fontWeight="700" textAnchor="middle" dominantBaseline="central">
                   S
                 </text>
-              </g>
-
-              {/* OESTE */}
-              <g transform="translate(19, 50)">
-                <text
-                  x="0"
-                  y="0"
-                  fill="#a1a1aa"
-                  fontSize="7"
-                  fontWeight="700"
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontFamily="system-ui, -apple-system, sans-serif"
-                >
+                <text x="20" y="50" fill="#a1a1aa" fontSize="7.5" fontWeight="700" textAnchor="middle" dominantBaseline="central">
                   O
                 </text>
-              </g>
+              </svg>
+            </div>
 
-              {/* Aguja 3D Facetada Estilizada con sombras de volumen */}
-              <g filter="url(#needleShadow)">
-                {/* Punta Norte - Faceta Izquierda Iluminada */}
-                <polygon points="50,22 46,50 50,47" fill="url(#facetNorthLeft)" />
-                {/* Punta Norte - Faceta Derecha Sombra */}
-                <polygon points="50,22 54,50 50,47" fill="url(#facetNorthRight)" />
+            {/* CAPA 5: Sombra Dinámica Proyectada de la Aguja Flotante (Z = 6px) */}
+            <div
+              ref={needleShadowRef}
+              className="absolute inset-[3px] rounded-full pointer-events-none will-change-transform"
+              style={{
+                transform: "translateZ(6px) rotateZ(0deg)",
+                filter: "blur(2.5px)",
+                opacity: 0.65,
+              }}
+            >
+              <svg viewBox="0 0 100 100" className="w-full h-full">
+                <polygon points="50,22 46,50 50,47" fill="#000000" />
+                <polygon points="50,22 54,50 50,47" fill="#000000" />
+                <polygon points="50,78 46,50 50,53" fill="#000000" />
+                <polygon points="50,78 54,50 50,53" fill="#000000" />
+                <circle cx="50" cy="50" r="4.5" fill="#000000" />
+              </svg>
+            </div>
 
-                {/* Punta Sur - Faceta Izquierda Iluminada */}
-                <polygon points="50,78 46,50 50,53" fill="url(#facetSouthLeft)" />
-                {/* Punta Sur - Faceta Derecha Sombra */}
-                <polygon points="50,78 54,50 50,53" fill="url(#facetSouthRight)" />
+            {/* CAPA 6: AGUJA 3D FACETADA FLOTANTE (Elevada en Z = 18px) */}
+            <div
+              ref={discRef}
+              className="absolute inset-[3px] rounded-full pointer-events-none will-change-transform"
+              style={{
+                transformStyle: "preserve-3d",
+                transform: "translateZ(18px) rotateZ(0deg)",
+              }}
+            >
+              <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible">
+                <defs>
+                  {/* Facetas de la aguja Norte */}
+                  <linearGradient id="gFacetNLeft" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#f43f5e" />
+                    <stop offset="100%" stopColor="#fb7185" />
+                  </linearGradient>
+                  <linearGradient id="gFacetNRight" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#9f1239" />
+                    <stop offset="100%" stopColor="#be123c" />
+                  </linearGradient>
 
-                {/* Cruz Cardinal Central Micro-facetada */}
-                <polygon points="26,50 50,48 48,50" fill="rgba(255,255,255,0.4)" />
-                <polygon points="74,50 50,52 52,50" fill="rgba(255,255,255,0.3)" />
+                  {/* Facetas de la aguja Sur */}
+                  <linearGradient id="gFacetSLeft" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#f1f5f9" />
+                    <stop offset="100%" stopColor="#cbd5e1" />
+                  </linearGradient>
+                  <linearGradient id="gFacetSRight" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#475569" />
+                    <stop offset="100%" stopColor="#64748b" />
+                  </linearGradient>
+                </defs>
 
-                {/* Pivote Central */}
-                <circle cx="50" cy="50" r="4.2" fill="#18181b" stroke="#3f3f46" strokeWidth="0.9" />
-                <circle cx="50" cy="50" r="2.2" fill="#f43f5e" style={{ filter: "drop-shadow(0 0 2px rgba(244,63,94,0.9))" }} />
-                <circle cx="50" cy="50" r="0.8" fill="#ffffff" />
-              </g>
-            </svg>
+                {/* Faceta Norte Izquierda (Luz) */}
+                <polygon points="50,22 46,50 50,47" fill="url(#gFacetNLeft)" />
+                {/* Faceta Norte Derecha (Sombra) */}
+                <polygon points="50,22 54,50 50,47" fill="url(#gFacetNRight)" />
+
+                {/* Faceta Sur Izquierda (Luz) */}
+                <polygon points="50,78 46,50 50,53" fill="url(#gFacetSLeft)" />
+                {/* Faceta Sur Derecha (Sombra) */}
+                <polygon points="50,78 54,50 50,53" fill="url(#gFacetSRight)" />
+
+                {/* Brazos Este/Oeste micro-facetados */}
+                <polygon points="27,50 50,48 48,50" fill="rgba(255,255,255,0.4)" />
+                <polygon points="73,50 50,52 52,50" fill="rgba(255,255,255,0.3)" />
+
+                {/* Arista dorsal iluminada de la aguja norte */}
+                <line x1="50" y1="23" x2="50" y2="47" stroke="#ffffff" strokeWidth="0.5" opacity="0.8" />
+              </svg>
+            </div>
+
+            {/* CAPA 7: Pivote Central Elevado con Gema Rubí (Z = 24px) */}
+            <div
+              className="absolute w-3.5 h-3.5 rounded-full flex items-center justify-center pointer-events-none"
+              style={{
+                transform: "translateZ(24px)",
+                background: "radial-gradient(circle, #3f3f46 0%, #18181b 100%)",
+                boxShadow: "0 2px 5px rgba(0,0,0,0.6)",
+                border: "0.75px solid #71717a",
+              }}
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,1)]" />
+            </div>
+
+            {/* CAPA 8: Cúpula de Cristal de Zafiro Curvo con Brillo Especular (Z = 28px) */}
+            <div
+              className="absolute inset-[2px] rounded-full pointer-events-none border border-white/25"
+              style={{
+                transform: "translateZ(28px)",
+                background:
+                  "linear-gradient(135deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.06) 40%, transparent 60%)",
+                boxShadow: "inset 0 1px 2px rgba(255,255,255,0.4)",
+              }}
+            />
+
+            {/* CAPA 9: Aro exterior de pulso de alineación exacta al Norte */}
+            <div
+              ref={alignedBadgeRef}
+              className="absolute inset-0 rounded-full border-2 border-rose-500 pointer-events-none opacity-0 transition-opacity duration-200 shadow-[0_0_16px_rgba(244,63,94,0.7)]"
+              style={{ transform: "translateZ(12px)" }}
+            />
           </div>
-
-          {/* Indicador de alineación exacta al Norte (anillo de pulso sutil) */}
-          <div
-            ref={alignedBadgeRef}
-            className="absolute inset-0 rounded-full border border-rose-500/50 pointer-events-none opacity-0 transition-opacity duration-200 shadow-[0_0_12px_rgba(244,63,94,0.4)]"
-          />
         </button>
       </div>
 
       {/* Píldora HUD de Telemetría (Rumbo + Inclinación) */}
-      <div className="mt-1.5 flex items-center gap-1.5 bg-zinc-950/90 backdrop-blur-md px-2 py-0.5 rounded-full border border-zinc-800/90 shadow-lg text-[10px] font-mono tracking-tight text-zinc-300">
+      <div className="mt-2 flex items-center gap-1.5 bg-zinc-950/90 backdrop-blur-md px-2 py-0.5 rounded-full border border-zinc-800/90 shadow-lg text-[10px] font-mono tracking-tight text-zinc-300">
         <span
           ref={headingRef}
           className="font-bold text-rose-400 min-w-[50px] text-center"
