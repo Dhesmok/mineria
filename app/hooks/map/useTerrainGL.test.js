@@ -157,4 +157,23 @@ describe("useTerrainGL", () => {
     const elev = result.current.elevationAt({ lng: -75.5, lat: 6.2 })
     expect(elev).toBe(1500)
   })
+
+  it("permite alternar el giro continuo con spin", () => {
+    const map = createMapMock()
+    const { result } = renderHook(() => useTerrainGL({ current: map }, map))
+
+    expect(result.current.isSpinning).toBe(false)
+
+    act(() => {
+      result.current.spin()
+    })
+
+    expect(result.current.isSpinning).toBe(true)
+
+    act(() => {
+      result.current.spin()
+    })
+
+    expect(result.current.isSpinning).toBe(false)
+  })
 })

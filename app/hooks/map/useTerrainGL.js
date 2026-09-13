@@ -431,49 +431,98 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     let frame = 0
     let previous = performance.now()
     let lastPublished = 0
-    let isUserDragging = false
+    let lastInteractionTime = -Infinity
+    let accumulatedBearing = mapInstance.getBearing()
+    const GRACE_PERIOD_MS = 300
 
+    const activePointers = new Set()
     const canvas = mapInstance.getCanvas?.()
 
-    const onPointerDown = (e) => {
-      // Si el usuario pulsa para arrastrar el mapa manualmente, pausamos el giro temporalmente
-      if (e.buttons > 0) {
-        isUserDragging = true
+    const markInteraction = () => {
+      lastInteractionTime = performance.now()
+      accumulatedBearing = mapInstance.getBearing()
+    }
+
+    const onPointerDown = (event) => {
+      activePointers.add(event.pointerId ?? "mouse")
+      markInteraction()
+    }
+
+    const onPointerUp = (event) => {
+      if (activePointers.delete(event.pointerId ?? "mouse") || activePointers.size > 0) {
+        markInteraction()
       }
     }
 
-    const onPointerUp = () => {
-      isUserDragging = false
-      previous = performance.now()
+    const onBlur = () => {
+      if (activePointers.size > 0) {
+        activePointers.clear()
+        markInteraction()
+      }
     }
+
+    const onUserGesture = (event) => {
+      // jumpTo() genera eventos de cámara, pero no un originalEvent de entrada del usuario.
+      // Esos eventos programáticos NO deben pausar el giro.
+      if (!event?.originalEvent) return
+      markInteraction()
+    }
+
+    const gestureEvents = [
+      "dragstart",
+      "drag",
+      "dragend",
+      "rotatestart",
+      "rotate",
+      "rotateend",
+      "pitchstart",
+      "pitch",
+      "pitchend",
+      "zoomstart",
+      "zoom",
+      "zoomend",
+    ]
 
     if (canvas) {
-      canvas.addEventListener("pointerdown", onPointerDown, { passive: true })
-      canvas.addEventListener("touchstart", onPointerDown, { passive: true })
+      canvas.addEventListener?.("pointerdown", onPointerDown, { passive: true })
     }
     window.addEventListener("pointerup", onPointerUp, { passive: true })
-    window.addEventListener("mouseup", onPointerUp, { passive: true })
-    window.addEventListener("touchend", onPointerUp, { passive: true })
     window.addEventListener("pointercancel", onPointerUp, { passive: true })
+    window.addEventListener("blur", onBlur)
+
+    for (const type of gestureEvents) {
+      mapInstance.on?.(type, onUserGesture)
+    }
 
     const step = (now) => {
-      if (isUserDragging) {
-        previous = now
-        frame = requestAnimationFrame(step)
-        return
-      }
-
-      // Evita saltos si el navegador se ralentiza temporalmente (máximo 50ms por paso)
-      const elapsed = Math.min((now - previous) / 1000, 0.05)
+      // Mantiene la velocidad angular constante en tiempo real (tope de 100ms para evitar saltos al cambiar de pestaña)
+      const elapsed = Math.min(Math.max((now - previous) / 1000, 0), 0.1)
       previous = now
 
-      // Giro suave y continuo
-      const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * elapsed
-      mapInstance.jumpTo({ bearing })
+      const isUserInputActive =
+        activePointers.size > 0 ||
+        Boolean(mapInstance.dragRotate?.isActive?.()) ||
+        Boolean(mapInstance.dragPan?.isActive?.()) ||
+        Boolean(mapInstance.touchZoomRotate?.isActive?.()) ||
+        Boolean(mapInstance.touchPitch?.isActive?.()) ||
+        Boolean(mapInstance.scrollZoom?.isActive?.())
 
-      if (now - lastPublished > 200) {
-        lastPublished = now
-        setBearing(mapInstance.getBearing())
+      if (isUserInputActive) {
+        lastInteractionTime = now
+      }
+
+      const isInGracePeriod = now - lastInteractionTime < GRACE_PERIOD_MS
+
+      if (isUserInputActive || isInGracePeriod) {
+        accumulatedBearing = mapInstance.getBearing()
+      } else {
+        accumulatedBearing = ((accumulatedBearing + SPIN_DEGREES_PER_SECOND * elapsed) % 360 + 360) % 360
+        mapInstance.jumpTo({ bearing: accumulatedBearing })
+
+        if (now - lastPublished > 200) {
+          lastPublished = now
+          setBearing(accumulatedBearing)
+        }
       }
 
       frame = requestAnimationFrame(step)
@@ -484,14 +533,17 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     return () => {
       cancelAnimationFrame(frame)
       if (canvas) {
-        canvas.removeEventListener("pointerdown", onPointerDown)
-        canvas.removeEventListener("touchstart", onPointerDown)
+        canvas.removeEventListener?.("pointerdown", onPointerDown)
       }
       window.removeEventListener("pointerup", onPointerUp)
-      window.removeEventListener("mouseup", onPointerUp)
-      window.removeEventListener("touchend", onPointerUp)
       window.removeEventListener("pointercancel", onPointerUp)
+      window.removeEventListener("blur", onBlur)
 
+      for (const type of gestureEvents) {
+        mapInstance.off?.(type, onUserGesture)
+      }
+
+      activePointers.clear()
       setBearing(mapInstance.getBearing())
     }
   }, [isSpinning, mapInstance])
@@ -501,6 +553,20 @@ export const useTerrainGL = (mapRef, mapInstance) => {
   useEffect(() => {
     if (!is3D) setIsSpinning(false)
   }, [is3D])
+
+  // Señalizar en mapInstance si el giro automático está activo para que otros
+  // hooks y listeners (como hover hit-testing o coordenadas) puedan saltarse
+  // cálculos pesados en cada píxel del cursor sobre el terreno 3D.
+  useEffect(() => {
+    if (mapInstance) {
+      mapInstance._isSpinning = isSpinning
+    }
+    return () => {
+      if (mapInstance) {
+        mapInstance._isSpinning = false
+      }
+    }
+  }, [mapInstance, isSpinning])
 
   /**
    * El desnivel se vuelve a medir al terminar de mover, mientras se está en 3D.
@@ -551,8 +617,8 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     }
   }, [mapInstance])
 
-  // Evitar que el clic derecho abra el menú contextual y deje trabado el giro 3D (dragRotate),
-  // y asegurar que si se mueve el ratón sin botones pulsados, MapLibre no quede "pegado".
+  // Evitar que el clic derecho sobre el canvas abra el menú contextual del navegador
+  // y deje trabado el giro 3D (dragRotate).
   useEffect(() => {
     if (!mapInstance) return
     const canvas = mapInstance.getCanvas?.()
@@ -562,27 +628,10 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       e.preventDefault()
     }
 
-    const onGlobalPointerMove = (e) => {
-      if (e.buttons === 0) {
-        if (mapInstance.dragRotate?.isActive?.() || mapInstance.dragPan?.isActive?.()) {
-          canvas.dispatchEvent(
-            new MouseEvent("mouseup", {
-              bubbles: true,
-              cancelable: true,
-              clientX: e.clientX,
-              clientY: e.clientY,
-            }),
-          )
-        }
-      }
-    }
-
-    canvas?.addEventListener?.("contextmenu", onContextMenu)
-    window.addEventListener("pointermove", onGlobalPointerMove, { passive: true })
+    canvas.addEventListener?.("contextmenu", onContextMenu)
 
     return () => {
-      canvas?.removeEventListener?.("contextmenu", onContextMenu)
-      window.removeEventListener("pointermove", onGlobalPointerMove)
+      canvas.removeEventListener?.("contextmenu", onContextMenu)
     }
   }, [mapInstance])
 

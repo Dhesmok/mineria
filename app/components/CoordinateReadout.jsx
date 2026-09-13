@@ -30,15 +30,55 @@ export const CursorCoordinates = ({ map, crsId }) => {
   useEffect(() => {
     if (!map) return
 
+    let rafId = null
+    let latestLngLat = null
+    let lastSpinUpdateTime = 0
+
     // `wrap()` devuelve la longitud al rango -180..180. Sin esto, arrastrar el
     // mapa dando la vuelta al mundo muestra longitudes como -434°.
-    const handleMove = (event) => setPosition(event.lngLat.wrap())
-    const handleOut = () => setPosition(null)
+    // Se sincroniza con requestAnimationFrame para no saturar el hilo principal
+    // con cientos de renders por segundo ante ráfagas de mousemove.
+    const handleMove = (event) => {
+      // Durante el giro automático 3D, el relieve rota continuamente bajo el cursor.
+      // Despachar proyecciones y re-renders React en cada píxel satura el hilo principal
+      // y compite con el RAF de rotación. Se aplica un throttle de 300 ms durante el giro.
+      if (map._isSpinning) {
+        const now = performance.now()
+        if (now - lastSpinUpdateTime < 300) return
+        lastSpinUpdateTime = now
+      }
+
+      latestLngLat = event.lngLat
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          if (latestLngLat) {
+            const wrapped = latestLngLat.wrap()
+            const lng = Math.round(wrapped.lng * 10000) / 10000
+            const lat = Math.round(wrapped.lat * 10000) / 10000
+            setPosition((prev) => {
+              if (prev && prev.lng === lng && prev.lat === lat) return prev
+              return { lng, lat }
+            })
+          }
+          rafId = null
+        })
+      }
+    }
+
+    const handleOut = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+      latestLngLat = null
+      setPosition(null)
+    }
 
     map.on("mousemove", handleMove)
     map.on("mouseout", handleOut)
 
     return () => {
+      if (rafId) cancelAnimationFrame(rafId)
       map.off("mousemove", handleMove)
       map.off("mouseout", handleOut)
     }

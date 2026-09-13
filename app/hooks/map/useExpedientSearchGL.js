@@ -333,6 +333,7 @@ export const useExpedientSearchGL = (
     }
 
     const onVertexEnter = (event) => {
+      if (mapInstance._isSpinning) return
       const feature = event.features?.[0]
       if (!feature) return
       mapInstance.getCanvas().style.cursor = "pointer"

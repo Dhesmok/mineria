@@ -938,6 +938,10 @@ export default function BlockModel3D({
   const autoRotateRef = useRef(autoRotate)
   useEffect(() => {
     autoRotateRef.current = autoRotate
+    if (controlsRef.current) {
+      controlsRef.current.autoRotate = autoRotate
+      needsRenderRef.current = true
+    }
   }, [autoRotate])
 
   const [wireframe, setWireframe] = useState(false)
@@ -1019,6 +1023,8 @@ export default function BlockModel3D({
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.05
+    controls.autoRotate = autoRotateRef.current
+    controls.autoRotateSpeed = 2.0
     controls.maxPolarAngle = Math.PI / 2 - 0.04
     controls.minDistance = 3
     controls.maxDistance = 50
@@ -1197,8 +1203,7 @@ export default function BlockModel3D({
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate)
       controls.update()
-      if (autoRotateRef.current && blockGroupRef.current) {
-        blockGroupRef.current.rotation.y += 0.0035
+      if (autoRotateRef.current) {
         needsRenderRef.current = true
       }
       if (needsRenderRef.current) {

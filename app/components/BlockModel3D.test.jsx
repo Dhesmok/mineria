@@ -169,4 +169,23 @@ describe("BlockModel3D", () => {
 
     expect(container).toBeInTheDocument()
   })
+
+  it("permite alternar el giro automático con el botón correspondiente", () => {
+    render(
+      <BlockModel3D
+        isOpen={true}
+        onClose={jest.fn()}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
+      />
+    )
+
+    const rotateBtn = screen.getByTitle("Iniciar giro automático")
+    expect(rotateBtn).toBeInTheDocument()
+
+    fireEvent.click(rotateBtn)
+    expect(screen.getByTitle("Detener giro continuo")).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTitle("Detener giro continuo"))
+    expect(screen.getByTitle("Iniciar giro automático")).toBeInTheDocument()
+  })
 })

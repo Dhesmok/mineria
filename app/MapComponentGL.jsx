@@ -335,20 +335,6 @@ export default function MapComponentGL({
   const [queryingTerrain, setQueryingTerrain] = useState(false)
   const [terrainResult, setTerrainResult] = useState(null)
 
-  // El panel entrega el estado de las capas ya agrupado por clave: encendida,
-  // opacidad y colores. Antes llegaban ocho props sueltas que había que volver a
-  // juntar aquí con dos useMemo.
-  const { showZoomInHint, truncatedLayers, loadedFeatures } = useMapLayersGL(
-    mapRef,
-    mapInstance,
-    layerState,
-    layerOrder,
-    filters,
-    setError,
-    setShowErrorBanner,
-    !queryingTerrain,
-  )
-
   const {
     is3D,
     toggle3D,
@@ -367,6 +353,21 @@ export default function MapComponentGL({
     setTerrainForQuery,
     queryTerrain,
   } = useTerrainGL(mapRef, mapInstance)
+
+  // El panel entrega el estado de las capas ya agrupado por clave: encendida,
+  // opacidad y colores. Antes llegaban ocho props sueltas que había que volver a
+  // juntar aquí con dos useMemo.
+  const { showZoomInHint, truncatedLayers, loadedFeatures } = useMapLayersGL(
+    mapRef,
+    mapInstance,
+    layerState,
+    layerOrder,
+    filters,
+    setError,
+    setShowErrorBanner,
+    !queryingTerrain,
+    isSpinning,
+  )
 
   const [hud3DOpen, setHud3DOpen] = useState(false)
   const [is3DPinned, setIs3DPinned] = useState(false)
