@@ -431,103 +431,93 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     let frame = 0
     let previous = performance.now()
     let lastPublished = 0
-    let lastInteractionTime = 0
+    let lastInteractionTime = -Infinity
     const GRACE_PERIOD_MS = 300
 
     const activePointers = new Set()
-
-    const onPointerDown = (e) => {
-      if (e.pointerId !== undefined) {
-        activePointers.add(e.pointerId)
-      } else if (e.buttons > 0) {
-        activePointers.add("mouse")
-      }
-      lastInteractionTime = performance.now()
-    }
-
-    const onPointerUp = (e) => {
-      if (e.pointerId !== undefined) {
-        activePointers.delete(e.pointerId)
-      } else {
-        activePointers.clear()
-      }
-      lastInteractionTime = performance.now()
-    }
-
-    const onTouchStart = (e) => {
-      if (e.touches) {
-        for (let i = 0; i < e.touches.length; i++) {
-          activePointers.add(e.touches[i].identifier)
-        }
-      }
-      lastInteractionTime = performance.now()
-    }
-
-    const onTouchEnd = (e) => {
-      if (e.touches && e.touches.length === 0) {
-        activePointers.clear()
-      }
-      lastInteractionTime = performance.now()
-    }
-
-    const onGestureStart = () => {
-      lastInteractionTime = performance.now()
-    }
-
-    const onGestureEnd = () => {
-      lastInteractionTime = performance.now()
-    }
-
     const canvas = mapInstance.getCanvas?.()
+
+    const markInteraction = () => {
+      lastInteractionTime = performance.now()
+    }
+
+    const onPointerDown = (event) => {
+      activePointers.add(event.pointerId ?? "mouse")
+      markInteraction()
+    }
+
+    const onPointerUp = (event) => {
+      if (activePointers.delete(event.pointerId ?? "mouse") || activePointers.size > 0) {
+        markInteraction()
+      }
+    }
+
+    const onBlur = () => {
+      if (activePointers.size > 0) {
+        activePointers.clear()
+        markInteraction()
+      }
+    }
+
+    const onUserGesture = (event) => {
+      // jumpTo() genera eventos de cámara, pero no un originalEvent de entrada del usuario.
+      // Esos eventos programáticos NO deben pausar el giro.
+      if (!event?.originalEvent) return
+      markInteraction()
+    }
+
+    const gestureEvents = [
+      "dragstart",
+      "drag",
+      "dragend",
+      "rotatestart",
+      "rotate",
+      "rotateend",
+      "pitchstart",
+      "pitch",
+      "pitchend",
+      "zoomstart",
+      "zoom",
+      "zoomend",
+    ]
 
     if (canvas) {
       canvas.addEventListener?.("pointerdown", onPointerDown, { passive: true })
-      canvas.addEventListener?.("touchstart", onTouchStart, { passive: true })
     }
     window.addEventListener("pointerup", onPointerUp, { passive: true })
-    window.addEventListener("mouseup", onPointerUp, { passive: true })
-    window.addEventListener("touchend", onTouchEnd, { passive: true })
     window.addEventListener("pointercancel", onPointerUp, { passive: true })
-    window.addEventListener("touchcancel", onTouchEnd, { passive: true })
+    window.addEventListener("blur", onBlur)
 
-    mapInstance.on?.("dragstart", onGestureStart)
-    mapInstance.on?.("dragend", onGestureEnd)
-    mapInstance.on?.("rotatestart", onGestureStart)
-    mapInstance.on?.("rotateend", onGestureEnd)
-    mapInstance.on?.("pitchstart", onGestureStart)
-    mapInstance.on?.("pitchend", onGestureEnd)
-    mapInstance.on?.("zoomstart", onGestureStart)
-    mapInstance.on?.("zoomend", onGestureEnd)
+    for (const type of gestureEvents) {
+      mapInstance.on?.(type, onUserGesture)
+    }
 
     const step = (now) => {
-      const isDragging =
-        activePointers.size > 0 ||
-        mapInstance.dragRotate?.isActive?.() ||
-        mapInstance.dragPan?.isActive?.()
+      const elapsed = Math.min(Math.max((now - previous) / 1000, 0), 0.05)
+      previous = now
 
-      if (isDragging) {
+      const isUserInputActive =
+        activePointers.size > 0 ||
+        Boolean(mapInstance.dragRotate?.isActive?.()) ||
+        Boolean(mapInstance.dragPan?.isActive?.()) ||
+        Boolean(mapInstance.touchZoomRotate?.isActive?.()) ||
+        Boolean(mapInstance.touchPitch?.isActive?.()) ||
+        Boolean(mapInstance.scrollZoom?.isActive?.())
+
+      if (isUserInputActive) {
         lastInteractionTime = now
       }
 
-      const isInteracting = isDragging || now - lastInteractionTime < GRACE_PERIOD_MS
+      const isInGracePeriod = now - lastInteractionTime < GRACE_PERIOD_MS
 
-      if (isInteracting) {
-        previous = now
-        frame = requestAnimationFrame(step)
-        return
-      }
+      if (!isUserInputActive && !isInGracePeriod) {
+        const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * elapsed
+        mapInstance.jumpTo({ bearing })
 
-      // Evita saltos si el navegador se ralentiza temporalmente (máximo 50ms por paso)
-      const elapsed = Math.min((now - previous) / 1000, 0.05)
-      previous = now
-
-      // Giro suave y continuo
-      const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * elapsed
-      mapInstance.jumpTo({ bearing })
-
-      if (now - lastPublished > 200) {
-        lastPublished = now
-        setBearing(mapInstance.getBearing())
+        if (now - lastPublished > 200) {
+          lastPublished = now
+          setBearing(mapInstance.getBearing())
+        }
       }
 
       frame = requestAnimationFrame(step)
@@ -539,23 +529,16 @@ export const useTerrainGL = (mapRef, mapInstance) => {
       cancelAnimationFrame(frame)
       if (canvas) {
         canvas.removeEventListener?.("pointerdown", onPointerDown)
-        canvas.removeEventListener?.("touchstart", onTouchStart)
       }
       window.removeEventListener("pointerup", onPointerUp)
-      window.removeEventListener("mouseup", onPointerUp)
-      window.removeEventListener("touchend", onTouchEnd)
       window.removeEventListener("pointercancel", onPointerUp)
-      window.removeEventListener("touchcancel", onTouchEnd)
+      window.removeEventListener("blur", onBlur)
 
-      mapInstance.off?.("dragstart", onGestureStart)
-      mapInstance.off?.("dragend", onGestureEnd)
-      mapInstance.off?.("rotatestart", onGestureStart)
-      mapInstance.off?.("rotateend", onGestureEnd)
-      mapInstance.off?.("pitchstart", onGestureStart)
-      mapInstance.off?.("pitchend", onGestureEnd)
-      mapInstance.off?.("zoomstart", onGestureStart)
-      mapInstance.off?.("zoomend", onGestureEnd)
+      for (const type of gestureEvents) {
+        mapInstance.off?.(type, onUserGesture)
+      }
 
+      activePointers.clear()
       setBearing(mapInstance.getBearing())
     }
   }, [isSpinning, mapInstance])
