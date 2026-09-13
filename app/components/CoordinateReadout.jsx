@@ -42,7 +42,13 @@ export const CursorCoordinates = ({ map, crsId }) => {
       if (!rafId) {
         rafId = requestAnimationFrame(() => {
           if (latestLngLat) {
-            setPosition(latestLngLat.wrap())
+            const wrapped = latestLngLat.wrap()
+            const lng = Math.round(wrapped.lng * 10000) / 10000
+            const lat = Math.round(wrapped.lat * 10000) / 10000
+            setPosition((prev) => {
+              if (prev && prev.lng === lng && prev.lat === lat) return prev
+              return { lng, lat }
+            })
           }
           rafId = null
         })

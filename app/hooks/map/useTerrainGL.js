@@ -432,6 +432,7 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     let previous = performance.now()
     let lastPublished = 0
     let lastInteractionTime = -Infinity
+    let accumulatedBearing = mapInstance.getBearing()
     const GRACE_PERIOD_MS = 300
 
     const activePointers = new Set()
@@ -439,6 +440,7 @@ export const useTerrainGL = (mapRef, mapInstance) => {
 
     const markInteraction = () => {
       lastInteractionTime = performance.now()
+      accumulatedBearing = mapInstance.getBearing()
     }
 
     const onPointerDown = (event) => {
@@ -511,13 +513,15 @@ export const useTerrainGL = (mapRef, mapInstance) => {
 
       const isInGracePeriod = now - lastInteractionTime < GRACE_PERIOD_MS
 
-      if (!isUserInputActive && !isInGracePeriod) {
-        const bearing = mapInstance.getBearing() + SPIN_DEGREES_PER_SECOND * elapsed
-        mapInstance.jumpTo({ bearing })
+      if (isUserInputActive || isInGracePeriod) {
+        accumulatedBearing = mapInstance.getBearing()
+      } else {
+        accumulatedBearing = ((accumulatedBearing + SPIN_DEGREES_PER_SECOND * elapsed) % 360 + 360) % 360
+        mapInstance.jumpTo({ bearing: accumulatedBearing })
 
         if (now - lastPublished > 200) {
           lastPublished = now
-          setBearing(mapInstance.getBearing())
+          setBearing(accumulatedBearing)
         }
       }
 
