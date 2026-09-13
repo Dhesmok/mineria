@@ -23,6 +23,7 @@ import { TILE_SIZE } from "../utils/demTiles"
 import { SGC_KEYS, sgcImageUrl } from "../utils/sgcLayers"
 import { ANH_KEYS, anhImageUrl } from "../utils/anhLayers"
 import { ANM_LAYERS, anmSourceId } from "../utils/anmLayers"
+import BlockCompass from "./BlockCompass"
 
 function lngLatToMercator(lng, lat) {
   const x = (lng * 20037508.34) / 180
@@ -953,6 +954,15 @@ export default function BlockModel3D({
   const [selectedPinId, setSelectedPinId] = useState(null)
   const [editingPinText, setEditingPinText] = useState("")
 
+  // Referencias para la brújula 3D espacial (actualizaciones directas a 60 fps)
+  const compassGimbalRef = useRef(null)
+  const compassDiscRef = useRef(null)
+  const compassNeedleShadowRef = useRef(null)
+  const compassHeadingRef = useRef(null)
+  const compassPitchRef = useRef(null)
+  const compassAlignedBadgeRef = useRef(null)
+  const [isCenital, setIsCenital] = useState(false)
+
   const bbox = rectangle?.bbox || [-75.6, 6.2, -75.5, 6.3]
   const bboxKey = bbox.join(",")
   const [minLng, minLat, maxLng, maxLat] = bbox
@@ -1195,8 +1205,67 @@ export default function BlockModel3D({
     blockGroup.add(pinsGroup)
     pinsGroupRef.current = pinsGroup
 
+    const updateCompassHUD = () => {
+      if (!controlsRef.current) return
+      const controls = controlsRef.current
+      const azimuth = typeof controls.getAzimuthalAngle === "function" ? controls.getAzimuthalAngle() : 0
+      const rotY = blockGroupRef.current ? blockGroupRef.current.rotation.y : 0
+      const needleRad = azimuth - rotY
+      const needleDeg = (needleRad * 180) / Math.PI
+
+      const polar = typeof controls.getPolarAngle === "function" ? controls.getPolarAngle() : Math.PI / 4
+      const polarDeg = (polar * 180) / Math.PI
+      // Inclinación 3D del gimbal espacial calibrada anti-escorzo:
+      // Cuando la cámara mira desde arriba (polar ~0, cenital): tiltX = 0° (plano frontal)
+      // A 45° de elevación: tiltX ~ 25°
+      // Con inclinación extrema del terreno (~85°): tiltX se acota suavemente en ~44°
+      // Esto asegura que la elipse 3D conserve siempre al menos el 72% de su altura vertical,
+      // haciendo que la aguja y la baliza Norte sean 100% legibles sin importar la inclinación.
+      const tiltX = Math.max(0, Math.min(44, polarDeg * 0.52))
+
+      if (compassGimbalRef.current) {
+        compassGimbalRef.current.style.transform = `rotateX(${tiltX.toFixed(1)}deg)`
+      }
+
+      if (compassDiscRef.current) {
+        compassDiscRef.current.style.transform = `translateZ(18px) rotateZ(${needleDeg.toFixed(1)}deg)`
+      }
+
+      if (compassNeedleShadowRef.current) {
+        const shadowDistY = (tiltX / 44) * 5.0
+        compassNeedleShadowRef.current.style.transform = `translateZ(6px) rotateZ(${needleDeg.toFixed(1)}deg) translate(0px, ${shadowDistY.toFixed(1)}px)`
+      }
+
+      if (compassHeadingRef.current) {
+        const headingDeg = Math.round(((-needleDeg % 360) + 360) % 360)
+        const cardinals = [
+          "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+          "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO",
+        ]
+        const cardIdx = Math.round(headingDeg / 22.5) % 16
+        const card = cardinals[cardIdx]
+
+        // Flecha direccional de rumbo activa
+        const arrows = ["↑", "↗", "↗", "→", "→", "↘", "↘", "↓", "↓", "↙", "↙", "←", "←", "↖", "↖", "↑"]
+        const arrow = arrows[cardIdx] || "↑"
+        compassHeadingRef.current.textContent = `${arrow} ${String(headingDeg).padStart(3, "0")}° ${card}`
+      }
+
+      if (compassPitchRef.current) {
+        const pitchDeg = Math.max(0, Math.min(90, Math.round(90 - (polar * 180) / Math.PI)))
+        compassPitchRef.current.textContent = `∠ ${pitchDeg}°`
+      }
+
+      if (compassAlignedBadgeRef.current) {
+        const norm = Math.abs(needleDeg % 360)
+        const isAligned = norm < 1.8 || Math.abs(norm - 360) < 1.8
+        compassAlignedBadgeRef.current.style.opacity = isAligned ? "1" : "0"
+      }
+    }
+
     const handleControlsChange = () => {
       needsRenderRef.current = true
+      updateCompassHUD()
     }
     controls.addEventListener?.("change", handleControlsChange)
 
@@ -1206,6 +1275,7 @@ export default function BlockModel3D({
       if (autoRotateRef.current) {
         needsRenderRef.current = true
       }
+      updateCompassHUD()
       if (needsRenderRef.current) {
         renderer.render(scene, camera)
         needsRenderRef.current = false
@@ -1634,6 +1704,93 @@ export default function BlockModel3D({
     link.click()
   }
 
+  const resetToNorth = useCallback(
+    (topDown = false) => {
+      if (!controlsRef.current || !cameraRef.current) return
+      if (autoRotateRef.current) {
+        setAutoRotate(false)
+      }
+
+      const controls = controlsRef.current
+      const camera = cameraRef.current
+      const blockGroup = blockGroupRef.current
+
+      const target = controls.target || new THREE.Vector3(0, 0, 0)
+      const currentPos = camera.position.clone()
+      const offset = currentPos.clone().sub(target)
+      const radius = Math.max(3, offset.length())
+
+      const currentPolar = typeof controls.getPolarAngle === "function" ? controls.getPolarAngle() : Math.PI / 4
+      const currentAzimuth = typeof controls.getAzimuthalAngle === "function" ? controls.getAzimuthalAngle() : 0
+      const currentRotY = blockGroup ? blockGroup.rotation.y : 0
+
+      // Si es topDown, ángulo polar casi cenital (~0.04 rad / 88° de elevación sobre el plano)
+      // Si no, perspectiva natural cómoda ~50° (0.88 rad)
+      const targetPolar = topDown ? 0.04 : (isCenital ? 0.88 : Math.max(0.35, Math.min(Math.PI / 2 - 0.05, currentPolar)))
+      const targetAzimuth = 0
+
+      // Trayectoria más corta para el azimut [-PI, PI]
+      let diffAzimuth = (currentAzimuth - targetAzimuth) % (2 * Math.PI)
+      if (diffAzimuth > Math.PI) diffAzimuth -= 2 * Math.PI
+      if (diffAzimuth < -Math.PI) diffAzimuth += 2 * Math.PI
+
+      const startAzimuth = diffAzimuth
+      const startPolar = currentPolar
+      const startRotY = currentRotY
+
+      const startTime = performance.now()
+      const duration = 650 // ms
+
+      if (topDown) {
+        setIsCenital(true)
+      } else if (isCenital) {
+        setIsCenital(false)
+      }
+
+      const animateGlide = (now) => {
+        const elapsed = now - startTime
+        const progress = Math.min(1, elapsed / duration)
+        // Ease out cubic
+        const ease = 1 - Math.pow(1 - progress, 3)
+
+        const polar = startPolar + (targetPolar - startPolar) * ease
+        const azimuth = startAzimuth * (1 - ease)
+
+        if (blockGroup) {
+          blockGroup.rotation.y = startRotY * (1 - ease)
+        }
+
+        const sinP = Math.sin(polar)
+        camera.position.x = target.x + radius * sinP * Math.sin(azimuth)
+        camera.position.y = target.y + radius * Math.cos(polar)
+        camera.position.z = target.z + radius * sinP * Math.cos(azimuth)
+
+        camera.lookAt(target)
+        if (typeof controls.update === "function") {
+          controls.update()
+        }
+        needsRenderRef.current = true
+
+        if (progress < 1) {
+          requestAnimationFrame(animateGlide)
+        }
+      }
+
+      requestAnimationFrame(animateGlide)
+    },
+    [isCenital, setAutoRotate]
+  )
+
+  const toggleCenital = useCallback(() => {
+    if (isCenital) {
+      resetToNorth(false)
+      setIsCenital(false)
+    } else {
+      resetToNorth(true)
+      setIsCenital(true)
+    }
+  }, [isCenital, resetToNorth])
+
   if (!isOpen) return null
 
   return (
@@ -1705,11 +1862,18 @@ export default function BlockModel3D({
         </div>
       )}
 
-      {/* Brújula e Indicador Norte Flotante */}
-      <div className="absolute top-14 right-4 z-10 flex flex-col items-center bg-zinc-900/85 backdrop-blur-md p-2 rounded-xl border border-zinc-800/80 shadow-xl pointer-events-none">
-        <Compass size={18} className="text-rose-500" />
-        <span className="text-[9px] font-bold text-rose-400 tracking-wider mt-0.5">N</span>
-      </div>
+      {/* Brújula 3D e Instrumento de Navegación de Alta Precisión */}
+      <BlockCompass
+        onResetNorth={resetToNorth}
+        onToggleCenital={toggleCenital}
+        isCenital={isCenital}
+        gimbalRef={compassGimbalRef}
+        discRef={compassDiscRef}
+        needleShadowRef={compassNeedleShadowRef}
+        headingRef={compassHeadingRef}
+        pitchRef={compassPitchRef}
+        alignedBadgeRef={compassAlignedBadgeRef}
+      />
 
       {/* HUD de Controles Flotante Inferior */}
       <div className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom,12px))] md:bottom-4 left-1/2 -translate-x-1/2 z-30 flex flex-col md:flex-row items-center gap-2 bg-zinc-900/95 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl max-w-[96vw] w-fit">
