@@ -30,15 +30,39 @@ export const CursorCoordinates = ({ map, crsId }) => {
   useEffect(() => {
     if (!map) return
 
+    let rafId = null
+    let latestLngLat = null
+
     // `wrap()` devuelve la longitud al rango -180..180. Sin esto, arrastrar el
     // mapa dando la vuelta al mundo muestra longitudes como -434°.
-    const handleMove = (event) => setPosition(event.lngLat.wrap())
-    const handleOut = () => setPosition(null)
+    // Se sincroniza con requestAnimationFrame para no saturar el hilo principal
+    // con cientos de renders por segundo ante ráfagas de mousemove.
+    const handleMove = (event) => {
+      latestLngLat = event.lngLat
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          if (latestLngLat) {
+            setPosition(latestLngLat.wrap())
+          }
+          rafId = null
+        })
+      }
+    }
+
+    const handleOut = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId)
+        rafId = null
+      }
+      latestLngLat = null
+      setPosition(null)
+    }
 
     map.on("mousemove", handleMove)
     map.on("mouseout", handleOut)
 
     return () => {
+      if (rafId) cancelAnimationFrame(rafId)
       map.off("mousemove", handleMove)
       map.off("mouseout", handleOut)
     }

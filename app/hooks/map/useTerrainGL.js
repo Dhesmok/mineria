@@ -493,7 +493,8 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     }
 
     const step = (now) => {
-      const elapsed = Math.min(Math.max((now - previous) / 1000, 0), 0.05)
+      // Mantiene la velocidad angular constante en tiempo real (tope de 100ms para evitar saltos al cambiar de pestaña)
+      const elapsed = Math.min(Math.max((now - previous) / 1000, 0), 0.1)
       previous = now
 
       const isUserInputActive =
