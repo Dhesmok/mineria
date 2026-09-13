@@ -71,6 +71,7 @@ export const useMapLayersGL = (
   setError,
   setShowErrorBanner,
   popupsEnabled = true,
+  isSpinning = false,
 ) => {
   const [isBelowMinZoom, setIsBelowMinZoom] = useState(false)
   const [truncatedLayers, setTruncatedLayers] = useState([])
@@ -620,8 +621,11 @@ export const useMapLayersGL = (
   }, [mapInstance, redrawLabels])
 
   // Popups e indicador del cursor sobre los polígonos.
+  // Durante el giro automático (isSpinning) se desactivan completamente los listeners
+  // de mouseenter/mouseleave: tenerlos activos fuerza a MapLibre a ejecutar queryRenderedFeatures
+  // y raycasts contra el terreno 3D en cada píxel de movimiento del ratón.
   useEffect(() => {
-    if (!mapInstance) return
+    if (!mapInstance || isSpinning) return
 
     // `closeOnClick: false` y un único manejador de clic para todo el mapa, en
     // vez de uno por capa. No es una preferencia de estilo: con el
@@ -637,8 +641,7 @@ export const useMapLayersGL = (
       ANM_LAYERS.map(({ key }) => anmFillLayerId(key)).filter((id) => mapInstance.getLayer(id))
 
     const onClick = (event) => {
-      // Con la consulta de terreno encendida, el clic es para preguntar por la
-      // ladera; abrir además la ficha del polígono taparía la respuesta.
+      // Con la consulta de terreno encendida o durante el giro, el clic no debe abrir ficha.
       if (!popupsEnabledRef.current) return
 
       // Solo se consultan las capas de la ANM: sin esta lista, el clic también
@@ -691,9 +694,12 @@ export const useMapLayersGL = (
         mapInstance.off("mouseenter", layerId, onEnter)
         mapInstance.off("mouseleave", layerId, onLeave)
       })
+      if (mapInstance.getCanvas?.()) {
+        mapInstance.getCanvas().style.cursor = ""
+      }
       popup.remove()
     }
-  }, [mapInstance])
+  }, [mapInstance, isSpinning])
 
   // Desmontaje: los marcadores viven en el DOM colgados del mapa y no se van
   // solos. La misma trampa que documentaba el visor Leaflet con sus layerGroups.

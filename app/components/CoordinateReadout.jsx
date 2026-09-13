@@ -32,12 +32,22 @@ export const CursorCoordinates = ({ map, crsId }) => {
 
     let rafId = null
     let latestLngLat = null
+    let lastSpinUpdateTime = 0
 
     // `wrap()` devuelve la longitud al rango -180..180. Sin esto, arrastrar el
     // mapa dando la vuelta al mundo muestra longitudes como -434°.
     // Se sincroniza con requestAnimationFrame para no saturar el hilo principal
     // con cientos de renders por segundo ante ráfagas de mousemove.
     const handleMove = (event) => {
+      // Durante el giro automático 3D, el relieve rota continuamente bajo el cursor.
+      // Despachar proyecciones y re-renders React en cada píxel satura el hilo principal
+      // y compite con el RAF de rotación. Se aplica un throttle de 300 ms durante el giro.
+      if (map._isSpinning) {
+        const now = performance.now()
+        if (now - lastSpinUpdateTime < 300) return
+        lastSpinUpdateTime = now
+      }
+
       latestLngLat = event.lngLat
       if (!rafId) {
         rafId = requestAnimationFrame(() => {

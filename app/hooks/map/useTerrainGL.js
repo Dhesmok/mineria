@@ -554,6 +554,20 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     if (!is3D) setIsSpinning(false)
   }, [is3D])
 
+  // Señalizar en mapInstance si el giro automático está activo para que otros
+  // hooks y listeners (como hover hit-testing o coordenadas) puedan saltarse
+  // cálculos pesados en cada píxel del cursor sobre el terreno 3D.
+  useEffect(() => {
+    if (mapInstance) {
+      mapInstance._isSpinning = isSpinning
+    }
+    return () => {
+      if (mapInstance) {
+        mapInstance._isSpinning = false
+      }
+    }
+  }, [mapInstance, isSpinning])
+
   /**
    * El desnivel se vuelve a medir al terminar de mover, mientras se está en 3D.
    *
