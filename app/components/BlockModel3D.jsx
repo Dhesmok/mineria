@@ -916,7 +916,6 @@ export default function BlockModel3D({
   const wallsMeshRef = useRef(null)
   const floorMeshRef = useRef(null)
   const sunLightRef = useRef(null)
-  const hemiLightRef = useRef(null)
   const animFrameRef = useRef(null)
   const pinsGroupRef = useRef(null)
   const needsRenderRef = useRef(true)
@@ -934,7 +933,12 @@ export default function BlockModel3D({
     exaggerationRef.current = exaggeration
   }, [exaggeration])
 
-  const [sunAngle, setSunAngle] = useState(180)
+  // Azimut y altura del sol, los dos parámetros con los que se sombrea un relieve en
+  // cualquier SIG. Los valores de partida son los de la convención: luz del noroeste a
+  // 45°, que es como se imprime un sombreado desde hace medio siglo. Y no es capricho:
+  // iluminado desde el sur, el ojo lee los valles como lomas —la ilusión del cráter—.
+  const [sunAngle, setSunAngle] = useState(315)
+  const [sunAltitude, setSunAltitude] = useState(45)
   const [autoRotate, setAutoRotate] = useState(false)
   const autoRotateRef = useRef(autoRotate)
   useEffect(() => {
@@ -1041,14 +1045,15 @@ export default function BlockModel3D({
     controls.target.set(0, 0, 0)
     controlsRef.current = controls
 
-    // Iluminación hemisférica natural con relleno para valles
-    const hemiLight = new THREE.HemisphereLight(0xf0f9ff, 0x52525b, 0.85)
+    // Relleno de cielo para que los valles en sombra no queden en negro puro. Fijo:
+    // es la luz del ambiente, y no tiene por qué cambiar porque se gire el sol.
+    const hemiLight = new THREE.HemisphereLight(0xf0f9ff, 0x52525b, 0.75)
     hemiLight.position.set(0, 50, 0)
     scene.add(hemiLight)
-    hemiLightRef.current = hemiLight
 
-    // Luz solar direccional potente con sombras suaves de alta definición
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.55)
+    // Sol: blanco y de intensidad fija, como la fuente de un sombreado. Lo que se
+    // gradúa es de dónde viene (ver el efecto de azimut y altura), nunca su color.
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.9)
     dirLight.position.set(0, 18, 0)
     dirLight.castShadow = true
     dirLight.shadow.mapSize.width = 2048
@@ -1315,7 +1320,6 @@ export default function BlockModel3D({
       topMeshRef.current = null
       wallsMeshRef.current = null
       sunLightRef.current = null
-      hemiLightRef.current = null
       sceneRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1565,42 +1569,44 @@ export default function BlockModel3D({
     }
   }, [wireframe, requestRender])
 
-  // Ángulo de Iluminación Solar continuo con sombras dinámicas realistas
+  /**
+   * Posición del sol: azimut y altura, como un sombreado de SIG.
+   *
+   * Antes esto hacía dos cosas mal a la vez.
+   *
+   * La primera: teñía la luz según el azimut —naranja mirando a un lado, crema en medio,
+   * blanca al otro—, como si girar el sol alrededor del bloque fuera pasar de la mañana
+   * a la tarde. No lo es: el azimut dice por dónde entra la luz, no qué hora es. El
+   * efecto era que al girar el mando cambiaba el color del terreno al mismo tiempo que
+   * las sombras, así que dos azimuts no se podían comparar: no se sabía si una ladera se
+   * veía más clara por su pendiente o porque le había tocado la luz amarilla. La luz es
+   * blanca y de intensidad fija; lo único que cambia es de dónde viene. Que una ladera se
+   * oscurezca al bajar el sol es la ley del coseno, y esa sí la aplica el motor solo.
+   *
+   * La segunda: la altura del sol salía del seno del azimut, así que subía y bajaba sola
+   * al girarlo y no se podía fijar. Ahora es su propio parámetro.
+   *
+   * El norte del bloque es -Z: la primera fila de la malla se muestrea en `maxLat` y la
+   * geometría gira -90° sobre X, que la manda a -Z. Y el este es +X, porque la primera
+   * columna va en `minLng`. Sin ese signo el dial marcaba un norte que la escena
+   * iluminaba desde el este: los 90° de desfase con los que salió la primera versión.
+   */
   useEffect(() => {
-    if (!sunLightRef.current || !hemiLightRef.current) return
-    const rad = (sunAngle * Math.PI) / 180
-    const dist = 18
+    const sol = sunLightRef.current
+    if (!sol) return
 
-    const sinAngle = Math.sin(rad)
-    const cosAngle = Math.cos(rad)
-    const sunHeight = Math.max(5.0, 14 + sinAngle * 4.5)
+    const az = (sunAngle * Math.PI) / 180
+    const alt = (sunAltitude * Math.PI) / 180
+    const DIST = 22
+    const radioHorizontal = Math.cos(alt) * DIST
 
-    sunLightRef.current.position.set(cosAngle * dist, sunHeight, sinAngle * dist)
-
-    if (sinAngle < -0.3) {
-      // Tarde / atardecer
-      sunLightRef.current.color.setHex(0xffa756)
-      sunLightRef.current.intensity = 1.5
-      hemiLightRef.current.color.setHex(0xfed7aa)
-      hemiLightRef.current.groundColor.setHex(0x27272a)
-      hemiLightRef.current.intensity = 0.55
-    } else if (sinAngle > 0.3) {
-      // Mediodía
-      sunLightRef.current.color.setHex(0xffffff)
-      sunLightRef.current.intensity = 2.1
-      hemiLightRef.current.color.setHex(0xf4f4f5)
-      hemiLightRef.current.groundColor.setHex(0x3f3f46)
-      hemiLightRef.current.intensity = 0.75
-    } else {
-      // Mañana / suave
-      sunLightRef.current.color.setHex(0xffedd5)
-      sunLightRef.current.intensity = 1.8
-      hemiLightRef.current.color.setHex(0xe4e4e7)
-      hemiLightRef.current.groundColor.setHex(0x27272a)
-      hemiLightRef.current.intensity = 0.65
-    }
+    sol.position.set(
+      Math.sin(az) * radioHorizontal,
+      Math.sin(alt) * DIST,
+      -Math.cos(az) * radioHorizontal,
+    )
     requestRender()
-  }, [sunAngle, requestRender])
+  }, [sunAngle, sunAltitude, requestRender])
 
   // Renderizado dinámico de pines
   useEffect(() => {
@@ -1989,18 +1995,32 @@ export default function BlockModel3D({
             <Groove vertical={false} className="min-[360px]:hidden" />
             <Groove className="hidden min-[360px]:block" />
 
-            {/* BAHÍA 2 · Azimut solar. Ver SunDial: un ángulo que da la vuelta no se
-                gradúa con una barra recta. */}
+            {/* BAHÍA 2 · Posición del sol. Los dos ángulos del sombreado en un mando:
+                el giro es el azimut y la distancia al centro, la altura. Ver SunDial.
+                Las lecturas usan los mismos signos que la píldora de la brújula —↑ para
+                un rumbo, ∠ para una inclinación—, que ya están a la vista ahí arriba. */}
             <div className="flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3">
               <SunDial
-                value={sunAngle}
-                onChange={setSunAngle}
-                label="Girar posición del sol para ver sombras dinámicas"
-                title="Girar posición del sol para ver sombras dinámicas"
+                azimuth={sunAngle}
+                altitude={sunAltitude}
+                onChange={(az, alt) => {
+                  setSunAngle(az)
+                  setSunAltitude(alt)
+                }}
+                azimuthLabel="Girar posición del sol para ver sombras dinámicas"
+                altitudeLabel="Altura del sol sobre el horizonte"
+                title="Posición del sol: gira para el azimut, acerca al centro para subirlo"
               />
-              <span className="bm3d-readout w-[44px] sm:w-[52px] text-right text-[15px] sm:text-[17px] font-mono tabular-nums text-amber-300 shrink-0">
-                {sunAngle}°
-              </span>
+              <div className="flex flex-col items-end gap-1 shrink-0 w-[52px] sm:w-[58px]">
+                <span className="bm3d-readout text-[15px] sm:text-[17px] font-mono tabular-nums text-amber-300 leading-none">
+                  <span className="text-amber-500/70 mr-0.5">↑</span>
+                  {sunAngle}°
+                </span>
+                <span className="text-[12px] sm:text-[13px] font-mono tabular-nums text-amber-200/70 leading-none">
+                  <span className="text-amber-500/60 mr-0.5">∠</span>
+                  {sunAltitude}°
+                </span>
+              </div>
             </div>
           </div>
 
