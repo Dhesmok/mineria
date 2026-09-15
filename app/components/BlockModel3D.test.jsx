@@ -49,7 +49,7 @@ describe("BlockModel3D", () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it("renderiza la cabecera, leyenda y controles cuando isOpen es true", () => {
+  it("muestra la medida del bloque y los controles, sin rótulos de relleno", () => {
     render(
       <BlockModel3D
         isOpen={true}
@@ -58,10 +58,43 @@ describe("BlockModel3D", () => {
       />
     )
 
-    expect(screen.getByText("Bloque 3D del Terreno")).toBeInTheDocument()
-    expect(screen.getByText("Relieve Real")).toBeInTheDocument()
-    expect(screen.getByText("Exageración:")).toBeInTheDocument()
-    expect(screen.getByText("Ángulo Sol")).toBeInTheDocument()
+    // La medida del área es el único texto de la esquina: dice a qué escala se mira.
+    expect(screen.getByText(/km/)).toBeInTheDocument()
+
+    // Los deslizadores se identifican por su etiqueta accesible, no por un rótulo
+    // impreso al lado: el icono y el número ya dicen de qué magnitud se trata.
+    expect(screen.getByLabelText("Exageración vertical")).toBeInTheDocument()
+    expect(
+      screen.getByLabelText("Girar posición del sol para ver sombras dinámicas")
+    ).toBeInTheDocument()
+
+    // El título y la insignia nombraban lo que ya se está viendo; se quitaron.
+    expect(screen.queryByText("Bloque 3D del Terreno")).not.toBeInTheDocument()
+    expect(screen.queryByText("Relieve Real")).not.toBeInTheDocument()
+  })
+
+  it("anuncia el modo de colocar marcador fuera del propio botón", () => {
+    render(
+      <BlockModel3D
+        isOpen={true}
+        onClose={jest.fn()}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
+      />
+    )
+
+    const pinBtn = screen.getByTitle("Añadir marcador sobre el terreno")
+    fireEvent.click(pinBtn)
+
+    // El aviso vive en su propia píldora: el botón no cambia de ancho al activarse,
+    // así que la fila de herramientas no se descoloca.
+    expect(
+      screen.getByText("Toca el terreno para colocar el marcador")
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText("Cancelar colocación de marcador"))
+    expect(
+      screen.queryByText("Toca el terreno para colocar el marcador")
+    ).not.toBeInTheDocument()
   })
 
   it("llama a onClose al presionar la equis de cerrar", () => {

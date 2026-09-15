@@ -10,12 +10,10 @@ import {
   Sun,
   Camera,
   RotateCw,
-  Box,
+  Scan,
   MapPin,
   Trash2,
-  Layers,
-  Activity,
-  Compass,
+  Contrast,
   Mountain,
   Grid,
 } from "lucide-react"
@@ -24,6 +22,36 @@ import { SGC_KEYS, sgcImageUrl } from "../utils/sgcLayers"
 import { ANH_KEYS, anhImageUrl } from "../utils/anhLayers"
 import { ANM_LAYERS, anmSourceId } from "../utils/anmLayers"
 import BlockCompass from "./BlockCompass"
+
+/**
+ * Piezas visuales compartidas del visor 3D.
+ *
+ * Los cuatro grupos flotantes —medida, ventana, herramientas y escala— se dibujaban
+ * cada uno con su propio fondo, su propio borde y su propio redondeo, así que en
+ * pantalla parecían cuatro widgets de sitios distintos posados sobre el mismo lienzo.
+ * Un solo cristal y un solo botón de icono los vuelven una misma pieza, y de paso
+ * dejan el color como señal: azul y ámbar solo en los números que se gradúan, rojo
+ * solo en lo que destruye o cierra, y gris en todo lo demás.
+ */
+const GLASS =
+  "bg-zinc-950/70 backdrop-blur-xl border border-white/10 shadow-xl shadow-black/50"
+
+const ICON_BTN =
+  "items-center justify-center w-8 h-8 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition-colors"
+
+const ICON_BTN_ON =
+  "items-center justify-center w-8 h-8 rounded-lg bg-sky-400/15 text-sky-300 ring-1 ring-inset ring-sky-400/40 transition-colors"
+
+// El tirador toma `currentColor`: cada deslizador lleva el color de su magnitud en una
+// clase de texto (`text-sky-400`, `text-amber-400`) y esta regla no se repite por color.
+const BLOCK_HUD_CSS = `
+.bm3d-range { -webkit-appearance: none; appearance: none; background: transparent; height: 14px; }
+.bm3d-range:focus { outline: none; }
+.bm3d-range::-webkit-slider-runnable-track { height: 3px; border-radius: 9999px; background: rgba(255,255,255,0.14); }
+.bm3d-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 11px; height: 11px; margin-top: -4px; border-radius: 9999px; background: currentColor; border: 1px solid rgba(0,0,0,0.55); box-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+.bm3d-range::-moz-range-track { height: 3px; border-radius: 9999px; background: rgba(255,255,255,0.14); }
+.bm3d-range::-moz-range-thumb { width: 11px; height: 11px; border-radius: 9999px; background: currentColor; border: 1px solid rgba(0,0,0,0.55); box-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+`
 
 function lngLatToMercator(lng, lat) {
   const x = (lng * 20037508.34) / 180
@@ -1794,75 +1822,81 @@ export default function BlockModel3D({
   if (!isOpen) return null
 
   return (
-    <div className="relative w-full h-full flex flex-col bg-zinc-950 select-none overflow-hidden font-sans">
-      {/* Cabecera Obsidian Glass */}
-      <div className="h-12 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800/80 px-3 sm:px-4 flex items-center justify-between z-20 shrink-0">
-        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-          <div className="p-1.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-400 shrink-0">
-            <Box size={16} />
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs font-semibold tracking-wide text-zinc-100 flex items-center gap-2 truncate">
-              Bloque 3D del Terreno
-              <span className="text-[10px] font-medium text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30 shrink-0">
-                Relieve Real
-              </span>
-            </span>
-            <span className="text-[10px] text-zinc-400 font-mono truncate">
-              {widthKm} × {heightKm} km · Escala Métrica 1:1
-            </span>
-          </div>
-        </div>
+    <div className="relative w-full h-full bg-zinc-950 select-none overflow-hidden font-sans">
+      {/* Estilo de los deslizadores del HUD.
+          Un `input[type=range]` nativo trae un carril grueso y un tirador del color del
+          sistema: dos piezas que no se parecen a nada más de esta pantalla. Se rehacen a
+          mano, y el tirador toma `currentColor` para que cada deslizador herede el color
+          de su magnitud (azul la exageración, ámbar el sol) sin duplicar la regla. */}
+      <style>{BLOCK_HUD_CSS}</style>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          {onRedrawRectangle && (
-            <button
-              onClick={onRedrawRectangle}
-              className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/60 rounded-md transition-all flex items-center gap-1.5"
-              title="Seleccionar otra área en el mapa"
-            >
-              <Box size={13} />
-              <span className="hidden sm:inline">Cambiar Área</span>
-              <span className="sm:hidden">Área</span>
-            </button>
-          )}
-
-          {onToggleMaximize && (
-            <button
-              onClick={onToggleMaximize}
-              className="hidden md:flex p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80 rounded-md border border-zinc-800 transition-colors"
-              title={isMaximized ? "Restaurar tamaño normal" : "Maximizar pantalla completa"}
-            >
-              {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-            </button>
-          )}
-
-          <button
-            onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-md border border-zinc-800 transition-colors"
-            title="Cerrar bloque 3D del terreno"
-          >
-            <X size={15} />
-          </button>
-        </div>
-      </div>
-
-      {/* Contenedor del Lienzo WebGL 3D */}
+      {/* Lienzo WebGL a pantalla completa.
+          Antes había encima una barra de 48 px con un icono, el título «Bloque 3D del
+          Terreno» y una insignia «Relieve Real»: tres formas de nombrar lo que ya se está
+          viendo, a cambio de robarle altura al relieve. Los controles flotan sobre el
+          lienzo, cada grupo en una esquina, y el centro queda entero para el terreno. */}
       <div
         ref={containerRef}
         onClick={handleCanvasClick}
-        className="relative flex-1 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden touch-none"
+        className="absolute inset-0 cursor-grab active:cursor-grabbing touch-none"
       />
 
-      {/* Badge de estado de carga DEM */}
-      {demLoading && (
-        <div className="absolute top-14 left-4 z-20 flex items-center gap-2 bg-black/75 backdrop-blur-md px-3 py-1.5 rounded-lg border border-sky-500/30 text-sky-400 text-xs shadow-lg animate-pulse">
-          <Mountain size={14} className="animate-spin" />
-          <span>Decodificando topografía DEM SRTM 30m...</span>
-        </div>
-      )}
+      {/* Esquina superior izquierda: la medida del bloque, que sí es un dato —dice a qué
+          escala se está mirando—. La carga del modelo de elevación se cuenta aquí mismo
+          en vez de en un cartel aparte, porque es un estado pasajero de esta misma vista. */}
+      <div
+        className={`absolute top-3 left-3 z-20 flex items-center gap-2 px-2.5 py-1 rounded-lg pointer-events-none ${GLASS}`}
+      >
+        <span className="text-[11px] font-mono tabular-nums text-zinc-300">
+          {widthKm} × {heightKm} <span className="text-zinc-500">km</span>
+        </span>
+        {demLoading && (
+          <span
+            className="flex items-center gap-1.5 pl-2 border-l border-white/10 text-[10px] text-sky-300"
+            title="Descargando y decodificando el modelo de elevación"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+            {/* En el teléfono solo queda el punto que late: la palabra ensancharía la
+                píldora hasta chocar con la brújula, que está a 242 px del borde. */}
+            <span className="hidden sm:inline">cargando relieve</span>
+          </span>
+        )}
+      </div>
 
-      {/* Brújula 3D e Instrumento de Navegación de Alta Precisión */}
+      {/* Esquina superior derecha: lo que le pasa a la ventana, no al terreno.
+          Solo iconos: el rótulo de cada uno vive en su `title`, que es donde se busca. */}
+      <div className={`absolute top-3 right-3 z-30 flex items-center gap-0.5 p-1 rounded-xl ${GLASS}`}>
+        {onRedrawRectangle && (
+          <button
+            onClick={onRedrawRectangle}
+            className={`flex ${ICON_BTN}`}
+            title="Seleccionar otra área en el mapa"
+            aria-label="Seleccionar otra área en el mapa"
+          >
+            <Scan size={15} />
+          </button>
+        )}
+
+        {onToggleMaximize && (
+          <button
+            onClick={onToggleMaximize}
+            className={`hidden md:flex ${ICON_BTN}`}
+            title={isMaximized ? "Restaurar tamaño normal" : "Maximizar pantalla completa"}
+          >
+            {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+        )}
+
+        <button
+          onClick={onClose}
+          className="flex items-center justify-center w-8 h-8 rounded-lg text-zinc-400 hover:text-rose-300 hover:bg-rose-500/15 transition-colors"
+          title="Cerrar bloque 3D del terreno"
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      {/* Brújula: instrumento de orientación, arriba a la derecha bajo los botones */}
       <BlockCompass
         onResetNorth={resetToNorth}
         onToggleCenital={toggleCenital}
@@ -1875,40 +1909,62 @@ export default function BlockModel3D({
         alignedBadgeRef={compassAlignedBadgeRef}
       />
 
-      {/* HUD de Controles Flotante Inferior */}
-      <div className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom,12px))] md:bottom-4 left-1/2 -translate-x-1/2 z-30 flex flex-col md:flex-row items-center gap-2 bg-zinc-900/95 backdrop-blur-md px-3 py-2 rounded-2xl border border-zinc-800/90 shadow-2xl max-w-[96vw] w-fit">
-        {/* Fila 1 en móvil / izquierda en desktop: Sliders de Exageración y Ángulo Sol */}
-        <div className="flex items-center justify-center gap-2 sm:gap-3 w-full md:w-auto">
-          {/* Control de Exageración Vertical */}
-          <div className="flex items-center gap-1.5 sm:gap-2 pr-2 sm:pr-3 border-r border-zinc-800 shrink-0">
-            <Mountain size={14} className="text-zinc-400 shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
-                Exageración:
-              </span>
+      {/* Zona inferior: una columna anclada al borde de abajo. Lo que se añada encima del
+          HUD —ahora el aviso de colocar marcador— crece hacia arriba sin mover el HUD ni
+          obligar a calcular alturas a mano. */}
+      <div className="absolute bottom-[max(0.75rem,env(safe-area-inset-bottom,12px))] left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 max-w-[96vw]">
+        {/* Modo «colocar marcador»: la instrucción va junto al botón que la activa, no
+            escrita dentro de él —eso ensanchaba el botón y descolocaba toda la fila al
+            pulsarlo—. Tampoco arriba: en el teléfono chocaría con la medida y la brújula. */}
+        {isAddingPin && (
+          <div
+            className={`flex items-center gap-2 pl-2.5 pr-1.5 py-1 rounded-lg text-[11px] text-zinc-200 ${GLASS}`}
+          >
+            <MapPin size={13} className="text-rose-400 shrink-0" />
+            <span>Toca el terreno para colocar el marcador</span>
+            <button
+              onClick={() => setIsAddingPin(false)}
+              className="flex items-center justify-center w-5 h-5 rounded text-zinc-500 hover:text-zinc-100 hover:bg-white/10 transition-colors shrink-0"
+              title="Cancelar"
+              aria-label="Cancelar colocación de marcador"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+
+        {/* HUD: primero las dos magnitudes que se gradúan, después las acciones. Los
+            rótulos en mayúsculas («EXAGERACIÓN:», «ÁNGULO SOL») se fueron: el icono y el
+            número dicen lo mismo en un tercio del sitio, y el nombre completo sigue
+            estando en el `title` de cada deslizador. */}
+        <div
+          className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-1 p-1.5 rounded-2xl max-w-full ${GLASS}`}
+        >
+          <div className="flex items-center justify-center gap-1">
+            {/* Exageración vertical */}
+            <div className="flex items-center gap-2 px-1.5">
+              <Mountain size={14} className="text-zinc-500 shrink-0" />
               <input
                 type="range"
                 min="0.5"
                 max="5.0"
                 step="0.1"
+                title="Exageración vertical del relieve"
                 aria-label="Exageración vertical"
                 value={exaggeration}
                 onChange={(e) => setExaggeration(parseFloat(e.target.value))}
-                className="w-16 sm:w-20 accent-sky-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
+                className="bm3d-range w-20 sm:w-24 text-sky-400 cursor-pointer"
               />
-            </div>
-            <span className="text-xs font-mono font-bold text-sky-400 w-7 sm:w-8 text-right">
-              {exaggeration.toFixed(1)}×
-            </span>
-          </div>
-
-          {/* Control del Sol e Iluminación */}
-          <div className="flex items-center gap-1.5 sm:gap-2 md:pr-3 md:border-r md:border-zinc-800 shrink-0">
-            <Sun size={14} className="text-amber-400 shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[9px] text-zinc-400 uppercase tracking-wider font-semibold">
-                Ángulo Sol
+              <span className="w-9 text-right text-[11px] font-mono tabular-nums text-sky-300">
+                {exaggeration.toFixed(1)}×
               </span>
+            </div>
+
+            <div className="w-px self-stretch my-1 bg-white/10" />
+
+            {/* Posición del sol */}
+            <div className="flex items-center gap-2 px-1.5">
+              <Sun size={14} className="text-zinc-500 shrink-0" />
               <input
                 type="range"
                 min="0"
@@ -1918,42 +1974,31 @@ export default function BlockModel3D({
                 aria-label="Girar posición del sol para ver sombras dinámicas"
                 value={sunAngle}
                 onChange={(e) => setSunAngle(parseInt(e.target.value))}
-                className="w-16 sm:w-20 accent-amber-400 cursor-pointer h-1.5 bg-zinc-700 rounded-lg appearance-none"
+                className="bm3d-range w-20 sm:w-24 text-amber-400 cursor-pointer"
               />
+              <span className="w-9 text-right text-[11px] font-mono tabular-nums text-amber-300">
+                {sunAngle}°
+              </span>
             </div>
-            <span className="text-xs font-mono font-bold text-amber-300 w-8 sm:w-9 text-right">
-              {sunAngle}°
-            </span>
           </div>
-        </div>
 
-        {/* Fila 2 en móvil / continuación en desktop: Herramientas y Acciones */}
-        <div className="flex items-center justify-center gap-1.5 sm:gap-2 w-full md:w-auto pt-1.5 border-t border-zinc-800/60 md:border-t-0 md:pt-0">
-          {/* Herramienta de Pines Personalizados */}
-          <div className="flex items-center gap-1 pr-2 sm:pr-3 border-r border-zinc-800 shrink-0">
+          {/* Separador: vertical cuando la fila es una sola, horizontal cuando se parte */}
+          <div className="h-px sm:h-auto sm:w-px sm:self-stretch sm:my-1 mx-1 sm:mx-0 bg-white/10" />
+
+          {/* Acciones */}
+          <div className="flex items-center justify-center gap-0.5">
             <button
               onClick={() => setIsAddingPin(!isAddingPin)}
-              className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-all flex items-center gap-1.5 ${
-                isAddingPin
-                  ? "bg-rose-500 text-white border-rose-400 shadow-md shadow-rose-500/30 animate-pulse"
-                  : "text-zinc-300 hover:text-white bg-zinc-800/60 border-zinc-700/60 hover:bg-zinc-800"
-              }`}
-              title={isAddingPin ? "Haz clic en el terreno para colocar el pin" : "Añadir pin sobre el terreno"}
+              className={`flex ${isAddingPin ? ICON_BTN_ON : ICON_BTN}`}
+              title="Añadir marcador sobre el terreno"
+              aria-label="Añadir marcador sobre el terreno"
             >
-              <MapPin size={13} />
-              <span>{isAddingPin ? "Colocar Pin..." : "+ Pin"}</span>
+              <MapPin size={15} />
             </button>
-          </div>
 
-          {/* Botones de Función */}
-          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => setAutoRotate(!autoRotate)}
-              className={`p-1.5 rounded-lg border transition-all ${
-                autoRotate
-                  ? "bg-sky-500/20 text-sky-400 border-sky-500/40"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
-              }`}
+              className={`flex ${autoRotate ? ICON_BTN_ON : ICON_BTN}`}
               title={autoRotate ? "Detener giro continuo" : "Iniciar giro automático"}
             >
               <RotateCw size={15} />
@@ -1961,11 +2006,7 @@ export default function BlockModel3D({
 
             <button
               onClick={() => setWireframe(!wireframe)}
-              className={`p-1.5 rounded-lg border transition-all ${
-                wireframe
-                  ? "bg-sky-500/20 text-sky-400 border-sky-500/40"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 border-transparent"
-              }`}
+              className={`flex ${wireframe ? ICON_BTN_ON : ICON_BTN}`}
               title="Alternar vista de malla de alambre"
             >
               <Grid size={15} />
@@ -1973,15 +2014,15 @@ export default function BlockModel3D({
 
             <button
               onClick={() => setStudioTheme(studioTheme === "dark" ? "light" : "dark")}
-              className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
+              className={`flex ${ICON_BTN}`}
               title={`Cambiar a fondo ${studioTheme === "dark" ? "claro" : "oscuro"}`}
             >
-              <Activity size={15} />
+              <Contrast size={15} />
             </button>
 
             <button
               onClick={handleScreenshot}
-              className="p-1.5 text-zinc-400 hover:text-sky-400 hover:bg-zinc-800/80 rounded-lg border border-transparent transition-all"
+              className={`flex ${ICON_BTN}`}
               title="Exportar imagen PNG del bloque 3D"
             >
               <Camera size={15} />
@@ -1990,23 +2031,14 @@ export default function BlockModel3D({
         </div>
       </div>
 
-      {/* Editor flotante de Pin Seleccionado */}
+      {/* Editor del marcador seleccionado */}
       {selectedPinId && (
-        <div className="absolute top-14 left-4 z-30 bg-zinc-900/95 backdrop-blur-md p-3 rounded-xl border border-sky-500/40 shadow-2xl flex flex-col gap-2 w-64 max-w-[calc(100vw-2rem)] animate-in fade-in zoom-in duration-150">
-          <div className="flex items-center justify-between text-xs font-semibold text-zinc-200">
-            <span className="flex items-center gap-1.5 text-sky-400">
-              <MapPin size={14} /> Editar Marcador
-            </span>
-            <button
-              onClick={() => setSelectedPinId(null)}
-              className="text-zinc-400 hover:text-zinc-100 p-0.5"
-            >
-              <X size={13} />
-            </button>
-          </div>
-
+        <div
+          className={`absolute top-14 left-3 z-30 flex flex-col gap-2 p-2.5 rounded-xl w-60 max-w-[calc(100vw-1.5rem)] ${GLASS}`}
+        >
           <input
             type="text"
+            autoFocus
             value={editingPinText}
             onChange={(e) => {
               setEditingPinText(e.target.value)
@@ -2014,51 +2046,69 @@ export default function BlockModel3D({
                 prev.map((p) => (p.id === selectedPinId ? { ...p, label: e.target.value } : p)),
               )
             }}
-            placeholder="Nombre o cota..."
-            className="bg-zinc-950 border border-zinc-700/80 rounded-lg px-2.5 py-1 text-xs text-zinc-100 focus:outline-none focus:border-sky-500"
+            placeholder="Nombre o cota…"
+            className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-400/60"
           />
 
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              {[0x38bdf8, 0x10b981, 0xf59e0b, 0xef4444, 0xa855f7].map((colorHex) => (
-                <button
-                  key={colorHex}
-                  onClick={() => {
-                    setPins((prev) =>
-                      prev.map((p) => (p.id === selectedPinId ? { ...p, color: colorHex } : p)),
-                    )
-                  }}
-                  className="w-4 h-4 rounded-full border border-white/20 hover:scale-110 transition-transform"
-                  style={{ backgroundColor: `#${colorHex.toString(16).padStart(6, "0")}` }}
-                />
-              ))}
+              {[0x38bdf8, 0x10b981, 0xf59e0b, 0xef4444, 0xa855f7].map((colorHex) => {
+                const hex = `#${colorHex.toString(16).padStart(6, "0")}`
+                const activo = pins.find((p) => p.id === selectedPinId)?.color === colorHex
+                return (
+                  <button
+                    key={colorHex}
+                    onClick={() => {
+                      setPins((prev) =>
+                        prev.map((p) => (p.id === selectedPinId ? { ...p, color: colorHex } : p)),
+                      )
+                    }}
+                    className={`w-4 h-4 rounded-full transition-transform hover:scale-110 ${
+                      activo ? "ring-2 ring-white/80 ring-offset-2 ring-offset-zinc-950" : ""
+                    }`}
+                    style={{ backgroundColor: hex }}
+                    title={`Color ${hex}`}
+                    aria-label={`Color ${hex}`}
+                  />
+                )
+              })}
             </div>
 
-            <button
-              onClick={() => {
-                setPins((prev) => prev.filter((p) => p.id !== selectedPinId))
-                setSelectedPinId(null)
-              }}
-              className="p-1 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition-colors"
-              title="Eliminar este pin"
-            >
-              <Trash2 size={14} />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => {
+                  setPins((prev) => prev.filter((p) => p.id !== selectedPinId))
+                  setSelectedPinId(null)
+                }}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-zinc-500 hover:text-rose-300 hover:bg-rose-500/15 transition-colors"
+                title="Eliminar este marcador"
+              >
+                <Trash2 size={14} />
+              </button>
+              <button
+                onClick={() => setSelectedPinId(null)}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-zinc-500 hover:text-zinc-100 hover:bg-white/10 transition-colors"
+                title="Cerrar el editor del marcador"
+                aria-label="Cerrar el editor del marcador"
+              >
+                <X size={14} />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Leyenda Hipsométrica Flotante */}
-      <div className="hidden sm:flex absolute bottom-4 left-4 z-10 bg-zinc-900/85 backdrop-blur-md px-3 py-2 rounded-xl border border-zinc-800/80 shadow-xl flex-col gap-1 pointer-events-none">
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-zinc-300">
-          <Layers size={12} className="text-sky-400" />
-          <span>Elevación Topográfica</span>
-        </div>
-        <div className="flex items-center justify-between text-[9px] font-mono text-zinc-400">
-          <span>{Math.round(elevationMinRef.current)} m</span>
+      {/* Escala hipsométrica: la rampa de color con sus dos cotas. El título «Elevación
+          Topográfica» sobraba —una rampa de color con metros debajo, sobre un bloque de
+          terreno, no puede ser otra cosa—. */}
+      <div
+        className={`hidden sm:flex absolute bottom-3 left-3 z-10 flex-col gap-1 px-2.5 py-2 rounded-xl pointer-events-none ${GLASS}`}
+      >
+        <div className="w-28 h-1.5 rounded-full bg-gradient-to-r from-emerald-600 via-amber-400 to-rose-200" />
+        <div className="flex items-center justify-between text-[9px] font-mono tabular-nums text-zinc-400">
+          <span>{Math.round(elevationMinRef.current)}</span>
           <span>{Math.round(elevationMaxRef.current)} m</span>
         </div>
-        <div className="w-28 h-1.5 rounded-full bg-gradient-to-r from-emerald-600 via-amber-400 to-rose-200" />
       </div>
     </div>
   )

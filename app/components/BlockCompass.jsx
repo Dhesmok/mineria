@@ -26,7 +26,7 @@ const BlockCompass = memo(function BlockCompass({
   alignedBadgeRef,
 }) {
   return (
-    <div className="absolute top-14 right-4 z-20 flex flex-col items-center select-none">
+    <div className="absolute top-16 right-3 z-20 flex flex-col items-center select-none">
       {/* Escenario con perspectiva 3D calibrada */}
       <div
         className="relative group"
