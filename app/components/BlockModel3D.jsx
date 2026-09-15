@@ -1043,6 +1043,33 @@ export default function BlockModel3D({
     controls.minDistance = 3
     controls.maxDistance = 50
     controls.target.set(0, 0, 0)
+
+    /**
+     * Reparto de botones del ratón.
+     *
+     * Lo que trae OrbitControls de fábrica es izquierdo girar, **centro acercar** y
+     * **derecho desplazar**. Aquí el centro sobraba —la rueda ya acerca y alejar con el
+     * mismo botón que se empuja es redundante— y el derecho estorbaba: en un visor de
+     * mapas el clic derecho es el menú de la plataforma, no una herramienta de cámara.
+     *
+     * Queda como en cualquier visor de CAD o de SIG: izquierdo gira, **centro
+     * desplaza**, rueda acerca. El derecho se desliga y no hace nada.
+     */
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: null,
+    }
+
+    // Con el botón central, Chrome en Windows abre su desplazamiento automático —el
+    // cursor de cuatro flechas— y se queda con el gesto: el bloque no se movería y el
+    // puntero se convertiría en un rueda-de-scroll fantasma sobre el lienzo. Solo se
+    // evita en el botón 1, para no tocar el comportamiento de los otros dos.
+    const evitarDesplazamientoAutomatico = (ev) => {
+      if (ev.button === 1) ev.preventDefault()
+    }
+    renderer.domElement.addEventListener("mousedown", evitarDesplazamientoAutomatico)
+
     controlsRef.current = controls
 
     // Relleno de cielo para que los valles en sombra no queden en negro puro. Fijo:
@@ -1310,6 +1337,7 @@ export default function BlockModel3D({
     return () => {
       cancelAnimationFrame(animFrameRef.current)
       controls.removeEventListener?.("change", handleControlsChange)
+      renderer.domElement.removeEventListener("mousedown", evitarDesplazamientoAutomatico)
       window.removeEventListener("resize", handleResize)
       if (ro) ro.disconnect()
       if (renderer.domElement && container.contains(renderer.domElement)) {

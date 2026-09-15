@@ -1,5 +1,7 @@
 import React from "react"
 import { render, screen, fireEvent } from "@testing-library/react"
+import { MOUSE } from "three"
+import { OrbitControls } from "three/addons/controls/OrbitControls.js"
 import BlockModel3D from "./BlockModel3D"
 
 // Mock WebGLRenderer and OrbitControls for JSDOM
@@ -95,6 +97,50 @@ describe("BlockModel3D", () => {
     expect(
       screen.queryByText("Toca el terreno para colocar el marcador")
     ).not.toBeInTheDocument()
+  })
+
+  it("desplaza con el botón central y deja libre el clic derecho", () => {
+    // OrbitControls trae de fábrica el centro para acercar y el derecho para
+    // desplazar. La rueda ya acerca, y en un visor de mapas el clic derecho es el
+    // menú de la plataforma: el reparto correcto es el de cualquier CAD o SIG.
+    OrbitControls.mockClear()
+    render(
+      <BlockModel3D
+        isOpen={true}
+        onClose={jest.fn()}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
+      />
+    )
+
+    const controls = OrbitControls.mock.results[0].value
+    expect(controls.mouseButtons).toEqual({
+      LEFT: MOUSE.ROTATE,
+      MIDDLE: MOUSE.PAN,
+      RIGHT: null,
+    })
+  })
+
+  it("no deja que el navegador se quede con el botón central", () => {
+    // Chrome en Windows abre su desplazamiento automático con el botón central y se
+    // queda con el gesto: el bloque no se movería. Solo se frena ese botón.
+    const { container } = render(
+      <BlockModel3D
+        isOpen={true}
+        onClose={jest.fn()}
+        rectangle={{ bbox: [-75.6, 6.2, -75.5, 6.3] }}
+      />
+    )
+
+    const lienzo = container.querySelector("canvas")
+    expect(lienzo).toBeTruthy()
+
+    const central = new MouseEvent("mousedown", { button: 1, bubbles: true, cancelable: true })
+    lienzo.dispatchEvent(central)
+    expect(central.defaultPrevented).toBe(true)
+
+    const izquierdo = new MouseEvent("mousedown", { button: 0, bubbles: true, cancelable: true })
+    lienzo.dispatchEvent(izquierdo)
+    expect(izquierdo.defaultPrevented).toBe(false)
   })
 
   it("llama a onClose al presionar la equis de cerrar", () => {
