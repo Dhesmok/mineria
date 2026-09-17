@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, MapPin, Map as MapIcon } from "lucide-react"
+import { ChevronDown, MapPin, Map as MapIcon, Loader2 } from "lucide-react"
 
 import { FloatingPanel } from "./FloatingPanel"
 import {
@@ -215,7 +215,7 @@ export const SgcPanel = ({
   return (
     <FloatingPanel
       title={consultando ? "Consultando…" : "En este punto"}
-      icon={MapPin}
+      icon={consultando ? (props) => <Loader2 {...props} className={`${props.className || ""} animate-spin`} /> : MapPin}
       collapsible={false}
       closeLabel="Cerrar la consulta"
       onRequestClose={onDismiss}

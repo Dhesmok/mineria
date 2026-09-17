@@ -10,3 +10,6 @@
 ## 2024-05-19 - Fixing stale closures in map tracking
 **Learning:** Found that using React state inside continuous event listeners (like `watchPosition`) can lead to severe UX bugs, such as locking the user camera, because the closure captures outdated state. Also, destroying DOM elements (like map markers) repeatedly breaks continuous animations (like a compass needle).
 **Action:** Used `useRef` for tracking state inside continuous callbacks (`hasCenteredRef`, `locationWatchIdRef`). Used Leaflet`s `.setLatLng()` to update positions seamlessly without destroying the markerDOM.
+## 2025-02-28 - Add loading spinner and accessible label to map query panel
+**Learning:** The SGC query panel (when clicking on the map for geological information) can take a few seconds to load but previously only showed the text 'Consultando…' with a static pin icon, which lacked strong visual feedback for an asynchronous operation. In addition, export buttons lacked aria-labels for screen readers.
+**Action:** Replaced the static MapPin icon with a spinning Loader2 during the query phase in SgcPanel to provide clear visual feedback, and added descriptive aria-labels to the SHP and KML export buttons.
