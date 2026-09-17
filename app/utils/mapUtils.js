@@ -327,3 +327,54 @@ export const createPopupContent = (properties = {}) => {
     </div>
   `
 }
+
+/**
+ * Cuántos atributos de una figura cargada se enseñan en su ficha.
+ *
+ * Un shapefile de catastro puede traer ochenta columnas, y una ficha de ochenta
+ * filas no se lee: tapa el mapa entero y hay que hacer scroll dentro del globo.
+ * Veinte cubren de sobra lo que alguien mira de un plano propio, y las que se
+ * quedan fuera se dicen al final en vez de desaparecer.
+ */
+export const POPUP_MAX_FIELDS = 20
+
+/**
+ * La ficha de una figura de un archivo que cargó el usuario.
+ *
+ * No puede ser `createPopupContent`: aquella sabe los nombres de los campos de la
+ * ANM —`CODIGO_EXPEDIENTE`, `TITULO_ESTADO`— y de un archivo cualquiera no se
+ * sabe nada. Aquí se enseñan los atributos tal como vienen, con su nombre tal
+ * como lo escribió quien hizo el archivo: en un plano propio, «PREDIO» o «Lote_2»
+ * son el dato, y renombrarlos o reordenarlos solo consigue que no se reconozcan.
+ *
+ * Se descartan los campos vacíos, que en un `.dbf` son legión —una columna que
+ * solo usan tres de las mil figuras—, y los que llevan geometría dentro
+ * (`geometry`), que algunos conversores dejan entre los atributos.
+ */
+export const createUserFeaturePopupContent = (properties = {}, layerLabel = "Capa cargada") => {
+  const entradas = Object.entries(properties ?? {}).filter(
+    ([nombre, valor]) =>
+      nombre !== "geometry" &&
+      valor !== null &&
+      valor !== undefined &&
+      String(valor).trim() !== "",
+  )
+
+  const visibles = entradas.slice(0, POPUP_MAX_FIELDS)
+  const sobran = entradas.length - visibles.length
+
+  const filas = visibles
+    .map(([nombre, valor]) => row(escapeXml(nombre), escapeXml(valor)))
+    .join("")
+
+  return `
+    <div class="popup-content">
+      <div class="popup-header-bar">
+        <span class="popup-type-badge">Capa propia</span>
+        <span class="popup-code-title">${escapeXml(layerLabel)}</span>
+      </div>
+      ${filas || '<p class="popup-row popup-row-na"><strong>Sin atributos:</strong> el archivo trae solo geometría.</p>'}
+      ${sobran > 0 ? `<p class="popup-row popup-row-na"><strong>y ${sobran} campos más</strong></p>` : ""}
+    </div>
+  `
+}

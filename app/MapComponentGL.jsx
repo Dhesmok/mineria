@@ -12,6 +12,7 @@ import { useAnhLayersGL } from "./hooks/map/useAnhLayersGL"
 import { usePlanchaGL } from "./hooks/map/usePlanchaGL"
 import { useTerrainProfileGL } from "./hooks/map/useTerrainProfileGL"
 import { useMapLayersGL } from "./hooks/map/useMapLayersGL"
+import { useUserLayersGL } from "./hooks/map/useUserLayersGL"
 import { useDrawControlGL } from "./hooks/map/useDrawControlGL"
 import { useAreaDownloadGL } from "./hooks/map/useAreaDownloadGL"
 import { useGeolocationGL } from "./hooks/map/useGeolocationGL"
@@ -93,6 +94,9 @@ export default function MapComponentGL({
   onCoordinatesUpdate,
   layerState,
   layerOrder,
+  // Las capas que cargó el usuario desde sus propios archivos. Llegan del panel
+  // —es quien las lee— porque el mapa solo tiene que dibujarlas.
+  userLayers = [],
   coordinateSystem,
   filters,
   onLayerData,
@@ -368,6 +372,16 @@ export default function MapComponentGL({
     !queryingTerrain,
     isSpinning,
   )
+
+  // Los archivos del usuario, sobre el mismo mapa que todo lo demás.
+  //
+  // El orden de pintado lo sigue decidiendo `useMapLayersGL`, que recorre
+  // `layerOrder` y conoce estas capas porque `styleLayerIdsFor` responde por
+  // ellas. Con una salvedad de tiempos: sus efectos corren antes que los de este
+  // hook, así que la capa que se acaba de cargar no la coloca aquella pasada sino
+  // este hook, insertándola encima de todo —que es donde la quiere quien acaba de
+  // abrir el archivo, y justo lo que dice `layerOrder`, donde entró de primera—.
+  useUserLayersGL(mapRef, mapInstance, userLayers, layerState, !queryingTerrain)
 
   const [hud3DOpen, setHud3DOpen] = useState(false)
   const [is3DPinned, setIs3DPinned] = useState(false)

@@ -1650,3 +1650,113 @@ encontraron las propias pruebas al escribirlas: `Valle_del_Cauca_2020` no perdí
 el año porque el guion bajo cuenta como letra y la búsqueda no encontraba dónde
 empezaba, y `Number(null)` es cero —un ajuste corrupto dejaba el panel clavado en
 su ancho mínimo en vez de en el de fábrica—.
+
+---
+
+## Fase 14 — Las capas del usuario (shapefile, KML, CAD)
+
+Hasta aquí, todo lo que el visor dibujaba venía de un servicio del Estado. Esta
+fase abre la puerta al otro lado: **los archivos de quien lo usa**. El shapefile
+del plano de topografía, el KML que mandó el geólogo de campo, el DXF del lindero
+que dibujó el ingeniero, y de paso el GeoJSON de cualquier servicio y el GPX del
+GPS de campo.
+
+Entran por un área nueva del panel —«Mis capas»—, eligiendo el archivo o
+arrastrándolo encima, y desde ahí se comportan como cualquier otra capa:
+interruptor, color, opacidad, orden de pintado arrastrando, y ficha al pulsar una
+figura. Nada se guarda entre visitas y nada sale del navegador.
+
+### Lo que hubo que decidir
+
+**Leer en el navegador y no en el servidor.** No es una limitación: un plano de un
+lindero en trámite es dato de alguien, y convertirlo en nuestro servidor sería
+pedir una confianza que no hace falta pedir. De paso se esquiva el tope de
+duración de una función de Vercel, que es exactamente lo que ya rompió la descarga
+de las planchas.
+
+**Tres librerías de lectura, cargadas a demanda.** `shpjs` para el shapefile,
+`@tmcw/togeojson` para KML/KMZ/GPX y `dxf-parser` para el CAD. Entre las tres
+pesan unos 200 kB y la mayoría de las visitas no abre ningún archivo, así que se
+traen con `import()` como pdf.js: el paquete inicial creció 8 kB —de 122 a 130—,
+no 200. Lo que **no** se delegó es lo que ya estaba resuelto en el proyecto: la
+reproyección la hace proj4 y el descomprimido, jszip. Y el paso de entidades de
+CAD a geometría es nuestro (`utils/dxfGeojson.js`), porque es donde están las
+decisiones: una polilínea cerrada es un polígono, un círculo es un polígono de 64
+lados, un rótulo es un punto con su texto en los atributos, y lo que no se sabe
+leer **se cuenta y se dice**.
+
+**El shapefile no es un archivo sino cuatro.** Quien lo manda en un `.zip` no
+tiene que saberlo; quien selecciona los cuatro a mano en el diálogo, tampoco. Se
+agrupan por nombre (`groupFiles`), y un `.dbf` que llega huérfano —el error más
+común, porque es «el que tiene los datos»— se explica en vez de ignorarse.
+
+### El problema de verdad: en qué sistema está el archivo
+
+Un servicio dice en qué sistema responde. Un archivo, casi nunca: un DXF son
+números pelados, 1.043.210 y 1.187.905, que son un punto de Antioquia en Origen
+Bogotá y también uno del Pacífico en CTM-12.
+
+Se adivina probando cuál de los diez sistemas que el visor conoce deja el archivo
+dentro de Colombia, y **se dice que es una suposición**: la capa se dibuja, el
+panel la marca en ámbar con la palabra «supuesto», cuenta cuántos sistemas más
+encajarían y deja el selector al lado. Dibujarla callando la duda sería lo peor de
+las dos opciones — es la trampa nº 34 de CLAUDE.md, una plancha colocada cinco
+kilómetros más allá sin más aviso que una raya en un panel.
+
+Dos pruebas en rojo enseñaron que **caer dentro de Colombia no basta**: el país
+mide dieciocho grados de ancho y hay lecturas equivocadas que también aterrizan
+dentro. Un shapefile en UTM 18N leído como Origen Bogotá queda 467 km al oeste, en
+Nariño, perfectamente verosímil. Un CAD en coordenadas locales de tres cifras cae
+en el Pacífico frente a Tumaco. Hizo falta una segunda condición —que el punto
+quede dentro de la franja que cubre ese sistema, `coverageHalfSpan` en `crs.js`— y
+un criterio de orden que no fuera el de la lista, porque los cinco orígenes MAGNA
+y los tres husos UTM son ambiguos entre sí por construcción: se ordenan por lo
+cerca que está su meridiano central del de Colombia continental, que deja de
+primero el Origen Bogotá y el huso 18.
+
+Y no se le cree al archivo sin mirar los números. `shpjs` intenta el `.prj` con
+proj4 y, si no lo entiende, **deja las coordenadas como estaban sin avisar**: un
+este de un millón no es una longitud por mucho que el archivo diga que es
+geográfico. Es la trampa nº 2 otra vez — la llamada que en vez de fallar devuelve
+algo verosímil.
+
+La colección original se guarda tal como venía del archivo, y cambiar el sistema
+reproyecta **desde ella**. Reproyectando encima de lo ya reproyectado, elegir
+Bogotá y después CTM-12 dejaría el plano en el mar sin que nada lo explique.
+
+### Dos hallazgos que solo se vieron en pantalla
+
+**La capa de puntos dibujaba los vértices de todo.** Una capa `circle` de MapLibre
+no dibuja «los puntos» de la fuente: dibuja un círculo en cada vértice de cada
+geometría. Sin filtro, el lindero de cinco esquinas salía con cinco pelotas encima
+y el círculo de la bocamina —polígono de 64 lados— era un anillo de 64 bolitas. La
+capa existía, la fuente tenía sus figuras y los colores eran los correctos:
+ninguna prueba sobre los datos podía verlo. Es la trampa nº 10 otra vez —cuando
+algo es visual, hay que mirarlo— y ahora es además la nº 35.
+
+**Una librería moderna puede apoyarse en una API que no está en todas partes.** El
+descompresor de `shpjs` usa `DecompressionStream`, que no existe en los navegadores
+de hace unos años ni en jsdom, y ahí no falla con un mensaje: falla llamando a algo
+que es `undefined`. Los `.zip` se descomprimen con jszip y a la librería se le
+entregan las cuatro partes de cada shapefile — lo que de paso permite que un
+`.zip` con tres shapefiles entre como tres capas con su nombre, y no como tres
+llamadas igual que el zip.
+
+### Comprobado
+
+110 pruebas nuevas en seis suites (922 en total, 68 suites, todas en verde) más
+tres tandas en navegador, una de ellas en teléfono. Las de datos parten de
+material real y no de objetos inventados: el DXF se escribe con sus códigos de
+grupo y lo interpreta `dxf-parser`, y el shapefile se escribe con el mismo
+`@mapbox/shp-write` con que el visor exporta y se vuelve a leer — ida y vuelta.
+Cinco fallos los encontraron las propias pruebas al escribirlas: los dos sistemas
+de coordenadas que se colaban, el anillo de un círculo que no cerraba exactamente
+porque `cos(2π)` no devuelve 1, y dos errores de aritmética míos en las
+expectativas.
+
+En navegador se comprobó, con el visor en marcha: que las dos capas se dibujan y
+con su color (leyendo el píxel del lienzo, no mirándolo por encima); que el mapa se
+encuadra donde cayó el archivo; que la ficha se abre al pulsar una figura y también
+**al tocarla con el dedo** en un teléfono; que cambiar el sistema mueve la capa y
+que «Encuadrar» la sigue; y que quitarla no deja ni capa ni fuente huérfana en el
+estilo. Ahí salió el hallazgo de los vértices.

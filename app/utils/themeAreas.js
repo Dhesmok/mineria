@@ -1,6 +1,7 @@
 import { ANM_LAYERS, anmFillLayerId, anmLineLayerId } from "./anmLayers"
 import { SGC_LAYERS, sgcLayerId } from "./sgcLayers"
 import { ANH_LAYERS, anhLayerId } from "./anhLayers"
+import { isUserLayerKey, USER_AREA_ID, userStyleLayerIds } from "./userLayers"
 
 /**
  * Las capas del visor, agrupadas por área temática.
@@ -84,6 +85,26 @@ export const AREAS = [
     source: "IGAC",
     color: "#22577A",
     icon: ["M3.4 3.4h17.2v17.2H3.4Z", "M3.4 10.2h17.2", "M10.2 20.6V10.2"],
+  },
+  {
+    /**
+     * El área de los archivos que carga el usuario.
+     *
+     * Va la última y es la única que no tiene entidad detrás: sus capas no salen
+     * de ningún servicio ni están en `THEME_LAYERS`, aparecen cuando alguien abre
+     * un shapefile, un KML o un DXF y se van al cerrar la pestaña. Por eso
+     * `importable`, que es lo que hace que su encabezado lleve el botón de cargar
+     * en lugar del filtro y la lupa: no hay nada que filtrar en una capa cuyos
+     * campos los puso quien hizo el archivo, y no hay a quién preguntarle un
+     * expediente.
+     */
+    id: USER_AREA_ID,
+    searchable: false,
+    importable: true,
+    name: "Mis capas",
+    source: "Archivos",
+    color: "#a8632e",
+    icon: ["M4 5.6h5.2l1.6 2.2H20v10.6H4Z", "M12 11.4v5", "M9.6 13.4 12 11 14.4 13.4"],
   },
 ]
 
@@ -232,6 +253,12 @@ export const initialLayerState = () =>
  * qué va encima de qué, y tarde o temprano discrepan.
  */
 export const styleLayerIdsFor = (key) => {
+  // Las capas del usuario no están en ninguna lista: se reconocen por el prefijo
+  // de su clave. Tiene que ser así porque este módulo es puro y la lista de las
+  // que hay cargadas vive en el estado de React, que aquí no se puede mirar. Ver
+  // la cabecera de `userLayers.js`.
+  if (isUserLayerKey(key)) return userStyleLayerIds(key)
+
   const capa = BY_KEY.get(key)
   if (!capa || capa.pending) return []
   if (capa.raster) {

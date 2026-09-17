@@ -40,6 +40,13 @@ proyecto es "dibuja un cuadro y sal con los archivos", no ser otro visor.
 - `pdfjs-dist` para abrir las planchas del SGC, que se publican en PDF. Se carga
   con `import()` solo cuando alguien pide una: pesa más de un mega y el paquete
   inicial del visor no lo lleva
+- `shpjs`, `@tmcw/togeojson` y `dxf-parser` para **leer** los archivos que carga
+  el usuario: shapefile, KML/KMZ/GPX y DXF. Los tres se cargan con `import()`
+  igual que pdf.js, y por lo mismo: entre ellos pesan unos 200 kB y la mayoría de
+  las visitas no abre ningún archivo. El paquete inicial creció 8 kB —la interfaz
+  y los módulos propios—, no 200. Lo que **no** se delegó es la reproyección
+  (proj4 ya estaba), el descomprimido (jszip ya estaba) ni la conversión del CAD a
+  geometría, que es nuestra: ver `utils/dxfGeojson.js`
 - Jest + Testing Library
 
 Esta lista incluía cinco paquetes que el código no importaba en ninguna parte
@@ -49,6 +56,12 @@ Los ocho se quitaron: arrastraban 136 paquetes y once de las veintitrés alertas
 de seguridad que tenía el proyecto. **Si añades algo aquí, que sea porque un
 `import` lo usa**; una lista de dependencias que no coincide con el código
 manda a quien la lee —persona o modelo— a buscar en el sitio equivocado.
+
+`shpjs` volvió, y volvió cumpliendo esa regla: ahora hay un `import()` que lo usa
+—leer los shapefiles que carga el usuario— y por eso está. Que un paquete
+estuviera de más una vez no lo inhabilita para siempre; lo que lo inhabilitaba era
+estar sin usarse. Los tres nuevos suman nueve paquetes y **cero** alertas de
+seguridad, que es lo que hay que comprobar antes de añadir cualquiera.
 
 **Leaflet ya no está.** La migración terminó (ver `docs/PLAN-MAPLIBRE.md`). Si
 encuentras un comentario que menciona Leaflet es historia, no una dependencia:
@@ -73,6 +86,8 @@ app/
     useAnhLayersGL.js     Lo mismo para las capas de hidrocarburos de la ANH
     usePlanchaGL.js       Traer la plancha en PDF y colocarla sobre el mapa
     useDualMapSyncGL.js   El segundo mapa: el lienzo de arriba que se funde con el relieve
+    useUserLayersGL.js    Las capas que carga el usuario, puestas en el mapa
+  hooks/useUserLayers.js  Leer sus archivos y decidir en qué sistema están
   utils/
     arcgis.js             fetch normalizado contra ArcGIS REST
     tenureLayers.js       Descubrimiento de índices de capa ANM
@@ -91,12 +106,16 @@ app/
     planchaGeo.js         Georreferenciar una plancha por la cuadrícula que trae dibujada
     planchaPdf.js         Abrir el PDF con pdf.js, medirlo y recortarle el mapa
     planchaUrl.js         Cuál de los enlaces de la ficha es la plancha, y cuál se deja pasar
+    fileImport.js         Leer shapefile, KML/KMZ, DXF, GeoJSON y GPX en el navegador
+    dxfGeojson.js         De las entidades de un CAD a geometría de GeoJSON
+    userLayers.js         Las capas del usuario: sus claves, su color y en qué sistema están
     panelSize.js          Topes del panel de capas, que se puede redimensionar
     whenSized.js          Esperar a que un elemento mida algo antes de montarle un mapa
     mapUtils.js, mapLabelsGL.js, drawStyles.js
   components/SgcPanel.jsx   Ficha del punto tocado y leyenda del SGC y de la ANH
   components/PlanchaPanel.jsx  La plancha colocada: opacidad, encuadre y con qué error se ajustó
   components/AttributeTable.jsx  La tabla de atributos, paginada
+  components/UserLayerImport.jsx Cargar archivos propios y la ficha de cada uno cargado
   api/sgc/route.js        Intermediario del SGC: imagen, árbol de capas, campos, identify y leyenda
   api/anh/route.js        Lo mismo para la ANH
   api/plancha/route.js    Intermediario para el PDF de una plancha, con lista de dominios permitidos
@@ -190,6 +209,37 @@ imagen que le piden sin saber nada de las de al lado, así que rotula cada una p
 separado: la grilla de planchas escribía el número de cada cuadrícula cuatro
 veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
 `utils/sgcLayers.js`.
+
+## Y el usuario también pone capas
+
+Además de lo que publican las entidades, el visor abre **los archivos de quien lo
+usa**: el shapefile del plano de topografía, el KML que mandó el geólogo de campo,
+el DXF del lindero, un GeoJSON o el GPX del GPS. Entran por el área «Mis capas»
+del panel —eligiendo el archivo o arrastrándolo encima— y desde ahí se comportan
+como cualquier otra capa: interruptor, color, opacidad, orden de pintado y ficha
+al pulsar una figura.
+
+Tres cosas que conviene saber antes de tocarlo:
+
+- **Son las únicas capas del estilo que se crean al vuelo.** Todo lo demás está
+  declarado desde el arranque (ver la cabecera de `mapStyles.js`), y por buenas
+  razones; aquí no se puede, porque no se sabe cuántos archivos va a abrir nadie.
+  Lo que sí se conservó es que el orden de pintado se decida en un solo sitio:
+  `styleLayerIdsFor` responde también por ellas, reconociéndolas por el prefijo
+  `usuario:` de su clave.
+- **La pregunta difícil no es leer el archivo, es saber en qué sistema está.** Un
+  KML es geográfico por definición y un shapefile puede traer `.prj`, pero un DXF
+  no dice nada y a un `.prj` que proj4 no entienda tampoco se le puede creer. Ver
+  las trampas 36 y 37, y `resolverCrs` en `hooks/useUserLayers.js`.
+- **El `.dwg` no se puede abrir**, y no por falta de ganas: es el formato propio de
+  AutoCAD, cerrado y sin lector libre que funcione en un navegador. Se detecta
+  para poder decirlo con una frase útil —«guárdalo como DXF»— en vez de dejarlo
+  como «extensión no reconocida».
+
+Lo que todavía **no** hacen: no salen en la tabla de atributos ni en el ZIP de la
+descarga por área. Lo segundo es a propósito —ese ZIP es dato oficial del Estado y
+mezclarle un plano propio confunde la procedencia—; lo primero es trabajo
+pendiente.
 
 ## Trampas conocidas (no las vuelvas a pisar)
 
@@ -571,6 +621,65 @@ veces, una por tesela. Con teselas eso no tiene arreglo. Ver `sgcImageUrl` en
     Con pypdfium el mismo archivo daba 45 × 40 y marco completo, porque suaviza
     distinto; el fallo solo aparece con pdf.js en un navegador. Para diagnosticar
     una hoja hay que correr `prepararPlancha` en Chromium, no en Node.
+
+35. **Una capa `circle` de MapLibre no dibuja los puntos: dibuja un círculo en
+    cada vértice de cada geometría.** Las capas que carga el usuario son tres por
+    archivo —relleno, contorno y puntos— porque un archivo trae lo que le dé la
+    gana, y la de puntos salió sin filtro. El resultado: un lindero de cinco
+    esquinas con cinco pelotas encima, y el círculo de una bocamina —que al venir
+    de un CAD es un polígono de 64 lados— convertido en un anillo de 64 bolitas.
+    En un plano de topografía, que es todo vértices, el mapa quedaba cubierto de
+    puntos. Se arregla con `filter: ["==", ["geometry-type"], "Point"]`.
+
+    Es la trampa nº 10 por enésima vez: la capa existía, la fuente tenía sus
+    figuras, los colores eran los correctos y **ninguna prueba sobre los datos
+    podía verlo**. Se vio en una captura. Ojo con el otro extremo: la capa `line`
+    va **sin** filtro a propósito, porque tiene que dibujar las líneas del archivo
+    *y* el contorno de sus polígonos.
+
+36. **Caer dentro de Colombia no basta para reconocer el sistema de coordenadas de
+    un archivo.** Un DXF son números pelados —1.043.210, 1.187.905— y un shapefile
+    sin `.prj` también: hay que deducir el sistema probando cuál de los diez que el
+    visor conoce deja el archivo dentro del país (ver `candidateSourceCrs` en
+    `utils/userLayers.js`). Pero el país mide dieciocho grados de ancho, así que
+    hay lecturas equivocadas que **también** aterrizan dentro: un shapefile en UTM
+    18N leído como Origen Bogotá queda 467 km al oeste, en Nariño, perfectamente
+    verosímil; y un CAD en coordenadas locales de tres cifras cae en el Pacífico
+    frente a Tumaco. Las dos pasaban por buenas.
+
+    La condición que falta es que el punto quede dentro de la franja que ese
+    sistema cubre —`coverageHalfSpan` en `crs.js`: tres grados a cada lado de su
+    meridiano central en un huso, once en el CTM-12, que es nacional—. Y cuando
+    varios sistemas siguen encajando, **el orden no puede ser el de la lista**: los
+    cinco orígenes MAGNA y los tres husos UTM son ambiguos entre sí por
+    construcción, así que se ordenan por lo cerca que está su meridiano central
+    del de Colombia continental. Eso deja de primero el Origen Bogotá y el huso 18,
+    que son los que de verdad cubren el país.
+
+    Y lo que nunca se hace es **callar la duda**: la capa se dibuja con el sistema
+    supuesto, el panel lo marca en ámbar con la palabra «supuesto», dice cuántos
+    sistemas más encajarían y deja el selector al lado. Un plano colocado en el
+    sitio equivocado es peor que un plano sin colocar — es la trampa nº 34 otra vez.
+
+37. **Los archivos del usuario se leen en el navegador, y no es una limitación
+    técnica.** El plano de un lindero en trámite o el levantamiento de una labor
+    son datos de alguien: convertirlos en nuestro servidor sería pedir una
+    confianza que no hace falta pedir. Nada de lo que se carga sale de la máquina
+    de quien lo abre, y nada se guarda entre visitas —`sanitizePreferences` ya
+    descarta lo que no reconoce, así que estas capas se ignoran solas al guardar—.
+    De paso se esquiva el tope de duración de una función de Vercel, que es lo que
+    ya rompió la descarga de las planchas.
+
+    Con dos consecuencias de las que hay que acordarse. Una: el tope de tamaño
+    (`MAX_FILE_BYTES`) no es del formato sino del teléfono, donde un shapefile de
+    200 MB es la pestaña muerta sin ningún mensaje. Y dos: **una librería moderna
+    puede apoyarse en una API del navegador que no está en todas partes.** El
+    descompresor de `shpjs` usa `DecompressionStream`, que no existe en los
+    navegadores de hace unos años ni en jsdom, y ahí no falla con un mensaje: falla
+    llamando a algo que es `undefined`. Los `.zip` se descomprimen con `jszip`, que
+    ya estaba en el proyecto, y a la librería se le entregan las cuatro partes de
+    cada shapefile — que de paso es lo que permite que un `.zip` con tres
+    shapefiles entre como tres capas con su nombre.
 
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
   actual documenta el bug que motivó cada decisión — mantenlo, es lo que hace
