@@ -47,6 +47,31 @@ const utmZonePrj = (zone, centralMeridian) =>
   `PARAMETER["Latitude_Of_Origin",0.0],UNIT["Meter",1.0]]`
 
 /**
+ * Cuánto se puede apartar del meridiano central un dato legítimo de un sistema
+ * plano, en grados.
+ *
+ * No es una propiedad matemática del sistema —una proyección se puede evaluar en
+ * cualquier punto— sino de su uso: un huso de MAGNA-SIRGAS o de UTM cubre una
+ * franja de tres grados a cada lado, y más allá está el huso siguiente.
+ *
+ * **Existe para reconocer el sistema de un archivo que no lo declara** (ver
+ * `candidateSourceCrs` en `userLayers.js`). Sin este dato, un shapefile en UTM
+ * 18N también pasa por Origen Bogotá: leído así queda 467 km al oeste, que sigue
+ * cayendo dentro de Colombia porque el país es ancho. Con él, esos 4,2 grados de
+ * desvío lo descartan. Lo mismo un CAD en coordenadas locales de tres cifras, que
+ * leído como un origen MAGNA aterriza en el Pacífico y antes pasaba por bueno.
+ */
+const HUSO = 3
+
+/**
+ * El CTM-12 es la excepción: no es un huso sino **una sola proyección para todo
+ * el país**, y por eso su factor de escala es 0,9992 en vez de 1. Once grados
+ * desde su meridiano central (-73°) llegan a San Andrés por el occidente y a la
+ * frontera con Venezuela por el oriente.
+ */
+const NACIONAL = 11
+
+/**
  * El sistema en el que llegan los datos y en el que se guarda todo internamente.
  * Los servicios de la ANM entregan geográficas y el mapa trabaja en ellas; los
  * demás sistemas son solo formas de *mostrar* o *exportar* el mismo punto.
@@ -72,6 +97,7 @@ export const CRS_LIST = [
     proj:
       "+proj=tmerc +lat_0=4.0 +lon_0=-73.0 +k=0.9992 +x_0=5000000 +y_0=2000000 " +
       `${GRS80} +units=m +no_defs`,
+    coverageHalfSpan: NACIONAL,
     prj:
       'PROJCS["MAGNA-SIRGAS_2018_Origen-Nacional",GEOGCS["MAGNA-SIRGAS_2018",' +
       'DATUM["Marco_Geocentrico_Nacional_de_Referencia_2018",' +
@@ -87,6 +113,7 @@ export const CRS_LIST = [
     hint: "El origen más usado antes del CTM-12. Muchos títulos viejos están aquí.",
     projected: true,
     proj: magnaZone(-74.07750791666666),
+    coverageHalfSpan: HUSO,
     prj: magnaZonePrj("MAGNA_Colombia_Bogota", -74.07750791666666),
   },
   {
@@ -95,6 +122,7 @@ export const CRS_LIST = [
     hint: "Huso occidental de MAGNA-SIRGAS. Meridiano central -77°.",
     projected: true,
     proj: magnaZone(-77.07750791666666),
+    coverageHalfSpan: HUSO,
     prj: magnaZonePrj("MAGNA_Colombia_West", -77.07750791666666),
   },
   {
@@ -103,6 +131,7 @@ export const CRS_LIST = [
     hint: "Huso más occidental, para San Andrés y Providencia.",
     projected: true,
     proj: magnaZone(-80.07750791666666),
+    coverageHalfSpan: HUSO,
     prj: magnaZonePrj("MAGNA_Colombia_West_West", -80.07750791666666),
   },
   {
@@ -111,6 +140,7 @@ export const CRS_LIST = [
     hint: "Huso oriental central. Meridiano central -71°.",
     projected: true,
     proj: magnaZone(-71.07750791666666),
+    coverageHalfSpan: HUSO,
     prj: magnaZonePrj("MAGNA_Colombia_East_Central", -71.07750791666666),
   },
   {
@@ -119,6 +149,7 @@ export const CRS_LIST = [
     hint: "Huso más oriental, para la Orinoquía y la Amazonía.",
     projected: true,
     proj: magnaZone(-68.07750791666666),
+    coverageHalfSpan: HUSO,
     prj: magnaZonePrj("MAGNA_Colombia_East", -68.07750791666666),
   },
   {
@@ -127,6 +158,7 @@ export const CRS_LIST = [
     hint: "Huso 17: el occidente del país, al oeste de 78°W.",
     projected: true,
     proj: utmZone(17),
+    coverageHalfSpan: HUSO,
     prj: utmZonePrj(17, -81),
   },
   {
@@ -135,6 +167,7 @@ export const CRS_LIST = [
     hint: "Huso 18: la mayor parte del país, entre 78°W y 72°W.",
     projected: true,
     proj: utmZone(18),
+    coverageHalfSpan: HUSO,
     prj: utmZonePrj(18, -75),
   },
   {
@@ -143,6 +176,7 @@ export const CRS_LIST = [
     hint: "Huso 19: el oriente del país, al este de 72°W.",
     projected: true,
     proj: utmZone(19),
+    coverageHalfSpan: HUSO,
     prj: utmZonePrj(19, -69),
   },
 ]
@@ -174,6 +208,34 @@ export const toGeographic = (coordinate, sourceId) => {
   const source = crsById(sourceId)
   if (source.id === SOURCE_CRS) return coordinate
   return proj4(source.proj, crsById(SOURCE_CRS).proj, coordinate)
+}
+
+/**
+ * El meridiano central de un sistema plano, en grados.
+ *
+ * **Se saca de la propia cadena de proj4 y no de un campo aparte**, que sería lo
+ * cómodo: el meridiano estaría entonces escrito dos veces en cada entrada, y el
+ * día que alguien corrigiera uno de los dos tendríamos un sistema que dice una
+ * cosa y proyecta otra. Es la misma razón por la que este módulo existe (ver la
+ * cabecera): dos copias de un dato acaban discrepando.
+ *
+ * Dos formas de escribirlo, porque proj4 tiene dos: los orígenes MAGNA y el
+ * CTM-12 lo dicen con `+lon_0`, y los UTM por número de huso, que es lo que
+ * significa `+zone`. El huso 18 va de 78° O a 72° O y su meridiano es el de
+ * enmedio: 6 × 18 − 183 = −75.
+ *
+ * @returns {number|null} nada si el sistema es geográfico o no lo declara
+ */
+export const centralMeridianOf = (id) => {
+  const { proj } = crsById(id)
+
+  const lon0 = /\+lon_0=(-?[\d.]+)/.exec(proj)
+  if (lon0) return Number(lon0[1])
+
+  const zona = /\+zone=(\d+)/.exec(proj)
+  if (zona) return 6 * Number(zona[1]) - 183
+
+  return null
 }
 
 /**

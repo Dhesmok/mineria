@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { Fragment, useCallback, useRef, useState } from "react"
 import { Check, ChevronDown, ChevronRight, Filter, GripVertical, Search } from "lucide-react"
 
 import { AREAS, THEME_LAYERS, layerByKey } from "../utils/themeAreas"
@@ -8,6 +8,7 @@ import { darken } from "../utils/colors"
 import { indexForPointer, moveWithinSubset } from "../utils/reorder"
 import { ColorPopover } from "./ColorPopover"
 import { OpacitySlider } from "./OpacitySlider"
+import { UserLayerDetails, UserLayerImport } from "./UserLayerImport"
 
 /**
  * Panel de capas agrupadas por área temática.
@@ -383,6 +384,17 @@ export const LayerPanel = ({
   subLayers = {},
   chosenSub = {},
   onToggleSubLayer,
+  // Las capas que cargó el usuario. No están en `THEME_LAYERS` —no existen hasta
+  // que alguien abre un archivo— así que llegan aparte y el panel las mezcla con
+  // las demás donde toca: en su área, y en la lista de activas.
+  userLayers = [],
+  userLayersLoading = false,
+  userLayerProblems = [],
+  onImportFiles,
+  onDismissImportProblems,
+  onRemoveUserLayer,
+  onFocusUserLayer,
+  onChooseUserLayerCrs,
 }) => {
   const [onlyActive, setOnlyActive] = useState(false)
   // Qué áreas están desplegadas. Permite múltiples a la vez o todas con Ctrl+clic.
@@ -412,7 +424,18 @@ export const LayerPanel = ({
   const [drag, setDrag] = useState(null)
   const rowRefs = useRef(new Map())
 
-  const activeKeys = order.filter((key) => layers[key]?.on)
+  /**
+   * La ficha de una capa por su clave, sea del visor o del usuario.
+   *
+   * `layerByKey` solo conoce las del visor —es un módulo puro y las cargadas
+   * viven en el estado de React— y devolver `undefined` en la lista de activas
+   * reventaba el panel entero con el primer archivo encendido. Aquí se buscan
+   * primero las del usuario, que son las pocas, y se cae a las del visor.
+   */
+  const userByKey = new Map(userLayers.map((capa) => [capa.key, capa]))
+  const capaPorClave = (key) => userByKey.get(key) ?? layerByKey(key)
+
+  const activeKeys = order.filter((key) => layers[key]?.on && capaPorClave(key))
   const activeCount = activeKeys.length
 
   // Se guarda el botón, no solo su recuadro: `useDismiss` lo necesita para no
@@ -458,7 +481,15 @@ export const LayerPanel = ({
   /** Los mismos manejadores para las dos vistas, para no repetirlos abajo. */
   const filaProps = (layer, index, draggable) => ({
     layer,
-    state: layers[layer.key],
+    // El respaldo no es paranoia: una capa cargada existe en esta lista un
+    // instante antes de que el panel le haya dado su estado, y sin él la fila
+    // reventaría al leer `state.on` de un `undefined`.
+    state: layers[layer.key] ?? {
+      on: false,
+      opacity: 0.6,
+      fillColor: layer.fillColor,
+      lineColor: layer.lineColor,
+    },
     subLayers: subLayers[layer.key],
     chosenSub: chosenSub[layer.key],
     onToggleSubLayer,
@@ -525,7 +556,15 @@ export const LayerPanel = ({
                   {drag && drag.to === index && drag.from !== index && (
                     <span className="pointer-events-none absolute inset-x-3 -top-px z-10 h-0.5 rounded bg-zinc-400" />
                   )}
-                  <LayerRow {...filaProps(layerByKey(key), index, true)} />
+                  <LayerRow {...filaProps(capaPorClave(key), index, true)} />
+                  {userByKey.has(key) && (
+                    <UserLayerDetails
+                      layer={userByKey.get(key)}
+                      onRemove={onRemoveUserLayer}
+                      onFocus={onFocusUserLayer}
+                      onChooseCrs={onChooseUserLayerCrs}
+                    />
+                  )}
                 </div>
               ))}
             </>
@@ -533,7 +572,11 @@ export const LayerPanel = ({
         ) : (
           // ───────────── Todas: áreas desplegables independientes ─────────────
           AREAS.map((area) => {
-            const delArea = THEME_LAYERS.filter((layer) => layer.areaId === area.id)
+            // El área de los archivos propios no tiene capas en `THEME_LAYERS`:
+            // las suyas son las que se hayan cargado en esta sesión.
+            const delArea = area.importable
+              ? userLayers
+              : THEME_LAYERS.filter((layer) => layer.areaId === area.id)
             const encendidas = delArea.filter((layer) => layers[layer.key]?.on).length
             const abierta = openAreas.has(area.id)
             const filtrada = areaHasFilter(area.id)
@@ -569,15 +612,20 @@ export const LayerPanel = ({
                     {encendidas}/{delArea.length}
                   </span>
 
-                  <HeaderButton
-                    icon={Filter}
-                    label={`Filtrar ${area.name}`}
-                    color={area.color}
-                    active={filtrada}
-                    disabled={false}
-                    onClick={(el) => onOpenFilters(area.id, el)}
-                  />
-                  {onOpenSearch && (
+                  {/* El área de archivos propios no lleva filtro ni lupa: no hay
+                      campos conocidos que filtrar ni servicio al que preguntar.
+                      Lo que lleva es la zona de carga, que va desplegada dentro. */}
+                  {!area.importable && (
+                    <HeaderButton
+                      icon={Filter}
+                      label={`Filtrar ${area.name}`}
+                      color={area.color}
+                      active={filtrada}
+                      disabled={false}
+                      onClick={(el) => onOpenFilters(area.id, el)}
+                    />
+                  )}
+                  {!area.importable && onOpenSearch && (
                     <HeaderButton
                       icon={Search}
                       label={
@@ -593,10 +641,32 @@ export const LayerPanel = ({
                   )}
                 </div>
 
+                {abierta && area.importable && (
+                  <UserLayerImport
+                    loading={userLayersLoading}
+                    problems={userLayerProblems}
+                    onFiles={onImportFiles}
+                    onDismissProblems={onDismissImportProblems}
+                    hasLayers={userLayers.length > 0}
+                  />
+                )}
+
                 {abierta &&
-                  delArea.map((layer) => (
-                    <LayerRow key={layer.key} {...filaProps(layer, -1, false)} />
-                  ))}
+                  delArea.map((layer) =>
+                    area.importable ? (
+                      <Fragment key={layer.key}>
+                        <LayerRow {...filaProps(layer, -1, false)} />
+                        <UserLayerDetails
+                          layer={layer}
+                          onRemove={onRemoveUserLayer}
+                          onFocus={onFocusUserLayer}
+                          onChooseCrs={onChooseUserLayerCrs}
+                        />
+                      </Fragment>
+                    ) : (
+                      <LayerRow key={layer.key} {...filaProps(layer, -1, false)} />
+                    ),
+                  )}
               </div>
             )
           })

@@ -37,6 +37,7 @@ import { MobileBottomBar } from "./components/MobileBottomBar"
 import { MobileBottomSheet } from "./components/MobileBottomSheet"
 import { MobileStorageManager } from "./components/MobileStorageManager"
 import { matchesFilters } from "./utils/layerFilters"
+import { useUserLayers } from "./hooks/useUserLayers"
 import { readPreferences, writePreferences } from "./utils/preferences"
 import { debounce } from "@/lib/utils"
 import {
@@ -241,6 +242,79 @@ export default function Component() {
   const cambiarColor = useCallback(
     (key, fillColor, lineColor) => actualizarCapa(key, { fillColor, lineColor }),
     [actualizarCapa],
+  )
+
+  // ─────────────────── Las capas que carga el usuario ───────────────────
+  //
+  // El archivo lo lee `useUserLayers` (ver ese hook) y lo dibuja
+  // `useUserLayersGL` dentro del mapa. Lo que se hace aquí es lo que solo puede
+  // hacer el panel: darle a la capa nueva su estado —encendida, al 60 %, con su
+  // color— y ponerla **de primera** en el orden de pintado.
+  //
+  // De primera y no de última: quien acaba de abrir un plano quiere verlo, y si
+  // entrara debajo de los títulos mineros quedaría tapado justo por lo que
+  // venía a comparar. Encenderla sola es lo mismo: nadie carga un archivo para
+  // dejarlo apagado.
+  const registrarCapaCargada = useCallback((capa) => {
+    setLayers((current) => ({
+      ...current,
+      [capa.key]: { on: true, opacity: 0.6, fillColor: capa.fillColor, lineColor: capa.lineColor },
+    }))
+    setLayerOrder((current) => [capa.key, ...current.filter((key) => key !== capa.key)])
+  }, [])
+
+  const olvidarCapaCargada = useCallback((key) => {
+    setLayers((current) => {
+      const resto = { ...current }
+      delete resto[key]
+      return resto
+    })
+    setLayerOrder((current) => current.filter((clave) => clave !== key))
+  }, [])
+
+  const {
+    userLayers,
+    loading: userLayersLoading,
+    problems: userLayerProblems,
+    importFiles,
+    removeLayer: removeUserLayer,
+    setLayerCrs: setUserLayerCrs,
+    clearProblems: clearUserLayerProblems,
+  } = useUserLayers({ onLayerAdded: registrarCapaCargada, onLayerRemoved: olvidarCapaCargada })
+
+  /**
+   * Llevar el mapa hasta una capa cargada.
+   *
+   * Se hace al cargarla y también desde su botón, porque un archivo puede estar
+   * en cualquier parte del país y el visor abre en el centro a zoom 5: una capa
+   * bien cargada puede quedar a dos pantallas, y desde aquí lo que se ve es que
+   * no apareció nada.
+   *
+   * El `maxZoom` está por los archivos de un solo punto —un mojón, una muestra—,
+   * cuyo recuadro no tiene tamaño: sin tope, `fitBounds` se iría al zoom máximo y
+   * dejaría la pantalla en cuatro píxeles de mapa base.
+   */
+  const encuadrarCapaCargada = useCallback((capa) => {
+    const map = mapRef.current
+    if (!map || !capa?.bbox) return
+    const [oeste, sur, este, norte] = capa.bbox
+    map.fitBounds(
+      [
+        [oeste, sur],
+        [este, norte],
+      ],
+      { padding: 80, duration: 1000, maxZoom: 16 },
+    )
+  }, [])
+
+  const cargarArchivos = useCallback(
+    async (files) => {
+      const nuevas = await importFiles(files)
+      // Se encuadra la primera, no todas: con dos archivos de sitios distintos,
+      // encuadrar las dos seguidas deja un viaje de cámara que no se entiende.
+      if (nuevas.length > 0) encuadrarCapaCargada(nuevas[0])
+    },
+    [importFiles, encuadrarCapaCargada],
   )
 
   /** Lanza la búsqueda del expediente que entregue cualquier buscador. */
@@ -537,6 +611,14 @@ export default function Component() {
                   onOpenFilters={(areaId, el) =>
                     setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
                   }
+                  userLayers={userLayers}
+                  userLayersLoading={userLayersLoading}
+                  userLayerProblems={userLayerProblems}
+                  onImportFiles={cargarArchivos}
+                  onDismissImportProblems={clearUserLayerProblems}
+                  onRemoveUserLayer={removeUserLayer}
+                  onFocusUserLayer={encuadrarCapaCargada}
+                  onChooseUserLayerCrs={setUserLayerCrs}
                 />
               </>
             ) : (
@@ -619,6 +701,7 @@ export default function Component() {
           onMapInitialized={handleMapInitialized}
           layerState={layers}
           layerOrder={layerOrder}
+          userLayers={userLayers}
           coordinateSystem={selectedCoordinateSystem}
           filters={filters}
           onLayerData={setLayerData}
@@ -905,6 +988,14 @@ export default function Component() {
             onOpenFilters={(areaId, el) =>
               setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
             }
+            userLayers={userLayers}
+            userLayersLoading={userLayersLoading}
+            userLayerProblems={userLayerProblems}
+            onImportFiles={cargarArchivos}
+            onDismissImportProblems={clearUserLayerProblems}
+            onRemoveUserLayer={removeUserLayer}
+            onFocusUserLayer={encuadrarCapaCargada}
+            onChooseUserLayerCrs={setUserLayerCrs}
           />
         )}
 

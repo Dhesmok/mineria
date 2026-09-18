@@ -1,4 +1,12 @@
-import { CRS_LIST, axisLabels, crsById, formatCoordinate, fromGeographic, toGeographic } from "./crs"
+import {
+  CRS_LIST,
+  axisLabels,
+  centralMeridianOf,
+  crsById,
+  formatCoordinate,
+  fromGeographic,
+  toGeographic,
+} from "./crs"
 
 // Punto de referencia en Medellín.
 const MEDELLIN = [-75.5906, 6.2308]
@@ -49,6 +57,39 @@ describe("crs", () => {
   it("nombra los ejes según el sistema sea plano o geográfico", () => {
     expect(axisLabels("4686")).toEqual({ first: "Latitud", second: "Longitud" })
     expect(axisLabels("9377")).toEqual({ first: "Norte", second: "Este" })
+  })
+
+  it("lee el meridiano central de las dos formas en que proj4 lo escribe", () => {
+    // Con `+lon_0` los orígenes MAGNA y el CTM-12; por número de huso los UTM.
+    expect(centralMeridianOf("9377")).toBe(-73)
+    expect(centralMeridianOf("3116")).toBeCloseTo(-74.0775, 4)
+    expect(centralMeridianOf("32618")).toBe(-75)
+    expect(centralMeridianOf("4686")).toBeNull()
+  })
+
+  /**
+   * La prueba que protege al regex: el meridiano que se lee de la cadena tiene
+   * que ser el que proj4 aplica de verdad. Si alguien añade un sistema escrito de
+   * otra manera, esto falla en vez de dejar a `candidateSourceCrs` adivinando con
+   * un número inventado.
+   *
+   * **Ir y volver no prueba nada** —vuelve al mismo punto se acierte o no el
+   * meridiano— y esa fue la primera versión de esta prueba. Lo que sí lo prueba es
+   * la simetría: en una transversa de Mercator, dos puntos a un grado a cada lado
+   * del meridiano central caen a la misma distancia de él y en lados contrarios,
+   * así que sus estes suman exactamente el doble del este del meridiano. Eso solo
+   * se cumple si el meridiano es el correcto.
+   */
+  it("el meridiano declarado es el que proj4 aplica", () => {
+    CRS_LIST.filter((crs) => crs.projected).forEach((crs) => {
+      const meridiano = centralMeridianOf(crs.id)
+      expect(meridiano).not.toBeNull()
+
+      const este = (lon) => fromGeographic([lon, 5], crs.id)[0]
+      expect(este(meridiano - 1) + este(meridiano + 1)).toBeCloseTo(2 * este(meridiano), 3)
+      // Y su franja de cobertura, que es lo que distingue un huso del de al lado.
+      expect(crs.coverageHalfSpan).toBeGreaterThan(0)
+    })
   })
 
   it("enseña grados con coma decimal y metros redondeados", () => {
