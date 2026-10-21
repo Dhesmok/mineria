@@ -1,4 +1,17 @@
-import { ArcgisError, fetchArcgisJson } from "./arcgis"
+import { ArcgisError, fetchArcgisJson, toAnmFetchUrl } from "./arcgis"
+
+describe("toAnmFetchUrl", () => {
+  it("envuelve las URLs de annamineria.anm.gov.co y geo.anm.gov.co por /api/anm en navegador", () => {
+    const u1 = "https://annamineria.anm.gov.co/annageo/rest/services/SIGM/TenureLayers/MapServer/3?f=json"
+    const u2 = "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3?f=json"
+    expect(toAnmFetchUrl(u1, true)).toBe(`/api/anm?url=${encodeURIComponent(u1)}`)
+    expect(toAnmFetchUrl(u2, true)).toBe(`/api/anm?url=${encodeURIComponent(u2)}`)
+  })
+
+  it("deja intactas las URLs que no son de la ANM", () => {
+    expect(toAnmFetchUrl("https://ejemplo/query", true)).toBe("https://ejemplo/query")
+  })
+})
 
 describe("fetchArcgisJson", () => {
   afterEach(() => {
