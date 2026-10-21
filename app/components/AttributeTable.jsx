@@ -111,7 +111,7 @@ export const AttributeTable = ({ features, onPick, onClose }) => {
     setSort((current) => ({ column: key, asc: current.column === key ? !current.asc : true }))
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/70 backdrop-blur-md">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-md">
       <div className="flex h-[75dvh] sm:h-[70vh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl">
         <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3">
           <h2 className="text-[15px] font-semibold text-white">Resultados</h2>

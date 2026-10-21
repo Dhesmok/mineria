@@ -23,25 +23,25 @@ import { ACCURACY_WARNING } from "../utils/terrainAnalysis"
  */
 
 const Fila = ({ label, value, hint }) => (
-  <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-1.5 last:border-b-0">
-    <span className="text-[11px] text-slate-500">{label}</span>
+  <div className="flex items-baseline justify-between gap-3 border-b border-zinc-800/80 py-1.5 last:border-b-0">
+    <span className="text-[11px] text-zinc-400">{label}</span>
     <span className="text-right">
-      <span className="block text-[13px] font-medium tabular-nums text-slate-900">{value}</span>
-      {hint && <span className="block text-[10px] leading-tight text-slate-400">{hint}</span>}
+      <span className="block text-[13px] font-medium tabular-nums text-zinc-100">{value}</span>
+      {hint && <span className="block text-[10px] leading-tight text-zinc-500">{hint}</span>}
     </span>
   </div>
 )
 
 export const TerrainQuery = ({ result, onClose }) => (
-  <div className="w-[min(15rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-    <div className="flex items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-2.5 py-1.5">
-      <MountainSnow className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-      <span className="flex-1 text-[11px] font-medium text-slate-600">Terreno en el punto</span>
+  <div className="w-[min(15rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-zinc-800/90 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl">
+    <div className="flex items-center gap-1.5 border-b border-zinc-800/80 bg-zinc-950/80 px-2.5 py-1.5">
+      <MountainSnow className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+      <span className="flex-1 text-[11px] font-medium text-zinc-300">Terreno en el punto</span>
       <button
         type="button"
         onClick={onClose}
         aria-label="Cerrar la consulta de terreno"
-        className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+        className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
       >
         <X className="h-3.5 w-3.5" />
       </button>
@@ -49,11 +49,11 @@ export const TerrainQuery = ({ result, onClose }) => (
 
     <div className="px-2.5 py-1">
       {result === null ? (
-        <p className="py-2 text-[11px] leading-tight text-slate-500">
+        <p className="py-2 text-[11px] leading-tight text-zinc-400">
           Pulsa en el mapa para consultar la cota, la pendiente y la orientación.
         </p>
       ) : result.elevation === undefined ? (
-        <p className="py-2 text-[11px] leading-tight text-slate-500">
+        <p className="py-2 text-[11px] leading-tight text-zinc-400">
           El modelo de elevación todavía no ha llegado a ese punto. Espera un momento
           y vuelve a pulsar.
         </p>
@@ -89,7 +89,7 @@ export const TerrainQuery = ({ result, onClose }) => (
       )}
     </div>
 
-    <p className="border-t border-slate-100 bg-amber-50 px-2.5 py-1.5 text-[10px] leading-tight text-amber-900">
+    <p className="border-t border-zinc-800/80 bg-amber-950/35 px-2.5 py-1.5 text-[10px] leading-tight text-amber-200/90">
       {ACCURACY_WARNING}
     </p>
   </div>

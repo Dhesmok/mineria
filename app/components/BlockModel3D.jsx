@@ -7,7 +7,6 @@ import {
   Maximize2,
   Minimize2,
   X,
-  Sun,
   Camera,
   RotateCw,
   Scan,
@@ -21,6 +20,7 @@ import { TILE_SIZE } from "../utils/demTiles"
 import { SGC_KEYS, sgcImageUrl } from "../utils/sgcLayers"
 import { ANH_KEYS, anhImageUrl } from "../utils/anhLayers"
 import { ANM_LAYERS, anmSourceId } from "../utils/anmLayers"
+import { SEARCH_SOURCES } from "../utils/mapStyles"
 import BlockCompass from "./BlockCompass"
 import SunDial from "./SunDial"
 import { BLOCK_CHROME_CSS, PANEL, PANEL_SM, Groove, BlockKey } from "./BlockChrome"
@@ -218,8 +218,8 @@ function getActiveVectorLayers(map, layerState, loadedFeatures = []) {
         const anmDef = ANM_LAYERS.find((l) => l.key === k)
         activeVectors.push({
           key: k,
-          color: conf?.color || anmDef?.lineColor || "#38bdf8",
-          fillColor: anmDef?.fillColor || conf?.color || "#38bdf8",
+          color: conf?.lineColor || conf?.color || anmDef?.lineColor || "#38bdf8",
+          fillColor: conf?.fillColor || anmDef?.fillColor || conf?.color || "#38bdf8",
           opacity: conf?.opacity !== undefined ? conf.opacity : 0.65,
           features: feats,
         })
@@ -257,8 +257,8 @@ function getActiveVectorLayers(map, layerState, loadedFeatures = []) {
         const anmDef = ANM_LAYERS.find((l) => l.key === key)
         activeVectors.push({
           key,
-          color: conf.color || anmDef?.lineColor || "#eab308",
-          fillColor: anmDef?.fillColor || conf.color || "#eab308",
+          color: conf.lineColor || conf.color || anmDef?.lineColor || "#eab308",
+          fillColor: conf.fillColor || anmDef?.fillColor || conf.color || "#eab308",
           opacity: conf.opacity !== undefined ? conf.opacity : 0.65,
           features: feats,
         })
@@ -270,7 +270,7 @@ function getActiveVectorLayers(map, layerState, loadedFeatures = []) {
   // 3. Resaltado de búsqueda o expediente si existe
   if (map && typeof map.getSource === "function") {
     try {
-      const searchSrc = map.getSource("search-highlight") || map.getSource("expedient-highlight")
+      const searchSrc = map.getSource(SEARCH_SOURCES.result) || map.getSource("search-highlight") || map.getSource("expedient-highlight")
       if (searchSrc && searchSrc._data && searchSrc._data.features && searchSrc._data.features.length > 0) {
         activeVectors.push({
           key: "search-highlight",
@@ -1382,7 +1382,7 @@ export default function BlockModel3D({
   const layerStateKey = useMemo(() => {
     if (!layerState) return ""
     return Object.entries(layerState)
-      .map(([k, v]) => `${k}:${v?.on ? 1 : 0}:${v?.opacity}:${v?.color}`)
+      .map(([k, v]) => `${k}:${v?.on ? 1 : 0}:${v?.opacity}:${v?.fillColor || v?.color}:${v?.lineColor || ""}`)
       .join("|")
   }, [layerState])
 

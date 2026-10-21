@@ -321,7 +321,7 @@ export const ImageExport = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-md sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-0 backdrop-blur-md sm:items-center sm:p-4">
       <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl sm:rounded-2xl">
         <div className="flex items-center gap-2.5 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3">
           <ImageIcon className="h-4 w-4 text-zinc-400" />
@@ -393,7 +393,7 @@ export const ImageExport = ({
           {error && <p className="text-[12px] text-rose-400">{error}</p>}
         </div>
 
-        <div className="border-t border-zinc-800 bg-zinc-950/80 p-3">
+        <div className="border-t border-zinc-800 bg-zinc-950/80 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
           <button
             type="button"
             onClick={exportar}

@@ -34,7 +34,7 @@ export const CrsPicker = ({ current, onChoose, onClose, anchorRect, anchorEl }) 
       role="dialog"
       aria-label="Elegir el sistema de coordenadas"
       style={{ top, left }}
-      className="fixed z-50 max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl"
+      className="fixed z-[60] max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl"
     >
       <div className="p-1.5">
         {CRS_LIST.map((crs) => {

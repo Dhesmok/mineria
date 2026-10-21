@@ -104,9 +104,9 @@ export const TerrainRasterLegend = ({ mode, unavailable, progress, cellSize }) =
       onPointerLeave={soloRaton(cerrarInfo)}
       className="relative w-[min(13rem,calc(100vw-1.5rem))]"
     >
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-2.5 py-1.5">
-          <p className="text-[11px] font-medium text-slate-600">{TITULOS[mode] ?? "Terreno"}</p>
+      <div className="overflow-hidden rounded-xl border border-zinc-800/90 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl">
+        <div className="flex items-center justify-between gap-2 border-b border-zinc-800/80 bg-zinc-950/80 px-2.5 py-1.5">
+          <p className="text-[11px] font-medium text-zinc-300">{TITULOS[mode] ?? "Terreno"}</p>
           {nota ? (
             <button
               type="button"
@@ -119,8 +119,8 @@ export const TerrainRasterLegend = ({ mode, unavailable, progress, cellSize }) =
                 if (porTeclado(evento.target)) setInfoAbierta(true)
               }}
               className={`-my-1 -mr-1 shrink-0 rounded p-1 transition-colors ${
-                infoAbierta ? "text-slate-600" : "text-slate-400"
-              } hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300`}
+                infoAbierta ? "text-zinc-200" : "text-zinc-400"
+              } hover:text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-600`}
             >
               <IconoInfo />
             </button>
@@ -133,21 +133,21 @@ export const TerrainRasterLegend = ({ mode, unavailable, progress, cellSize }) =
             zona ya vista ni se llega a ver, porque las teselas están guardadas. */}
         {cargando && !unavailable ? (
           <div className="px-2.5 py-2">
-            <div className="flex items-baseline justify-between gap-2 text-[11px] text-slate-600">
+            <div className="flex items-baseline justify-between gap-2 text-[11px] text-zinc-300">
               <span>Cargando el modelo…</span>
-              <span className="tabular-nums text-slate-400">
+              <span className="tabular-nums text-zinc-400">
                 {progress.hechas}/{progress.total}
               </span>
             </div>
-            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-slate-100">
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-zinc-800">
               <div
-                className="h-full rounded-full bg-slate-400 transition-[width] duration-200"
+                className="h-full rounded-full bg-sky-400 transition-[width] duration-200"
                 style={{ width: `${porcentaje}%` }}
               />
             </div>
           </div>
         ) : unavailable ? (
-          <p className="px-2.5 py-2 text-[11px] leading-tight text-slate-500">{unavailable}</p>
+          <p className="px-2.5 py-2 text-[11px] leading-tight text-zinc-400">{unavailable}</p>
         ) : (
           <div
             // La orientación son ocho tramos: en una sola columna la leyenda mide
@@ -159,17 +159,17 @@ export const TerrainRasterLegend = ({ mode, unavailable, progress, cellSize }) =
             {tramos.map(({ label, hint, color }) => (
               <div key={label} className="flex items-center gap-2">
                 <span
-                  className="h-3 w-5 shrink-0 rounded-[3px]"
+                  className="h-3 w-5 shrink-0 rounded-[3px] ring-1 ring-white/10"
                   style={{ backgroundColor: `rgb(${color.join(",")})` }}
                 />
-                <span className="flex-1 text-[11px] tabular-nums text-slate-700">{label}</span>
-                {mode !== "aspect" && <span className="text-[10px] text-slate-400">{hint}</span>}
+                <span className="flex-1 text-[11px] tabular-nums text-zinc-200">{label}</span>
+                {mode !== "aspect" && <span className="text-[10px] text-zinc-400">{hint}</span>}
               </div>
             ))}
           </div>
         )}
 
-        <p className="border-t border-slate-100 bg-amber-50 px-2.5 py-1.5 text-[10px] leading-tight text-amber-900">
+        <p className="border-t border-zinc-800/80 bg-amber-950/35 px-2.5 py-1.5 text-[10px] leading-tight text-amber-200/90">
           {ACCURACY_USE}
         </p>
       </div>
@@ -184,33 +184,33 @@ export const TerrainRasterLegend = ({ mode, unavailable, progress, cellSize }) =
         <div
           id={ID_NOTA}
           role="tooltip"
-          className="absolute right-0 top-full z-20 mt-1 w-[min(17rem,calc(100vw-2rem))] rounded-lg border border-slate-200 bg-white p-2.5 shadow-lg sm:right-full sm:top-0 sm:mr-2 sm:mt-0"
+          className="absolute right-0 top-full z-20 mt-1 w-[min(17rem,calc(100vw-2rem))] rounded-xl border border-zinc-800/90 bg-[#09090b]/95 p-2.5 text-zinc-100 shadow-2xl backdrop-blur-2xl sm:right-full sm:top-0 sm:mr-2 sm:mt-0"
         >
-          <p className="text-[11px] font-medium text-slate-700">De dónde sale este mapa</p>
+          <p className="text-[11px] font-medium text-zinc-200">De dónde sale este mapa</p>
 
-          <p className="mt-1 text-[11px] leading-snug text-slate-600">
+          <p className="mt-1 text-[11px] leading-snug text-zinc-400">
             El modelo mide la altura del terreno cada ~{nota.source} m.{" "}
             {nota.interpolated ? (
               <>
                 Aquí se dibuja sobre celdas de {nota.cell} m: las de en medio están{" "}
-                <strong className="font-medium text-slate-700">interpoladas</strong> para que se vea
+                <strong className="font-medium text-zinc-200">interpoladas</strong> para que se vea
                 suave, no son medidas nuevas.
               </>
             ) : (
               <>
                 A este zoom se dibuja sobre celdas de {nota.cell} m, así que cada una{" "}
-                <strong className="font-medium text-slate-700">resume</strong> varias medidas.
+                <strong className="font-medium text-zinc-200">resume</strong> varias medidas.
               </>
             )}
           </p>
 
-          <p className="mt-1.5 text-[11px] leading-snug text-slate-600">
+          <p className="mt-1.5 text-[11px] leading-snug text-zinc-400">
             Cada valor sale de mirar las celdas vecinas, así que lo que lees es el promedio de unos{" "}
-            <strong className="font-medium text-slate-700">{nota.window} m</strong> de terreno. Nada
+            <strong className="font-medium text-zinc-200">{nota.window} m</strong> de terreno. Nada
             más pequeño que eso aparece en el mapa.
           </p>
 
-          <p className="mt-2 border-t border-slate-100 pt-1.5 text-[10px] leading-tight text-slate-400">
+          <p className="mt-2 border-t border-zinc-800/80 pt-1.5 text-[10px] leading-tight text-zinc-500">
             Terrain Tiles (AWS Open Data). Alturas elipsoidales.
           </p>
         </div>

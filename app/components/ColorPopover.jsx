@@ -6,6 +6,7 @@ import { useDismiss } from "../hooks/useDismiss"
 import { Check } from "lucide-react"
 
 import { LAYER_PALETTE, darken, readableInk } from "../utils/colors"
+import { anchorToViewport, popoverWidth } from "../utils/popoverPosition"
 
 /**
  * Selector de color de una capa.
@@ -31,8 +32,12 @@ export const ColorPopover = ({
   const panelRef = useRef(null)
   useDismiss(panelRef, anchorEl, onClose)
 
-  const top = Math.min((anchorRect?.bottom ?? 0) + 6, window.innerHeight - 260)
-  const left = Math.min(anchorRect?.left ?? 0, window.innerWidth - 240)
+  const ancho = popoverWidth(240, window.innerWidth)
+  const { top, left } = anchorToViewport(
+    anchorRect,
+    { width: ancho, height: onAlphaChange ? 260 : 210 },
+    { width: window.innerWidth, height: window.innerHeight },
+  )
 
   return (
     <div
@@ -40,7 +45,7 @@ export const ColorPopover = ({
       role="dialog"
       aria-label="Elegir el color de la capa"
       style={{ top, left }}
-      className="fixed z-50 w-60 rounded-xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl"
+      className="fixed z-[60] w-60 rounded-xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl"
     >
       <div className="mb-2.5 flex items-center justify-between">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">

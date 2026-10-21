@@ -660,6 +660,8 @@ export default function MapComponentGL({
     mapInstance.startMode = startMode
     mapInstance.toggle3D = toggle3D
     mapInstance.handleLocateUser = handleLocateUser
+    mapInstance.openImageExport = () => setExportandoImagen(true)
+    mapInstance.toggleDrawToolbar = () => setDibujoAbierto((v) => !v)
   }, [mapInstance, addVertices, removeVertices, clearDrawings, clearSearchResult, addPointAt, chooseBasemap, startMode, toggle3D, handleLocateUser])
 
   /**
@@ -923,7 +925,7 @@ export default function MapComponentGL({
                   aria-expanded={!dibujoCompacto}
                   aria-label={dibujoCompacto ? "Desplegar las herramientas" : "Recoger las herramientas"}
                   title={dibujoCompacto ? "Desplegar" : "Recoger a solo iconos"}
-                  className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                  className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
                 >
                   <ChevronLeft
                     className={`h-3.5 w-3.5 transition-transform ${dibujoCompacto ? "rotate-180" : ""}`}
@@ -1063,6 +1065,22 @@ export default function MapComponentGL({
 
         {/* Controles de navegación y HUD unificados del mapa */}
         <div className="flex flex-col items-end gap-2">
+          {/* Botón Dibujo y Medidas */}
+          <button
+            type="button"
+            onClick={() => setDibujoAbierto((v) => !v)}
+            title={dibujoAbierto ? "Cerrar dibujo y medidas" : "Herramientas de dibujo y medición"}
+            aria-label="Dibujo y medidas"
+            aria-expanded={dibujoAbierto}
+            className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+              dibujoAbierto || (mode && mode !== "simple_select")
+                ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
+                : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            }`}
+          >
+            <PencilRuler className="h-4.5 w-4.5" />
+          </button>
+
           {/* Botón Bloque 3D del Terreno */}
           <button
             type="button"
@@ -1382,12 +1400,15 @@ export default function MapComponentGL({
       </div>
 
       {error && showErrorBanner && (
-        <div className="absolute top-0 left-0 right-0 bg-red-500 text-white p-2 z-10 flex items-center justify-between gap-2 pointer-events-auto">
-          <span className="text-sm">{error}</span>
+        <div
+          role="alert"
+          className="pointer-events-auto fixed top-20 left-1/2 -translate-x-1/2 z-50 flex w-[min(32rem,calc(100vw-1.5rem))] items-center justify-between gap-3 rounded-2xl border border-rose-500/50 bg-[#18090c]/95 px-4 py-2.5 text-rose-100 shadow-2xl backdrop-blur-2xl"
+        >
+          <span className="text-xs sm:text-[13px] font-medium leading-snug">{error}</span>
           <button
             type="button"
             onClick={() => setShowErrorBanner(false)}
-            className="px-2 py-1 text-xs font-semibold bg-red-700 rounded hover:bg-red-800"
+            className="shrink-0 rounded-lg border border-rose-500/40 bg-rose-950/80 px-2.5 py-1 text-xs font-semibold text-rose-200 transition-colors hover:bg-rose-900 hover:text-white"
           >
             Cerrar
           </button>
@@ -1627,6 +1648,27 @@ export default function MapComponentGL({
            un trackpad es incómodo de acertar —sobre todo la brújula, que además
            hay que arrastrar—. A 36 px se pulsan sin apuntar. Los controles
            grandes de giro e inclinación viven aparte, en el panel del 3D. */
+        /* Evitar que la escala y la atribución queden ocultas tras el riel lateral en escritorio o la barra inferior en móvil */
+        @media (min-width: 768px) {
+          .maplibregl-ctrl-bottom-left {
+            left: 58px !important;
+          }
+        }
+        @media (max-width: 767px) {
+          .maplibregl-ctrl-bottom-left,
+          .maplibregl-ctrl-bottom-right {
+            bottom: 58px !important;
+          }
+        }
+        .maplibregl-ctrl-scale {
+          background: rgba(9, 9, 11, 0.85) !important;
+          color: #e4e4e7 !important;
+          border-color: #71717a !important;
+          border-radius: 4px !important;
+          padding: 0 6px !important;
+          font-size: 10px !important;
+          backdrop-filter: blur(8px);
+        }
         .maplibregl-ctrl-group button {
           width: 36px;
           height: 36px;

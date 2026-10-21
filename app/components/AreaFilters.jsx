@@ -90,7 +90,7 @@ export const AreaFilters = ({
       role="dialog"
       aria-label={`Filtros de ${area.name}`}
       style={{ top, left }}
-      className="fixed z-50 max-h-[70vh] w-[min(19rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl"
+      className="fixed z-[60] max-h-[70vh] w-[min(19rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl"
     >
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-800 bg-zinc-950/80 px-3.5 py-2.5 backdrop-blur-md">
         <span

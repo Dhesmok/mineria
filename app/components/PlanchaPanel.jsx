@@ -88,36 +88,36 @@ export const PlanchaPanel = ({
       {cargando && (
         <div className="space-y-2.5 py-1">
           <div className="flex items-center justify-between text-[11px]">
-            <span className="font-medium text-slate-700">
+            <span className="font-medium text-zinc-200">
               {plancha.progreso?.detalle || "Procesando plancha geológica..."}
             </span>
-            <span className="text-[10px] font-semibold tabular-nums text-blue-600">
+            <span className="text-[10px] font-semibold tabular-nums text-sky-400">
               {plancha.progreso?.porcentaje ? `${plancha.progreso.porcentaje}%` : ""}
             </span>
           </div>
 
           {/* Barra de progreso animada */}
-          <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200/60">
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-zinc-800 ring-1 ring-zinc-700/60">
             <div
-              className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-300 ease-out"
+              className="h-full bg-gradient-to-r from-sky-500 to-indigo-500 transition-all duration-300 ease-out"
               style={{ width: `${Math.max(5, Math.min(100, plancha.progreso?.porcentaje ?? 15))}%` }}
             />
           </div>
 
           {/* Etapas discretas del pipeline */}
-          <div className="flex justify-between text-[9px] uppercase tracking-wider text-slate-400">
-            <span className={plancha.progreso?.porcentaje >= 10 ? "font-bold text-blue-600" : ""}>Descarga</span>
-            <span className={plancha.progreso?.porcentaje >= 52 ? "font-bold text-blue-600" : ""}>Medida</span>
-            <span className={plancha.progreso?.porcentaje >= 68 ? "font-bold text-blue-600" : ""}>Gauss</span>
-            <span className={plancha.progreso?.porcentaje >= 82 ? "font-bold text-blue-600" : ""}>Recorte</span>
-            <span className={plancha.progreso?.porcentaje >= 96 ? "font-bold text-blue-600" : ""}>Visor</span>
+          <div className="flex justify-between text-[9px] uppercase tracking-wider text-zinc-500">
+            <span className={plancha.progreso?.porcentaje >= 10 ? "font-bold text-sky-400" : ""}>Descarga</span>
+            <span className={plancha.progreso?.porcentaje >= 52 ? "font-bold text-sky-400" : ""}>Medida</span>
+            <span className={plancha.progreso?.porcentaje >= 68 ? "font-bold text-sky-400" : ""}>Gauss</span>
+            <span className={plancha.progreso?.porcentaje >= 82 ? "font-bold text-sky-400" : ""}>Recorte</span>
+            <span className={plancha.progreso?.porcentaje >= 96 ? "font-bold text-sky-400" : ""}>Visor</span>
           </div>
 
           <div className="flex justify-end pt-1">
             <button
               type="button"
               onClick={onCancelar ?? onQuitar}
-              className="rounded border border-slate-200 px-2.5 py-0.5 text-[10px] font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+              className="rounded border border-zinc-700 bg-zinc-900 px-2.5 py-0.5 text-[10px] font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
             >
               Cancelar
             </button>
@@ -127,7 +127,7 @@ export const PlanchaPanel = ({
 
       {fallo && (
         <div className="space-y-1 py-1">
-          <div className="flex items-start gap-1.5 text-[11px] font-medium text-red-600">
+          <div className="flex items-start gap-1.5 text-[11px] font-medium text-rose-400">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{fallo}</span>
           </div>
@@ -135,7 +135,7 @@ export const PlanchaPanel = ({
               que falló: sin ellos es imposible depurar una hoja rota sin tener el
               archivo delante. */}
           {plancha.detalle && (
-            <p className="pl-5 text-[10px] leading-snug text-slate-400">{plancha.detalle}</p>
+            <p className="pl-5 text-[10px] leading-snug text-zinc-400">{plancha.detalle}</p>
           )}
           {/* Que no se pueda colocar sobre el mapa no quita que el PDF sirva:
               sigue siendo la geología más actualizada de esa plancha. */}
@@ -144,7 +144,7 @@ export const PlanchaPanel = ({
               href={plancha.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-600 underline decoration-blue-300 underline-offset-2 hover:text-blue-700"
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-sky-400 underline decoration-sky-500/40 underline-offset-2 hover:text-sky-300"
             >
               <ExternalLink className="h-3 w-3" />
               Abrir el PDF aparte

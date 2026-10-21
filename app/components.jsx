@@ -23,6 +23,8 @@ import {
   Linkedin,
   Compass,
   Crosshair,
+  MapPin,
+  Image as ImageIcon,
 } from "lucide-react"
 import ExportComponent from "./ExportComponent"
 import { axisLabels, crsById, formatCoordinate, fromGeographic, SOURCE_CRS } from "./utils/crs"
@@ -652,14 +654,14 @@ export default function Component() {
                 </div>
 
                 {/* 3. Medición y Captura */}
-                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
-                  <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block mb-2">
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl space-y-2">
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block">
                     Medición y Captura
                   </Label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => mapRef.current?.startMode?.("measure-distance")}
+                      onClick={() => mapRef.current?.startMode?.("draw_line_string")}
                       className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
                       title="Medir distancia lineal entre puntos"
                     >
@@ -668,12 +670,21 @@ export default function Component() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => mapRef.current?.startMode?.("measure-area")}
+                      onClick={() => mapRef.current?.startMode?.("draw_polygon")}
                       className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
                       title="Medir área y perímetro de un polígono"
                     >
                       <Square className="h-4 w-4 text-zinc-200" />
                       <span className="text-[11px] font-medium">Área</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => mapRef.current?.startMode?.("draw_point")}
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
+                      title="Marcar un punto o ir a una coordenada"
+                    >
+                      <MapPin className="h-4 w-4 text-zinc-200" />
+                      <span className="text-[11px] font-medium">Punto / Coord.</span>
                     </button>
                     <button
                       type="button"
@@ -685,6 +696,15 @@ export default function Component() {
                       <span className="text-[11px] font-medium">Limpiar</span>
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => mapRef.current?.openImageExport?.()}
+                    className="flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-[11.5px] font-medium text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.99]"
+                    title="Exportar el mapa actual como imagen PNG con leyenda, norte y escala"
+                  >
+                    <ImageIcon className="h-3.5 w-3.5 text-sky-400" />
+                    <span>Exportar mapa en PNG</span>
+                  </button>
                 </div>
               </div>
             )}
@@ -1030,15 +1050,15 @@ export default function Component() {
             </div>
 
             {/* 3. Medición */}
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3">
-              <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block mb-2">
+            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 space-y-2">
+              <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block">
                 Medición y Dibujo
               </Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    mapRef.current?.startMode?.("measure-distance")
+                    mapRef.current?.startMode?.("draw_line_string")
                     setMobilePanel(null)
                   }}
                   className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-300 active:scale-95"
@@ -1049,13 +1069,24 @@ export default function Component() {
                 <button
                   type="button"
                   onClick={() => {
-                    mapRef.current?.startMode?.("measure-area")
+                    mapRef.current?.startMode?.("draw_polygon")
                     setMobilePanel(null)
                   }}
                   className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-300 active:scale-95"
                 >
                   <Square className="h-5 w-5 text-zinc-200" />
                   <span className="text-xs font-medium">Área</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    mapRef.current?.startMode?.("draw_point")
+                    setMobilePanel(null)
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-300 active:scale-95"
+                >
+                  <MapPin className="h-5 w-5 text-zinc-200" />
+                  <span className="text-xs font-medium">Punto / Coord.</span>
                 </button>
                 <button
                   type="button"
@@ -1069,6 +1100,17 @@ export default function Component() {
                   <span className="text-xs font-medium">Limpiar</span>
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  mapRef.current?.openImageExport?.()
+                  setMobilePanel(null)
+                }}
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-xs font-medium text-zinc-200 active:scale-[0.99]"
+              >
+                <ImageIcon className="h-4 w-4 text-sky-400" />
+                <span>Exportar mapa en PNG</span>
+              </button>
             </div>
 
             {/* 4. Aplicación Móvil y Gestión de Memoria */}
@@ -1085,7 +1127,14 @@ export default function Component() {
                   type="text"
                   value={islandSearchText}
                   onChange={handleIslandSearchChange}
-                  placeholder="Escribe código o titular..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && islandSearchText.trim()) {
+                      e.preventDefault()
+                      handleSelectIslandExpedient(islandSearchText.trim())
+                      setMobilePanel(null)
+                    }
+                  }}
+                  placeholder="Código de expediente (ej. ICQ-08005)..."
                   className="w-full h-11 pl-9 pr-9 bg-zinc-900/90 border border-zinc-800 rounded-xl text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
                 />
                 {islandSearchText && (
@@ -1124,24 +1173,37 @@ export default function Component() {
 
             {islandSuggestions.length > 0 && (
               <div className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800 overflow-hidden max-h-60 overflow-y-auto">
-                {islandSuggestions.map((sug) => (
-                  <button
-                    key={sug.code}
-                    type="button"
-                    onClick={() => {
-                      handleSelectIslandExpedient(sug.code)
-                      setMobilePanel(null)
-                    }}
-                    className="w-full px-3.5 py-2.5 text-left flex items-center justify-between hover:bg-zinc-900/80 active:bg-zinc-800 transition-colors"
-                  >
-                    <span className="font-mono text-xs font-semibold text-white">{sug.code}</span>
-                    {sug.titular && (
-                      <span className="text-[11px] text-zinc-400 truncate max-w-[180px]">{sug.titular}</span>
-                    )}
-                  </button>
-                ))}
+                {islandSuggestions.map((sug, index) => {
+                  const code = typeof sug === "string" ? sug : (sug?.code || "")
+                  const layerName = typeof sug === "object" ? sug?.layerName : null
+                  return (
+                    <button
+                      key={code || index}
+                      type="button"
+                      onClick={() => {
+                        handleSelectIslandExpedient(code)
+                        setMobilePanel(null)
+                      }}
+                      className="w-full px-3.5 py-2.5 text-left flex items-center justify-between hover:bg-zinc-900/80 active:bg-zinc-800 transition-colors"
+                    >
+                      <span className="font-mono text-xs font-semibold text-white">{code}</span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                          layerName?.toLowerCase().includes("solicitud") ||
+                          layerName?.toLowerCase().includes("trámite") ||
+                          layerName?.toLowerCase().includes("tramite")
+                            ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                            : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                        }`}
+                      >
+                        {layerName || "Expediente"}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             )}
+
           </div>
         )}
 
@@ -1179,7 +1241,7 @@ export default function Component() {
       </MobileBottomSheet>
 
       {showTable && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-md">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md">
           <div className="bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
             <div className="mb-4 flex items-baseline gap-2">
               <h2 className="text-xl font-semibold text-zinc-100">Coordenadas</h2>
@@ -1291,7 +1353,7 @@ export default function Component() {
       )}
 
       {showExportModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-md">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md">
           <div className="relative bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-bold tracking-tight text-zinc-100">Tipo de archivo para exportar</h2>

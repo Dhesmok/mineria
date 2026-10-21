@@ -212,7 +212,7 @@ export const RotateHint = ({ onClose }) => {
   }, [onClose])
 
   return (
-    <div className="pointer-events-auto absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-xl border border-zinc-800/90 bg-[#09090b]/95 py-2 pl-3 pr-2 text-[12.5px] text-zinc-200 shadow-2xl backdrop-blur-2xl">
+    <div className="pointer-events-auto absolute top-20 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-xl border border-zinc-800/90 bg-[#09090b]/95 py-2 pl-3 pr-2 text-[12.5px] text-zinc-200 shadow-2xl backdrop-blur-2xl">
       <Rotate3d className="h-4 w-4 shrink-0 text-zinc-400" />
       <span>
         Mantén{" "}
@@ -454,7 +454,7 @@ export const Hud3DPopover = ({
       aria-label="Perspectiva 3D del Terreno"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="pointer-events-auto w-[305px] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl transition-all select-none"
+      className="pointer-events-auto w-[min(305px,calc(100vw-4.5rem))] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl transition-all select-none"
     >
       {/* Cabecera */}
       <div className="mb-3 flex items-center justify-between border-b border-zinc-800/80 pb-2">
@@ -659,4 +659,3 @@ export const Hud3DPopover = ({
     </div>
   )
 }
-

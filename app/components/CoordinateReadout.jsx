@@ -95,7 +95,7 @@ export const CursorCoordinates = ({ map, crsId }) => {
     // Centrada abajo. Estuvo en las dos esquinas inferiores y las dos acabaron
     // ocupadas: la derecha por los botones y la izquierda por la escala. En el
     // centro no compite con nada y es donde la vista ya está mirando.
-    <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-zinc-800/90 bg-[#09090b]/90 px-4 py-1.5 font-mono text-[12.5px] font-medium tabular-nums text-zinc-200 shadow-2xl backdrop-blur-2xl transition-all">
+    <div className="pointer-events-none absolute bottom-16 md:bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-zinc-800/90 bg-[#09090b]/90 px-3.5 py-1.5 font-mono text-[11px] md:text-[12.5px] font-medium tabular-nums text-zinc-200 shadow-2xl backdrop-blur-2xl transition-all whitespace-nowrap">
       {ejes.first} <span className="text-white font-semibold">{formatCoordinate(y, crsId)}</span> · {ejes.second} <span className="text-white font-semibold">{formatCoordinate(x, crsId)}</span>
     </div>
   )
@@ -149,13 +149,13 @@ export const CoordinateEntry = ({ crsId, onGo }) => {
   }
 
   return (
-    <div className="absolute bottom-24 left-1/2 z-20 w-[min(24rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 shadow-2xl backdrop-blur-2xl md:bottom-16 md:w-auto text-zinc-100">
+    <div className="pointer-events-auto absolute bottom-24 left-1/2 z-20 w-[min(24rem,calc(100vw-1.5rem))] -translate-x-1/2 rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 shadow-2xl backdrop-blur-2xl md:bottom-16 md:w-auto text-zinc-100">
       <div className="flex items-end gap-2">
         {[
           { label: ejes.first, value: first, set: setFirst, hint: ejemplo[0] },
           { label: ejes.second, value: second, set: setSecond, hint: ejemplo[1] },
         ].map((campo) => (
-          <label key={campo.label} className="flex flex-col gap-1">
+          <label key={campo.label} className="flex flex-1 md:flex-initial flex-col gap-1 min-w-0">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
               {campo.label}
             </span>
@@ -169,7 +169,7 @@ export const CoordinateEntry = ({ crsId, onGo }) => {
               placeholder={campo.hint}
               aria-label={campo.label}
               autoComplete="off"
-              className="h-8 w-28 rounded-lg border border-zinc-800 bg-zinc-900/80 px-2.5 font-mono text-[13px] text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
+              className="h-8 w-full md:w-28 rounded-lg border border-zinc-800 bg-zinc-900/80 px-2.5 font-mono text-[13px] text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600"
             />
           </label>
         ))}
@@ -177,7 +177,7 @@ export const CoordinateEntry = ({ crsId, onGo }) => {
         <button
           type="button"
           onClick={go}
-          className="h-8 rounded-lg border border-zinc-700 bg-zinc-800 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-zinc-700 shadow-sm"
+          className="h-8 shrink-0 rounded-lg border border-zinc-700 bg-zinc-800 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-zinc-700 shadow-sm"
         >
           Ir
         </button>

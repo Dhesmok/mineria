@@ -14,11 +14,18 @@ const fontBody = Inter({
   variable: '--font-body',
 })
 
+export const viewport = {
+  themeColor: "#0f172a",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+}
+
 export const metadata = {
   title: "Visor Geológico y Minero - Colombia",
   description: "Visor de información geoespacial minera y territorial de Colombia",
   manifest: "/manifest.json",
-  themeColor: "#0f172a",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -30,7 +37,6 @@ export default function Layout({ children }) {
   return (
     <html lang="es">
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>

@@ -11,9 +11,9 @@ import { formatDistance } from "../utils/mapUtils"
  *
  * **Una sola serie, así que no lleva leyenda**: el título ya dice qué se está
  * mirando, y una caja de leyenda con una sola entrada es ruido. Por lo mismo, un
- * solo color: el azul pizarra de la paleta del visor, que sobre blanco tiene
- * contraste de sobra y no compite con los verdes y rojos que la pendiente usa
- * para significar otra cosa.
+ * solo color: el azul cielo de la paleta oscura del visor, que sobre el fondo
+ * obsidiana tiene contraste limpio y no compite con los verdes y rojos que la
+ * pendiente usa para significar otra cosa.
  *
  * **La interacción no es un extra, es la mitad de la función.** Una curva sola
  * dice que hay un escarpe; no dice *dónde*. Al pasar el puntero por la gráfica
@@ -31,9 +31,9 @@ import { formatDistance } from "../utils/mapUtils"
 const MARGEN = { arriba: 10, derecha: 12, abajo: 18, izquierda: 46 }
 const ALTO = 130
 
-/** El azul pizarra de la paleta del visor. */
-const TRAZO = "#3D5A80"
-const RELLENO = "rgba(61, 90, 128, 0.14)"
+/** Azul cielo de alto contraste para la interfaz oscura del visor. */
+const TRAZO = "#38bdf8"
+const RELLENO = "rgba(56, 189, 248, 0.16)"
 
 const metros = (valor) =>
   Number.isFinite(valor) ? `${Math.round(valor).toLocaleString("es-CO")} m` : "—"
@@ -213,16 +213,16 @@ export const TerrainProfile = ({ profile, hovered, onHover, onClose }) => {
   const cobertura = stats?.coverage ?? 0
 
   return (
-    <div className="pointer-events-auto w-full rounded-lg border border-slate-200 bg-white shadow-lg">
-      <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5">
-        <MountainSnow className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-        <span className="flex-1 text-[11px] font-medium text-slate-600">Perfil longitudinal</span>
+    <div className="pointer-events-auto w-full rounded-xl border border-zinc-800/90 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl">
+      <div className="flex items-center gap-2 border-b border-zinc-800/80 bg-zinc-950/80 px-3 py-1.5 rounded-t-xl">
+        <MountainSnow className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+        <span className="flex-1 text-[11px] font-medium text-zinc-300">Perfil longitudinal</span>
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar el perfil"
           title="Cerrar"
-          className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -230,12 +230,12 @@ export const TerrainProfile = ({ profile, hovered, onHover, onClose }) => {
 
       <div className="px-3 py-2">
         {!profile ? (
-          <p className="py-6 text-center text-[12px] text-slate-500">
+          <p className="py-6 text-center text-[12px] text-zinc-400">
             Dibuja una línea sobre el mapa para ver su corte del terreno.
           </p>
         ) : profile.pending || !escalas ? (
-          <p className="flex items-center justify-center gap-2 py-6 text-[12px] text-slate-500">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <p className="flex items-center justify-center gap-2 py-6 text-[12px] text-zinc-400">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
             {profile.pending
               ? "Esperando el modelo de elevación…"
               : "Sin datos de elevación en este recorrido todavía."}
@@ -257,7 +257,7 @@ export const TerrainProfile = ({ profile, hovered, onHover, onClose }) => {
                 onPointerMove={alMover}
                 onPointerLeave={() => onHover(null)}
                 onKeyDown={alTeclear}
-                className="block touch-none rounded outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                className="block touch-none rounded outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
               >
                 {/* La rejilla, discreta: está para leer valores, no para verse. */}
                 {marcas.map((valor) => (
@@ -267,14 +267,14 @@ export const TerrainProfile = ({ profile, hovered, onHover, onClose }) => {
                       x2={ancho - MARGEN.derecha}
                       y1={escalas.y(valor)}
                       y2={escalas.y(valor)}
-                      stroke="#e2e8f0"
+                      stroke="#27272a"
                       strokeWidth="1"
                     />
                     <text
                       x={MARGEN.izquierda - 6}
                       y={escalas.y(valor) + 3}
                       textAnchor="end"
-                      className="fill-slate-400 text-[9px] tabular-nums"
+                      className="fill-zinc-400 text-[9px] tabular-nums"
                     >
                       {Math.round(valor).toLocaleString("es-CO")}
                     </text>
@@ -303,7 +303,7 @@ export const TerrainProfile = ({ profile, hovered, onHover, onClose }) => {
                       x2={escalas.x(hovered.distance)}
                       y1={MARGEN.arriba}
                       y2={ALTO - MARGEN.abajo}
-                      stroke="#94a3b8"
+                      stroke="#71717a"
                       strokeWidth="1"
                       strokeDasharray="3 3"
                     />
@@ -312,7 +312,7 @@ export const TerrainProfile = ({ profile, hovered, onHover, onClose }) => {
                       cy={escalas.y(hovered.elevation)}
                       r="4.5"
                       fill={TRAZO}
-                      stroke="#ffffff"
+                      stroke="#09090b"
                       strokeWidth="2"
                     />
                   </g>
@@ -321,7 +321,7 @@ export const TerrainProfile = ({ profile, hovered, onHover, onClose }) => {
                 <text
                   x={MARGEN.izquierda}
                   y={ALTO - 5}
-                  className="fill-slate-400 text-[9px] tabular-nums"
+                  className="fill-zinc-400 text-[9px] tabular-nums"
                 >
                   0
                 </text>
@@ -329,7 +329,7 @@ export const TerrainProfile = ({ profile, hovered, onHover, onClose }) => {
                   x={ancho - MARGEN.derecha}
                   y={ALTO - 5}
                   textAnchor="end"
-                  className="fill-slate-400 text-[9px] tabular-nums"
+                  className="fill-zinc-400 text-[9px] tabular-nums"
                 >
                   {formatDistance(stats.length)}
                 </text>
@@ -344,56 +344,56 @@ export const TerrainProfile = ({ profile, hovered, onHover, onClose }) => {
             >
               {hovered ? (
                 <>
-                  <span className="text-slate-500">
-                    En <strong className="font-medium text-slate-900">{distanciaCursor(hovered.distance)}</strong>
+                  <span className="text-zinc-400">
+                    En <strong className="font-medium text-zinc-100">{distanciaCursor(hovered.distance)}</strong>
                   </span>
-                  <span className="text-slate-500">
-                    Cota <strong className="font-medium text-slate-900">{metros(hovered.elevation)}</strong>
+                  <span className="text-zinc-400">
+                    Cota <strong className="font-medium text-zinc-100">{metros(hovered.elevation)}</strong>
                   </span>
-                  <span className="text-slate-500">
-                    Pendiente <strong className="font-medium text-slate-900">{grados(hovered.slope)}</strong>
+                  <span className="text-zinc-400">
+                    Pendiente <strong className="font-medium text-zinc-100">{grados(hovered.slope)}</strong>
                   </span>
                 </>
               ) : (
-                <span className="text-slate-400">
+                <span className="text-zinc-500">
                   Pasa el puntero por la gráfica para leer cada punto sobre el mapa
                 </span>
               )}
             </div>
 
-            <div className="mt-1.5 flex flex-wrap items-baseline gap-x-4 gap-y-0.5 border-t border-slate-100 pt-1.5 text-[11px] tabular-nums text-slate-500">
+            <div className="mt-1.5 flex flex-wrap items-baseline gap-x-4 gap-y-0.5 border-t border-zinc-800/80 pt-1.5 text-[11px] tabular-nums text-zinc-400">
               <span>
-                Longitud <strong className="font-medium text-slate-700">{formatDistance(stats.length)}</strong>
+                Longitud <strong className="font-medium text-zinc-200">{formatDistance(stats.length)}</strong>
               </span>
               <span>
-                Mín <strong className="font-medium text-slate-700">{metros(stats.min)}</strong>
+                Mín <strong className="font-medium text-zinc-200">{metros(stats.min)}</strong>
               </span>
               <span>
-                Máx <strong className="font-medium text-slate-700">{metros(stats.max)}</strong>
+                Máx <strong className="font-medium text-zinc-200">{metros(stats.max)}</strong>
               </span>
               {/* Ascenso y descenso acumulados, que no son máximo menos mínimo:
                   una línea que sube un cerro y baja al otro lado tiene desnivel
                   pequeño y mucho acumulado. Es lo que importa para un recorrido. */}
               <span>
-                Sube <strong className="font-medium text-slate-700">{metros(stats.gain)}</strong>
+                Sube <strong className="font-medium text-zinc-200">{metros(stats.gain)}</strong>
               </span>
               <span>
-                Baja <strong className="font-medium text-slate-700">{metros(stats.loss)}</strong>
+                Baja <strong className="font-medium text-zinc-200">{metros(stats.loss)}</strong>
               </span>
               <span>
-                Máx. pendiente <strong className="font-medium text-slate-700">{grados(stats.maxSlope)}</strong>
+                Máx. pendiente <strong className="font-medium text-zinc-200">{grados(stats.maxSlope)}</strong>
               </span>
             </div>
 
             {cobertura < 1 && (
-              <p className="mt-1 text-[11px] text-amber-700">
+              <p className="mt-1 text-[11px] text-amber-300">
                 Falta el modelo de elevación en parte del recorrido: hay dato en el{" "}
                 {Math.round(cobertura * 100)} %. Los tramos sin dato salen cortados, no
                 inventados.
               </p>
             )}
 
-            <p className="mt-1 text-[10px] leading-tight text-slate-400">{ACCURACY_WARNING}</p>
+            <p className="mt-1 text-[10px] leading-tight text-zinc-500">{ACCURACY_WARNING}</p>
           </>
         )}
       </div>
