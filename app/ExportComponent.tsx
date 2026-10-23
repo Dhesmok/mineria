@@ -143,6 +143,7 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
       <button
         type="button"
         onClick={exportSHP}
+        aria-label="Exportar expediente en formato SHP"
         disabled={isExportingSHP || isExportingKML}
         className="group relative flex flex-col items-start gap-2.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
       >
@@ -166,6 +167,7 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
       <button
         type="button"
         onClick={exportKML}
+        aria-label="Exportar expediente en formato KML"
         disabled={isExportingSHP || isExportingKML}
         className="group relative flex flex-col items-start gap-2.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
       >
