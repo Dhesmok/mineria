@@ -45,14 +45,14 @@ export const ColorPopover = ({
       role="dialog"
       aria-label="Elegir el color de la capa"
       style={{ top, left }}
-      className="fixed z-[60] w-60 rounded-xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl"
+      className="fixed z-[60] w-60 rounded-xl border glass-strong p-3.5 text-foreground"
     >
       <div className="mb-2.5 flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+        <p className="eyebrow">
           Color y opacidad
         </p>
         <span
-          className="h-4 w-6 rounded border border-zinc-700/80"
+          className="h-4 w-6 rounded border border-border"
           style={{ backgroundColor: color, opacity: Math.max(alpha, 0.2) }}
         />
       </div>
@@ -77,22 +77,22 @@ export const ColorPopover = ({
         })}
       </div>
 
-      <div className="mt-3 flex items-center justify-between border-t border-zinc-800/80 pt-2.5 text-[11px] text-zinc-400">
+      <div className="mt-3 flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-label-3">
         <span>Color personalizado</span>
         <div className="flex items-center gap-1.5">
           <input
             type="color"
             value={color && color.startsWith("#") && color.length === 7 ? color : "#3b82f6"}
             onChange={(event) => onChange?.(event.target.value)}
-            className="h-6 w-8 cursor-pointer rounded border border-zinc-700 bg-zinc-900 p-0.5"
+            className="h-6 w-8 cursor-pointer rounded border border-input bg-fill p-0.5"
             aria-label="Elegir un color exacto"
           />
-          <span className="font-mono text-[10px] text-zinc-300 uppercase">{color}</span>
+          <span className="tabular-nums text-[10px] text-label-2 uppercase">{color}</span>
         </div>
       </div>
 
       {onAlphaChange && (
-        <div className="mt-2.5 border-t border-zinc-800/80 pt-2 text-[11px] text-zinc-400">
+        <div className="mt-2.5 border-t border-border pt-2 text-[11px] text-label-3">
           <div className="mb-1 flex items-center justify-between">
             <span>Transparencia</span>
           </div>
@@ -103,7 +103,7 @@ export const ColorPopover = ({
             step="0.05"
             value={alpha}
             onChange={(event) => onAlphaChange(parseFloat(event.target.value))}
-            className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-zinc-200"
+            className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-fill-strong accent-primary"
             aria-label="Ajustar transparencia"
           />
         </div>

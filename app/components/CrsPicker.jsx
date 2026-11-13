@@ -34,7 +34,7 @@ export const CrsPicker = ({ current, onChoose, onClose, anchorRect, anchorEl }) 
       role="dialog"
       aria-label="Elegir el sistema de coordenadas"
       style={{ top, left }}
-      className="fixed z-[60] max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl"
+      className="fixed z-[60] max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border glass-strong text-foreground"
     >
       <div className="p-1.5">
         {CRS_LIST.map((crs) => {
@@ -49,23 +49,23 @@ export const CrsPicker = ({ current, onChoose, onClose, anchorRect, anchorEl }) 
               }}
               aria-pressed={elegido}
               className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                elegido ? "bg-zinc-800 text-white border border-zinc-700" : "hover:bg-zinc-800/50 text-zinc-300"
+                elegido ? "border border-transparent bg-primary/10 text-foreground" : "hover:bg-fill-strong/70 text-label-2"
               }`}
             >
               <span
                 className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
-                  elegido ? "bg-white text-zinc-950" : "border border-zinc-700 bg-zinc-900/50"
+                  elegido ? "bg-primary text-primary-foreground" : "border border-label-5 bg-card"
                 }`}
               >
                 {elegido && <Check className="h-3 w-3" />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className={`block text-[13px] font-medium ${elegido ? "text-white" : "text-zinc-200"}`}>{crs.label}</span>
-                <span className="mt-0.5 block text-[11px] leading-tight text-zinc-400">
+                <span className={`block text-[13px] font-medium ${elegido ? "text-foreground" : "text-foreground"}`}>{crs.label}</span>
+                <span className="mt-0.5 block text-[11px] leading-tight text-label-3">
                   {crs.hint}
                 </span>
               </span>
-              <span className="shrink-0 font-mono text-[10px] text-zinc-400">EPSG:{crs.id}</span>
+              <span className="shrink-0 tabular-nums text-[10px] text-label-3">EPSG:{crs.id}</span>
             </button>
           )
         })}

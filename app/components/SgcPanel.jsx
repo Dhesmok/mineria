@@ -54,12 +54,12 @@ const Atributo = ({ field, value }) => (
         cuál de los dos campos es. Y en el teléfono no hay ratón que pasar por
         encima para leer el `title`. */}
     <span
-      className="w-[38%] shrink-0 break-words text-[10px] uppercase leading-tight tracking-wide text-zinc-400"
+      className="w-[38%] shrink-0 break-words text-[10px] uppercase leading-tight tracking-wide text-label-3"
       title={field}
     >
       {field}
     </span>
-    <span className="min-w-0 flex-1 break-words text-[11px] leading-snug text-zinc-200">
+    <span className="min-w-0 flex-1 break-words text-[11px] leading-snug text-foreground">
       {linkPartsOf(value).map((parte, i) =>
         parte.href ? (
           <a
@@ -70,7 +70,7 @@ const Atributo = ({ field, value }) => (
             // por qué saber desde dónde se llegó.
             rel="noopener noreferrer"
             title={parte.href}
-            className="break-all font-medium text-sky-400 underline decoration-sky-500/40 underline-offset-2 transition-colors hover:text-sky-300"
+            className="break-all font-medium text-primary underline decoration-primary/40 underline-offset-2 transition-colors hover:text-primary"
           >
             {shortLinkText(parte.text)}
           </a>
@@ -106,12 +106,12 @@ const PonerPlancha = ({ resultado, lngLat, onCargar, onDismiss }) => {
   if (!url) return null
 
   return (
-    <div className="mb-2.5 rounded-xl border border-zinc-700/80 bg-zinc-900/90 p-2 shadow-sm">
-      <div className="mb-1.5 flex items-center justify-between text-[10px] text-zinc-400">
-        <span className="font-medium text-zinc-300">Resolución</span>
-        <span className="tabular-nums text-zinc-400">{resolucion.toLocaleString()} px</span>
+    <div className="mb-2.5 rounded-xl border border-border bg-fill p-2 shadow-sm">
+      <div className="mb-1.5 flex items-center justify-between text-[10px] text-label-3">
+        <span className="font-medium text-label-2">Resolución</span>
+        <span className="tabular-nums text-label-3">{resolucion.toLocaleString()} px</span>
       </div>
-      <div className="mb-2 grid grid-cols-3 gap-1 rounded-lg bg-zinc-800/80 p-0.5">
+      <div className="mb-2 grid grid-cols-3 gap-1 rounded-lg bg-fill-strong p-0.5">
         {OPCIONES_RESOLUCION.map((opc) => {
           const activa = resolucion === opc.valor
           return (
@@ -121,8 +121,8 @@ const PonerPlancha = ({ resultado, lngLat, onCargar, onDismiss }) => {
               onClick={() => setResolucion(opc.valor)}
               className={`rounded-md py-1 text-center transition-all ${
                 activa
-                  ? "bg-blue-600 font-semibold text-white shadow-sm"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-primary font-semibold text-white shadow-sm"
+                  : "text-label-3 hover:text-foreground"
               }`}
             >
               <div className="text-[10px]">{opc.etiqueta}</div>
@@ -144,7 +144,7 @@ const PonerPlancha = ({ resultado, lngLat, onCargar, onDismiss }) => {
           })
           onDismiss?.()
         }}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-blue-500/50 bg-blue-600 hover:bg-blue-500 px-2 py-1.5 text-[11px] font-semibold text-white transition-colors shadow-sm"
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary hover:bg-primary px-2 py-1.5 text-[11px] font-semibold text-white transition-colors shadow-sm"
       >
         <MapIcon className="h-3.5 w-3.5" />
         Poner la plancha sobre el mapa
@@ -228,17 +228,17 @@ export const SgcPanel = ({
         // Decirlo, y no dejar la tarjeta vacía: «no hay dato aquí» y «la consulta
         // falló» se ven igual si no se distinguen, y la primera es una respuesta
         // legítima —hay huecos de cartografía—.
-        <p className="px-2.5 py-2 text-[11px] leading-snug text-zinc-400">
+        <p className="px-2.5 py-2 text-[11px] leading-snug text-label-3">
           No hay unidades cartografiadas en este punto para las capas encendidas.
         </p>
       ) : (
         <div className="max-h-[16rem] overflow-y-auto px-2.5 py-2">
           {resultados.map((resultado, i) => (
-            <div key={`${resultado.layerKey}-${i}`} className={i > 0 ? "mt-2.5 border-t border-zinc-800 pt-2" : ""}>
-              <p className="text-[11px] font-semibold leading-snug text-white">
+            <div key={`${resultado.layerKey}-${i}`} className={i > 0 ? "mt-2.5 border-t border-border pt-2" : ""}>
+              <p className="text-[11px] font-semibold leading-snug text-foreground">
                 {resultado.value || resultado.layerName}
               </p>
-              <p className="mb-1 text-[10px] text-zinc-400">
+              <p className="mb-1 text-[10px] text-label-3">
                 {layerByKey(resultado.layerKey)?.label ??
                   sgcLayerByKey(resultado.layerKey)?.label ??
                   anhLayerByKey(resultado.layerKey)?.label ??
@@ -280,10 +280,10 @@ export const SgcPanel = ({
         type="button"
         onClick={() => setLeyendaAbierta((abierta) => !abierta)}
         aria-expanded={leyendaAbierta}
-        className="flex w-full items-center justify-between gap-2 border-t border-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-300 transition-colors hover:bg-zinc-850/60"
+        className="flex w-full items-center justify-between gap-2 border-t border-border px-2.5 py-1.5 text-[11px] text-label-2 transition-colors hover:bg-fill-strong"
       >
         <span>Simbología</span>
-        <span className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+        <span className="flex items-center gap-1.5 text-[10px] text-label-3">
           {leyendaVisible.length === 0
             ? "sin datos"
             : leyendaVisible.length === 1
@@ -296,15 +296,15 @@ export const SgcPanel = ({
       </button>
 
       {leyendaAbierta && (
-        <div className="overflow-y-auto border-t border-zinc-800 px-2.5 py-2" style={{ maxHeight: ALTO_LEYENDA }}>
+        <div className="overflow-y-auto border-t border-border px-2.5 py-2" style={{ maxHeight: ALTO_LEYENDA }}>
           {leyendaVisible.length === 0 ? (
-            <p className="text-[11px] leading-snug text-zinc-400">
+            <p className="text-[11px] leading-snug text-label-3">
               El servicio no devolvió simbología para lo que está encendido.
             </p>
           ) : (
             leyendaVisible.map((capa) => (
               <div key={`${capa.key}-${capa.layerId}`} className="mb-2 last:mb-0">
-                <p className="mb-1 text-[10px] uppercase tracking-wide text-zinc-400">
+                <p className="mb-1 text-[10px] uppercase tracking-wide text-label-3">
                   {capa.layerName}
                 </p>
                 {capa.items.map((item, i) => (
@@ -320,7 +320,7 @@ export const SgcPanel = ({
                         optimizar. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={item.image} alt="" className="h-3.5 w-5 shrink-0 object-contain" />
-                    <span className="flex-1 text-[11px] leading-tight text-zinc-200">
+                    <span className="flex-1 text-[11px] leading-tight text-foreground">
                       {item.label || "sin nombre"}
                     </span>
                   </div>

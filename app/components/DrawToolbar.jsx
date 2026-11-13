@@ -133,14 +133,14 @@ export const DrawToolbar = ({
             type="button"
             onClick={() => setPaletaAbierta((abierta) => !abierta)}
             aria-expanded={paletaAbierta}
-            className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-zinc-200 transition-colors hover:bg-zinc-800/60"
+            className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-foreground transition-colors hover:bg-fill-strong/70"
           >
-            <Palette className="h-4 w-4 shrink-0 text-zinc-400" />
+            <Palette className="h-4 w-4 shrink-0 text-label-3" />
             <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-medium leading-tight text-zinc-200">
+              <span className="block text-[13px] font-medium leading-tight text-foreground">
                 {hasSelection ? "Color de lo seleccionado" : "Color del dibujo"}
               </span>
-              <span className="mt-0.5 block text-[11px] leading-tight text-zinc-400">
+              <span className="mt-0.5 block text-[11px] leading-tight text-label-3">
                 {paletaAbierta ? "Pulsa para recoger" : "Pulsa para cambiarlo"}
               </span>
             </span>
@@ -155,7 +155,7 @@ export const DrawToolbar = ({
 
           {/* Sobre fondo oscuro en su propio recuadro */}
           {paletaAbierta && (
-            <div className="mx-1 mb-1 rounded-xl border border-zinc-800 bg-zinc-950/80 px-2.5 py-2">
+            <div className="mx-1 mb-1 rounded-xl bg-fill px-2.5 py-2">
               <div className="grid grid-cols-7 gap-1.5">
                 {DRAW_PALETTE.map((swatch) => {
                   const elegido = swatch.toLowerCase() === String(drawingColor).toLowerCase()
@@ -167,7 +167,7 @@ export const DrawToolbar = ({
                       title={swatch}
                       aria-label={`Usar el color ${swatch}`}
                       aria-pressed={elegido}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-900 transition-transform hover:scale-110"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-fill transition-transform hover:scale-110"
                       style={{
                         backgroundColor: swatch,
                         border: `1.5px solid ${darken(swatch, 0.35)}`,
@@ -181,12 +181,12 @@ export const DrawToolbar = ({
                 })}
               </div>
 
-              <label className="mt-2.5 flex items-center gap-2 border-t border-zinc-800 pt-2 text-[11px] text-zinc-400">
+              <label className="mt-2.5 flex items-center gap-2 border-t border-border pt-2 text-[11px] text-label-3">
                 <input
                   type="color"
                   value={drawingColor}
                   onChange={(event) => onColorChange(event.target.value)}
-                  className="h-7 w-9 cursor-pointer rounded-lg border border-zinc-700 bg-zinc-900 p-0.5"
+                  className="h-7 w-9 cursor-pointer rounded-lg border border-input bg-fill p-0.5"
                   aria-label="Elegir un color exacto"
                 />
                 Otro color

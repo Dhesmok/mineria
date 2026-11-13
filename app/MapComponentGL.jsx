@@ -855,11 +855,11 @@ export default function MapComponentGL({
             onPointerDown={handleBoxPointerDown}
             onPointerMove={handleBoxPointerMove}
             onPointerUp={handleBoxPointerUp}
-            className="absolute inset-0 z-30 cursor-crosshair select-none touch-none bg-black/15"
+            className="absolute inset-0 z-30 cursor-crosshair select-none touch-none bg-black/5"
           >
             {boxDragStart && boxDragCurrent && (
               <div
-                className="absolute border-2 border-emerald-400 bg-emerald-500/25 rounded shadow-[0_0_20px_rgba(16,185,129,0.4)] pointer-events-none"
+                className="absolute border-2 border-success/30 bg-success/10 rounded shadow-[0_0_20px_rgba(16,185,129,0.4)] pointer-events-none"
                 style={{
                   left: Math.min(boxDragStart.x, boxDragCurrent.x),
                   top: Math.min(boxDragStart.y, boxDragCurrent.y),
@@ -898,7 +898,7 @@ export default function MapComponentGL({
         //
         // Alineado abajo (`items-end`) para que el panel salga a la altura del
         // último botón y no flotando a media pantalla.
-        className={`pointer-events-auto absolute bottom-16 right-2 z-10 items-end gap-2 md:bottom-10 md:right-4 ${
+        className={`pointer-events-auto absolute bottom-[6rem] right-2 z-10 items-end gap-2 md:bottom-10 md:right-4 ${
           panelOpen ? "hidden md:flex" : "flex"
         }`}
       >
@@ -925,7 +925,7 @@ export default function MapComponentGL({
                   aria-expanded={!dibujoCompacto}
                   aria-label={dibujoCompacto ? "Desplegar las herramientas" : "Recoger las herramientas"}
                   title={dibujoCompacto ? "Desplegar" : "Recoger a solo iconos"}
-                  className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                  className="rounded p-0.5 text-label-3 transition-colors hover:bg-fill-strong hover:text-foreground"
                 >
                   <ChevronLeft
                     className={`h-3.5 w-3.5 transition-transform ${dibujoCompacto ? "rotate-180" : ""}`}
@@ -948,7 +948,7 @@ export default function MapComponentGL({
 
           {/* 250 px es mucho en un celular y poco en un monitor grande. */}
           {isCompassActive && (
-            <div className="rounded-xl border border-zinc-800 bg-[#09090b]/95 px-3 py-2 text-zinc-100 shadow-2xl backdrop-blur-2xl">
+            <div className="rounded-xl border glass px-3 py-2 text-foreground">
               <SliderRow
                 id="tamano-brujula"
                 label="Brújula"
@@ -1055,7 +1055,7 @@ export default function MapComponentGL({
             disabled={isDownloading}
             icon={isDownloading ? Loader2 : Download}
             title="Descargar en un ZIP las capas encendidas dentro del área dibujada"
-            className={`!border-emerald-700 !bg-emerald-600 !text-white hover:!bg-emerald-700 disabled:opacity-60 ${
+            className={`!border-transparent !bg-primary !text-white hover:!bg-primary/90 !shadow-[0_6px_16px_-4px_rgba(0,113,227,0.5)] disabled:opacity-60 ${
               isDownloading ? "[&_svg]:animate-spin" : ""
             }`}
           >
@@ -1063,8 +1063,16 @@ export default function MapComponentGL({
           </MapButton>
         )}
 
-        {/* Controles de navegación y HUD unificados del mapa */}
-        <div className="flex flex-col items-end gap-2">
+        {/* Los controles del mapa, en tres grupos como en Apple Maps: las
+            herramientas de análisis, el mapa base con la ubicación, y la
+            navegación. Eran seis piezas sueltas apiladas, cada una con su
+            borde y su sombra, y no se veía qué iba con qué. */}
+        {/* z-40 en los grupos y no solo en sus menús: el vidrio
+            (backdrop-filter) abre un contexto de apilado propio, y un menú
+            dentro de él no puede subir por encima del panel de dibujo por mucho
+            z-index que lleve. Se veían los menús por detrás de ese panel. */}
+        <div className="flex flex-col items-end gap-2.5">
+          <div role="group" aria-label="Herramientas de análisis" className="glass relative z-40 flex flex-col items-center gap-0.5 rounded-[14px] p-1">
           {/* Botón Dibujo y Medidas */}
           <button
             type="button"
@@ -1072,13 +1080,13 @@ export default function MapComponentGL({
             title={dibujoAbierto ? "Cerrar dibujo y medidas" : "Herramientas de dibujo y medición"}
             aria-label="Dibujo y medidas"
             aria-expanded={dibujoAbierto}
-            className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+            className={`flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] transition-colors ${
               dibujoAbierto || (mode && mode !== "simple_select")
-                ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
-                : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                ? "bg-primary/10 text-primary"
+                : "text-label-2 hover:bg-fill-strong hover:text-foreground"
             }`}
           >
-            <PencilRuler className="h-4.5 w-4.5" />
+            <PencilRuler className="h-[18px] w-[18px]" />
           </button>
 
           {/* Botón Bloque 3D del Terreno */}
@@ -1110,13 +1118,13 @@ export default function MapComponentGL({
             }
             aria-label="Bloque 3D del terreno"
             aria-expanded={blockModelOpen}
-            className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+            className={`flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] transition-colors ${
               blockModelOpen || isDrawingBox
-                ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
-                : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                ? "bg-primary/10 text-primary"
+                : "text-label-2 hover:bg-fill-strong hover:text-foreground"
             }`}
           >
-            <Boxes className="h-4.5 w-4.5" />
+            <Boxes className="h-[18px] w-[18px]" />
           </button>
 
           {/* Botón Análisis de Terreno */}
@@ -1139,13 +1147,13 @@ export default function MapComponentGL({
               title="Análisis de terreno (pendiente, orientación, corte topográfico, cota)"
               aria-label="Análisis de terreno"
               aria-expanded={terrainOpen}
-              className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+              className={`flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] transition-colors ${
                 terrainOpen || Boolean(terrainMode) || profileActive || queryingTerrain
-                  ? "border-emerald-500/60 bg-emerald-950/40 text-emerald-300 shadow-md"
-                  : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                  ? "bg-primary/10 text-primary"
+                  : "text-label-2 hover:bg-fill-strong hover:text-foreground"
               }`}
             >
-              <Mountain className="h-4.5 w-4.5" />
+              <Mountain className="h-[18px] w-[18px]" />
             </button>
             <div
               className={`absolute right-full mr-3 bottom-0 z-30 origin-bottom-right transition-all duration-200 ease-out ${
@@ -1166,6 +1174,9 @@ export default function MapComponentGL({
             </div>
           </div>
 
+          </div>
+
+          <div role="group" aria-label="Mapa base y ubicación" className="glass relative z-40 flex flex-col items-center gap-0.5 rounded-[14px] p-1">
           {/* Botón Mapa Base */}
           <div
             ref={basemapContainerRef}
@@ -1186,13 +1197,13 @@ export default function MapComponentGL({
               title="Cambiar mapa base (6 estilos disponibles)"
               aria-label="Mapa base"
               aria-expanded={basemapOpen}
-              className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-2xl backdrop-blur-2xl transition-all ${
+              className={`flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] transition-colors ${
                 basemapOpen
-                  ? "border-white/40 bg-zinc-800 text-white"
-                  : "border-zinc-800/90 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                  ? "bg-primary/10 text-primary"
+                  : "text-label-2 hover:bg-fill-strong hover:text-foreground"
               }`}
             >
-              <MapIcon className="h-4.5 w-4.5" />
+              <MapIcon className="h-[18px] w-[18px]" />
             </button>
             <div
               className={`absolute right-full mr-3 bottom-0 z-30 origin-bottom-right transition-all duration-200 ease-out ${
@@ -1218,21 +1229,23 @@ export default function MapComponentGL({
             onClick={handleLocateUser}
             title={isLocating ? "Ubicando…" : hasLocated ? "Ubicación GPS activa" : "Activar GPS"}
             aria-label="Ubicación GPS"
-            className={`flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-800/90 bg-[#09090b]/90 shadow-2xl backdrop-blur-2xl transition-all ${
+            className={`flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] transition-colors ${
               hasLocated
-                ? "border-emerald-600/60 bg-emerald-950/40 text-emerald-300"
-                : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                ? "bg-primary/10 text-primary"
+                : "text-label-2 hover:bg-fill-strong hover:text-foreground"
             }`}
           >
-            <Crosshair className={`h-4.5 w-4.5 ${isLocating ? "animate-spin" : ""}`} />
+            <Crosshair className={`h-[18px] w-[18px] ${isLocating ? "animate-spin" : ""}`} />
           </button>
+
+          </div>
 
           {/* MapHUD: Norte, Zoom +, Zoom -, 3D y Popover de opciones 3D */}
           <div
             ref={hud3DContainerRef}
             onMouseEnter={handleHud3DMouseEnter}
             onMouseLeave={handleHud3DMouseLeave}
-            className="relative flex items-center"
+            className="relative z-40 flex items-center"
           >
             {is3D && (
               <div
@@ -1312,8 +1325,8 @@ export default function MapComponentGL({
 
       {/* Banner de instrucción para dibujar el rectángulo del bloque 3D */}
       {isDrawingBox && (
-        <div className="pointer-events-auto fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full border border-emerald-500/50 bg-[#09090b]/95 px-5 py-2.5 text-xs sm:text-sm font-medium text-emerald-300 shadow-2xl backdrop-blur-2xl animate-in fade-in slide-in-from-top-4">
-          <Square className="h-4 w-4 text-emerald-400 shrink-0" />
+        <div className="pointer-events-auto fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full border border-success/30 glass px-5 py-2.5 text-xs sm:text-sm font-medium text-success animate-in fade-in slide-in-from-top-4">
+          <Square className="h-4 w-4 text-success shrink-0" />
           <span>Haz clic y arrastra sobre el mapa para definir el área del bloque 3D</span>
           <button
             type="button"
@@ -1322,7 +1335,7 @@ export default function MapComponentGL({
               setBoxDragStart(null)
               setBoxDragCurrent(null)
             }}
-            className="ml-2 rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+            className="ml-2 rounded-full p-1 text-label-3 hover:bg-fill-strong hover:text-foreground transition-colors"
             title="Cancelar selección"
           >
             <X className="h-3.5 w-3.5" />
@@ -1402,13 +1415,13 @@ export default function MapComponentGL({
       {error && showErrorBanner && (
         <div
           role="alert"
-          className="pointer-events-auto fixed top-20 left-1/2 -translate-x-1/2 z-50 flex w-[min(32rem,calc(100vw-1.5rem))] items-center justify-between gap-3 rounded-2xl border border-rose-500/50 bg-[#18090c]/95 px-4 py-2.5 text-rose-100 shadow-2xl backdrop-blur-2xl"
+          className="pointer-events-auto fixed top-20 left-1/2 -translate-x-1/2 z-50 flex w-[min(32rem,calc(100vw-1.5rem))] items-center justify-between gap-3 rounded-2xl border border-danger/30 glass px-4 py-2.5 text-danger"
         >
           <span className="text-xs sm:text-[13px] font-medium leading-snug">{error}</span>
           <button
             type="button"
             onClick={() => setShowErrorBanner(false)}
-            className="shrink-0 rounded-lg border border-rose-500/40 bg-rose-950/80 px-2.5 py-1 text-xs font-semibold text-rose-200 transition-colors hover:bg-rose-900 hover:text-white"
+            className="shrink-0 rounded-lg border border-danger/30 bg-danger/10 px-2.5 py-1 text-xs font-semibold text-danger transition-colors hover:bg-danger/10 hover:text-foreground"
           >
             Cerrar
           </button>
@@ -1423,11 +1436,11 @@ export default function MapComponentGL({
           onPointerDown={handleSplitPointerDown}
           onPointerMove={handleSplitPointerMove}
           onPointerUp={handleSplitPointerUp}
-          className="hidden md:flex relative w-2 bg-zinc-950 border-x border-zinc-800 hover:border-emerald-500 cursor-col-resize items-center justify-center transition-colors z-30 select-none touch-none group shrink-0"
+          className="hidden md:flex relative w-2 bg-transparent border-x border-border hover:border-success/30 cursor-col-resize items-center justify-center transition-colors z-30 select-none touch-none group shrink-0"
           title="Arrastrar para ajustar la división de pantalla"
         >
-          <div className="absolute w-5 h-10 rounded-full bg-zinc-800 border border-zinc-700 group-hover:border-emerald-500 flex items-center justify-center shadow-lg transition-colors">
-            <GripVertical className="h-3.5 w-3.5 text-zinc-400 group-hover:text-emerald-300" />
+          <div className="absolute w-5 h-10 rounded-full bg-fill-strong border border-input group-hover:border-success/30 flex items-center justify-center shadow-lg transition-colors">
+            <GripVertical className="h-3.5 w-3.5 text-label-3 group-hover:text-success" />
           </div>
         </div>
       )}
@@ -1503,26 +1516,26 @@ export default function MapComponentGL({
           font-size: 11px;
           font-weight: 600;
           letter-spacing: 0.02em;
-          color: #f4f4f5;
-          background: rgba(9, 9, 11, 0.88);
-          border: 1px solid rgba(63, 63, 70, 0.8);
-          border-radius: 6px;
+          color: #1d1d1f;
+          background: rgba(255, 255, 255, 0.86);
+          border: 1px solid rgba(255, 255, 255, 0.7);
+          border-radius: 7px;
           padding: 2px 7px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+          box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.18);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           white-space: nowrap;
         }
         .maplibregl-popup-content {
-          background: rgba(9, 9, 11, 0.95) !important;
-          color: #f4f4f5 !important;
+          background: rgba(255, 255, 255, 0.9) !important;
+          color: #1d1d1f !important;
           font-size: 12px !important;
           line-height: 1.4 !important;
           border-radius: 16px !important;
-          border: 1px solid rgba(39, 39, 42, 0.8) !important;
-          box-shadow: 0 20px 45px -8px rgba(0, 0, 0, 0.85) !important;
-          backdrop-filter: blur(16px) !important;
-          -webkit-backdrop-filter: blur(16px) !important;
+          border: 1px solid rgba(255, 255, 255, 0.7) !important;
+          box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.1), 0 16px 40px -10px rgba(0, 0, 0, 0.25) !important;
+          backdrop-filter: blur(24px) saturate(180%) !important;
+          -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
           max-height: 420px;
           overflow-y: auto;
           padding: 14px 16px !important;
@@ -1534,7 +1547,7 @@ export default function MapComponentGL({
           gap: 8px;
           margin-bottom: 6px;
           padding-bottom: 6px;
-          border-bottom: 1px solid rgba(63, 63, 70, 0.5);
+          border-bottom: 1px solid rgba(60, 60, 67, 0.12);
         }
         .popup-type-badge {
           display: inline-flex;
@@ -1543,23 +1556,23 @@ export default function MapComponentGL({
           border-radius: 9999px;
           font-size: 10px;
           font-weight: 600;
-          background: rgba(16, 185, 129, 0.12);
-          color: #6ee7b7;
-          border: 1px solid rgba(16, 185, 129, 0.25);
+          background: rgba(0, 113, 227, 0.08);
+          color: #0060c0;
+          border: 1px solid rgba(0, 113, 227, 0.16);
           letter-spacing: 0.02em;
         }
         .popup-code-title {
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
           font-size: 11px;
           font-weight: 700;
-          color: #e4e4e7;
+          color: #1d1d1f;
         }
         .maplibregl-popup-content h3 {
           font-size: 12px !important;
           font-weight: 600 !important;
           letter-spacing: 0.04em;
           text-transform: uppercase;
-          color: #a1a1aa !important;
+          color: #86868b !important;
           margin-bottom: 6px !important;
           margin-top: 2px !important;
         }
@@ -1571,8 +1584,8 @@ export default function MapComponentGL({
           gap: 10px;
           margin: 0;
           padding: 4px 0 !important;
-          border-bottom: 1px solid rgba(39, 39, 42, 0.4) !important;
-          color: #f4f4f5 !important;
+          border-bottom: 1px solid rgba(60, 60, 67, 0.1) !important;
+          color: #1d1d1f !important;
           font-size: 11.5px !important;
         }
         .maplibregl-popup-content .popup-row-na {
@@ -1583,19 +1596,19 @@ export default function MapComponentGL({
           padding-bottom: 0 !important;
         }
         .maplibregl-popup-tip {
-          border-top-color: rgba(9, 9, 11, 0.95) !important;
-          border-bottom-color: rgba(9, 9, 11, 0.95) !important;
+          border-top-color: rgba(255, 255, 255, 0.9) !important;
+          border-bottom-color: rgba(255, 255, 255, 0.9) !important;
         }
         .maplibregl-popup-close-button {
-          color: #a1a1aa !important;
+          color: #86868b !important;
           padding: 4px 8px !important;
           font-size: 16px !important;
           border-radius: 8px !important;
           transition: color 0.15s, background 0.15s;
         }
         .maplibregl-popup-close-button:hover {
-          color: #ffffff !important;
-          background: rgba(255, 255, 255, 0.1) !important;
+          color: #1d1d1f !important;
+          background: rgba(120, 120, 128, 0.12) !important;
         }
         @media (pointer: coarse) {
           .maplibregl-popup-close-button {
@@ -1606,8 +1619,8 @@ export default function MapComponentGL({
           }
         }
         .maplibregl-popup-content p strong {
-          font-weight: 600 !important;
-          color: #a1a1aa !important;
+          font-weight: 500 !important;
+          color: #6e6e73 !important;
         }
         /* Esta regla estaba puesta sobre todos los globos y era la causa de que
            la ficha de un expediente saliera con un renglón en blanco entre cada
@@ -1648,10 +1661,13 @@ export default function MapComponentGL({
            un trackpad es incómodo de acertar —sobre todo la brújula, que además
            hay que arrastrar—. A 36 px se pulsan sin apuntar. Los controles
            grandes de giro e inclinación viven aparte, en el panel del 3D. */
-        /* Evitar que la escala y la atribución queden ocultas tras el riel lateral en escritorio o la barra inferior en móvil */
+        /* La escala se corre lo que tape la barra lateral, que lo publica en
+           la variable --sidebar-offset (ver components.jsx): abierta mide 384
+           px con su margen, y recogida no tapa la esquina. */
         @media (min-width: 768px) {
           .maplibregl-ctrl-bottom-left {
-            left: 58px !important;
+            left: var(--sidebar-offset, 0px) !important;
+            transition: left 0.3s ease-out;
           }
         }
         @media (max-width: 767px) {
@@ -1661,9 +1677,9 @@ export default function MapComponentGL({
           }
         }
         .maplibregl-ctrl-scale {
-          background: rgba(9, 9, 11, 0.85) !important;
-          color: #e4e4e7 !important;
-          border-color: #71717a !important;
+          background: rgba(255, 255, 255, 0.82) !important;
+          color: #424245 !important;
+          border-color: #86868b !important;
           border-radius: 4px !important;
           padding: 0 6px !important;
           font-size: 10px !important;

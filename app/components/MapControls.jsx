@@ -35,10 +35,10 @@ export const MapButton = ({ active, icon: Icon, badge, className = "", children,
     title={typeof children === "string" ? children : undefined}
     aria-label={typeof children === "string" ? children : undefined}
     {...props}
-    className={`flex h-10 items-center gap-2 rounded-xl border px-3 text-[12.5px] font-medium shadow-sm transition-all md:h-9 ${
+    className={`flex h-10 items-center gap-2 rounded-full border px-4 text-[13px] font-medium transition-all md:h-9 ${
       active
-        ? "border-zinc-700 bg-zinc-800 text-white shadow"
-        : "border-zinc-800/80 bg-[#09090b]/90 text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
+        ? "border-transparent bg-primary/10 text-primary"
+        : "glass text-label-2 hover:text-foreground"
     } ${className}`}
   >
     {Icon && <Icon className="h-4 w-4 shrink-0" />}
@@ -46,7 +46,7 @@ export const MapButton = ({ active, icon: Icon, badge, className = "", children,
     {badge && (
       <span
         className={`ml-0.5 hidden rounded px-1.5 py-0.5 text-[9px] font-semibold md:inline ${
-          active ? "bg-white/20 text-white" : "bg-zinc-800 text-zinc-400"
+          active ? "bg-foreground/10 text-foreground" : "bg-fill-strong text-label-3"
         }`}
       >
         {badge}
@@ -72,7 +72,7 @@ export const MapHUD = ({
   <div
     role="toolbar"
     aria-label="Controles de navegación del mapa"
-    className="flex flex-col items-center gap-1 rounded-2xl border border-zinc-800/90 bg-[#09090b]/90 p-1.5 shadow-2xl backdrop-blur-2xl"
+    className="glass flex flex-col items-center gap-0.5 rounded-[14px] p-1"
   >
     {/* Brújula interactiva */}
     <button
@@ -80,20 +80,20 @@ export const MapHUD = ({
       onClick={onResetNorth}
       title="Orientar al Norte (0°)"
       aria-label="Orientar al Norte"
-      className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+      className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] text-label-2 hover:bg-fill-strong hover:text-foreground transition-colors"
     >
       <div
         style={{ transform: `rotate(${-bearing}deg)` }}
         className="transition-transform duration-150"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <polygon points="12,2 16,12 12,9 8,12" fill="#ef4444" />
-          <polygon points="12,22 16,12 12,9 8,12" fill="#71717a" />
+          <polygon points="12,2 16,12 12,9 8,12" fill="#ff3b30" />
+          <polygon points="12,22 16,12 12,9 8,12" fill="#c7c7cc" />
         </svg>
       </div>
     </button>
 
-    <div className="h-px w-6 bg-zinc-800" />
+    <div className="h-px w-5 bg-border" />
 
     {/* Zoom In */}
     <button
@@ -101,7 +101,7 @@ export const MapHUD = ({
       onClick={onZoomIn}
       title="Acercar mapa (+)"
       aria-label="Acercar mapa"
-      className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-lg font-semibold"
+      className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] text-label-2 hover:bg-fill-strong hover:text-foreground transition-colors text-lg font-normal"
     >
       +
     </button>
@@ -112,12 +112,12 @@ export const MapHUD = ({
       onClick={onZoomOut}
       title="Alejar mapa (−)"
       aria-label="Alejar mapa"
-      className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-xl text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-lg font-semibold"
+      className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] text-label-2 hover:bg-fill-strong hover:text-foreground transition-colors text-lg font-normal"
     >
       −
     </button>
 
-    <div className="h-px w-6 bg-zinc-800" />
+    <div className="h-px w-5 bg-border" />
 
     {/* 3D / 2D Toggle */}
     <button
@@ -133,10 +133,10 @@ export const MapHUD = ({
       }
       aria-label={is3D ? "Volver a 2D" : "Perspectiva 3D"}
       aria-pressed={is3D}
-      className={`flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-xl text-xs font-bold transition-all ${
+      className={`flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] text-[12px] font-semibold transition-all ${
         is3D || hud3DOpen
-          ? "bg-white text-black shadow-sm"
-          : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "text-label-3 hover:bg-fill-strong hover:text-foreground"
       }`}
     >
       {is3D ? "2D" : "3D"}
@@ -152,7 +152,7 @@ export const SliderRow = ({ id, label, title, value, display, min, max, step, on
     <label
       htmlFor={id}
       title={title}
-      className="w-20 shrink-0 text-[11px] leading-tight text-zinc-400"
+      className="w-20 shrink-0 text-[11px] leading-tight text-label-3"
     >
       {label}
     </label>
@@ -164,9 +164,9 @@ export const SliderRow = ({ id, label, title, value, display, min, max, step, on
       step={step}
       value={value}
       onChange={(event) => onChange(parseFloat(event.target.value))}
-      className="min-w-0 flex-1 h-1.5 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-white"
+      className="min-w-0 flex-1 h-1.5 cursor-pointer appearance-none rounded-lg bg-fill-strong accent-primary"
     />
-    <span className="w-11 shrink-0 text-right text-[11px] tabular-nums text-zinc-300">
+    <span className="w-11 shrink-0 text-right text-[11px] tabular-nums text-label-2">
       {display}
     </span>
   </div>
@@ -177,8 +177,8 @@ export const SliderRow = ({ id, label, title, value, display, min, max, step, on
  */
 export const MapNotice = ({ tone = "info", icon: Icon, children, onClose }) => {
   const tonos = {
-    info: "border-zinc-800 bg-[#09090b]/95 text-zinc-200",
-    warning: "border-amber-900/60 bg-[#1c1408]/95 text-amber-200",
+    info: "glass text-foreground",
+    warning: "border-warning/30 glass text-warning",
   }
 
   return (
@@ -193,7 +193,7 @@ export const MapNotice = ({ tone = "info", icon: Icon, children, onClose }) => {
           type="button"
           onClick={onClose}
           aria-label="Cerrar el aviso"
-          className="rounded p-1 opacity-60 transition-opacity hover:bg-white/10 hover:opacity-100"
+          className="rounded p-1 opacity-60 transition-opacity hover:bg-foreground/5 hover:opacity-100"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -212,11 +212,11 @@ export const RotateHint = ({ onClose }) => {
   }, [onClose])
 
   return (
-    <div className="pointer-events-auto absolute top-20 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-xl border border-zinc-800/90 bg-[#09090b]/95 py-2 pl-3 pr-2 text-[12.5px] text-zinc-200 shadow-2xl backdrop-blur-2xl">
-      <Rotate3d className="h-4 w-4 shrink-0 text-zinc-400" />
+    <div className="pointer-events-auto absolute top-20 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-xl border glass py-2 pl-3 pr-2 text-[12.5px] text-foreground">
+      <Rotate3d className="h-4 w-4 shrink-0 text-label-3" />
       <span>
         Mantén{" "}
-        <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-zinc-100">
+        <kbd className="rounded border border-input bg-fill-strong px-1.5 py-0.5 font-sans text-[11px] font-semibold text-foreground">
           Ctrl
         </kbd>{" "}
         y arrastra para girar e inclinar la escena
@@ -225,7 +225,7 @@ export const RotateHint = ({ onClose }) => {
         type="button"
         onClick={onClose}
         aria-label="Cerrar el aviso"
-        className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+        className="rounded p-1 text-label-3 transition-colors hover:bg-fill-strong hover:text-foreground"
       >
         <X className="h-3.5 w-3.5" />
       </button>
@@ -291,18 +291,18 @@ const GizmoSphere = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="relative h-36 w-36 cursor-grab active:cursor-grabbing rounded-full border border-zinc-700/80 bg-gradient-to-b from-zinc-850 to-zinc-950 shadow-[inset_0_0_24px_rgba(0,0,0,0.8),0_8px_20px_rgba(0,0,0,0.6)] flex items-center justify-center overflow-hidden touch-none"
+        className="relative h-36 w-36 cursor-grab active:cursor-grabbing rounded-full border border-border bg-gradient-to-b from-card to-card shadow-lg flex items-center justify-center overflow-hidden touch-none"
         title="Arrastra para rotar el rumbo e inclinar la vista 3D"
       >
         {/* Anillos de latitud y longitud estilo giroscopio */}
         <div
-          className="absolute inset-2 rounded-full border border-dashed border-zinc-600/40 pointer-events-none transition-transform duration-75"
+          className="absolute inset-2 rounded-full border border-dashed border-input pointer-events-none transition-transform duration-75"
           style={{
             transform: `perspective(300px) rotateX(${pitch}deg) rotateZ(${-bearing}deg)`,
           }}
         />
         <div
-          className="absolute inset-5 rounded-full border border-zinc-500/30 pointer-events-none transition-transform duration-75"
+          className="absolute inset-5 rounded-full border border-label-5 pointer-events-none transition-transform duration-75"
           style={{
             transform: `perspective(300px) rotateX(${pitch}deg) rotateZ(${-bearing}deg)`,
           }}
@@ -318,30 +318,30 @@ const GizmoSphere = ({
         >
           {/* Marcador Norte */}
           <div className="absolute top-0 flex flex-col items-center">
-            <span className="text-[10px] font-bold text-rose-400 font-mono tracking-wider">N</span>
-            <div className="h-4 w-1 bg-rose-500 rounded-full shadow-sm" />
+            <span className="text-[10px] font-bold text-danger tabular-nums tracking-wider">N</span>
+            <div className="h-4 w-1 bg-danger rounded-full shadow-sm" />
           </div>
           {/* Marcador Sur */}
           <div className="absolute bottom-0 flex flex-col items-center">
-            <div className="h-4 w-1 bg-zinc-500 rounded-full" />
-            <span className="text-[10px] font-bold text-zinc-400 font-mono">S</span>
+            <div className="h-4 w-1 bg-label-4 rounded-full" />
+            <span className="text-[10px] font-bold text-label-3 tabular-nums">S</span>
           </div>
           {/* Marcador Este */}
           <div className="absolute right-0 flex items-center">
-            <div className="w-4 h-1 bg-zinc-500 rounded-full" />
-            <span className="text-[10px] font-bold text-zinc-400 font-mono ml-0.5">E</span>
+            <div className="w-4 h-1 bg-label-4 rounded-full" />
+            <span className="text-[10px] font-bold text-label-3 tabular-nums ml-0.5">E</span>
           </div>
           {/* Marcador Oeste */}
           <div className="absolute left-0 flex items-center">
-            <span className="text-[10px] font-bold text-zinc-400 font-mono mr-0.5">O</span>
-            <div className="w-4 h-1 bg-zinc-500 rounded-full" />
+            <span className="text-[10px] font-bold text-label-3 tabular-nums mr-0.5">O</span>
+            <div className="w-4 h-1 bg-label-4 rounded-full" />
           </div>
           {/* Centro */}
-          <div className="h-3 w-3 rounded-full bg-white shadow-md ring-2 ring-zinc-700" />
+          <div className="h-3 w-3 rounded-full bg-white shadow-md ring-2 ring-border" />
         </div>
 
         {/* Pista de interacción */}
-        <span className="absolute bottom-2 text-[8.5px] font-mono text-zinc-500 pointer-events-none uppercase tracking-widest opacity-80">
+        <span className="absolute bottom-2 text-[8.5px] tabular-nums text-label-4 pointer-events-none uppercase tracking-widest opacity-80">
           Arrastrar
         </span>
       </div>
@@ -351,28 +351,28 @@ const GizmoSphere = ({
         <button
           type="button"
           onClick={onResetNorth}
-          className="rounded-lg border border-zinc-800 bg-zinc-900/80 py-1 text-center text-[10.5px] font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors"
+          className="rounded-lg border border-border bg-fill py-1 text-center text-[10.5px] font-medium text-foreground hover:bg-fill-strong hover:text-foreground transition-colors"
         >
           Norte
         </button>
         <button
           type="button"
           onClick={() => onChangeBearing?.(90)}
-          className="rounded-lg border border-zinc-800 bg-zinc-900/80 py-1 text-center text-[10.5px] font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors"
+          className="rounded-lg border border-border bg-fill py-1 text-center text-[10.5px] font-medium text-foreground hover:bg-fill-strong hover:text-foreground transition-colors"
         >
           Este
         </button>
         <button
           type="button"
           onClick={() => onChangeBearing?.(180)}
-          className="rounded-lg border border-zinc-800 bg-zinc-900/80 py-1 text-center text-[10.5px] font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors"
+          className="rounded-lg border border-border bg-fill py-1 text-center text-[10.5px] font-medium text-foreground hover:bg-fill-strong hover:text-foreground transition-colors"
         >
           Sur
         </button>
         <button
           type="button"
           onClick={() => onChangeBearing?.(270)}
-          className="rounded-lg border border-zinc-800 bg-zinc-900/80 py-1 text-center text-[10.5px] font-medium text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors"
+          className="rounded-lg border border-border bg-fill py-1 text-center text-[10.5px] font-medium text-foreground hover:bg-fill-strong hover:text-foreground transition-colors"
         >
           Oeste
         </button>
@@ -454,12 +454,12 @@ export const Hud3DPopover = ({
       aria-label="Perspectiva 3D del Terreno"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className="pointer-events-auto w-[min(305px,calc(100vw-4.5rem))] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-3.5 text-zinc-100 shadow-2xl backdrop-blur-2xl transition-all select-none"
+      className="pointer-events-auto w-[min(305px,calc(100vw-4.5rem))] rounded-2xl border glass-strong p-3.5 text-foreground transition-all select-none"
     >
       {/* Cabecera */}
-      <div className="mb-3 flex items-center justify-between border-b border-zinc-800/80 pb-2">
-        <div className="flex items-center gap-2 text-xs font-semibold text-zinc-100">
-          <Box className="h-4 w-4 text-white" />
+      <div className="mb-3 flex items-center justify-between border-b border-border pb-2">
+        <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+          <Box className="h-4 w-4 text-foreground" />
           <span className="tracking-wide">Perspectiva 3D</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -471,8 +471,8 @@ export const Hud3DPopover = ({
             aria-pressed={isSpinning}
             className={`flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10.5px] font-medium transition-all ${
               isSpinning
-                ? "bg-white text-black font-semibold shadow-sm"
-                : "border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                : "border border-border bg-fill text-label-2 hover:bg-fill-strong hover:text-foreground"
             }`}
           >
             <Rotate3d className={`h-3 w-3 ${isSpinning ? "animate-spin" : ""}`} />
@@ -486,8 +486,8 @@ export const Hud3DPopover = ({
             title={modeView === "sliders" ? "Cambiar a esfera de orientación 3D" : "Cambiar a deslizadores"}
             className={`flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10.5px] font-medium transition-all ${
               modeView === "gizmo"
-                ? "bg-zinc-800 text-white border border-zinc-700 font-semibold shadow-sm"
-                : "border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                ? "border border-transparent bg-primary/10 text-primary"
+                : "border border-border bg-fill text-label-2 hover:bg-fill-strong hover:text-foreground"
             }`}
           >
             <Orbit className="h-3 w-3" />
@@ -503,11 +503,11 @@ export const Hud3DPopover = ({
             aria-label={isPinned ? "Desfijar panel 3D" : "Fijar panel 3D"}
             className={`flex h-6 w-6 items-center justify-center rounded-lg border transition-all ${
               isPinned
-                ? "border-zinc-700 bg-zinc-800 text-white shadow-sm"
-                : "border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                ? "border-transparent bg-primary/10 text-primary"
+                : "border-border bg-fill text-label-3 hover:bg-fill-strong hover:text-foreground"
             }`}
           >
-            {isPinned ? <Pin className="h-3.5 w-3.5 fill-white" /> : <PinOff className="h-3.5 w-3.5" />}
+            {isPinned ? <Pin className="h-3.5 w-3.5 fill-current" /> : <PinOff className="h-3.5 w-3.5" />}
           </button>
         </div>
       </div>
@@ -522,18 +522,18 @@ export const Hud3DPopover = ({
             onResetNorth={onResetNorth}
           />
           {/* Lectura de ángulos y ajuste de relieve */}
-          <div className="mt-2 border-t border-zinc-800/80 pt-2.5">
-            <div className="mb-2 flex items-center justify-between text-[11px] font-mono">
-              <span className="text-zinc-400">
-                Inclinación: <span className="text-white font-semibold">{normPitch}°</span>
+          <div className="mt-2 border-t border-border pt-2.5">
+            <div className="mb-2 flex items-center justify-between text-[11px] tabular-nums">
+              <span className="text-label-3">
+                Inclinación: <span className="text-foreground font-semibold">{normPitch}°</span>
               </span>
-              <span className="text-zinc-400">
-                Rumbo: <span className="text-white font-semibold">{normBearing}° {compassHeading(normBearing)}</span>
+              <span className="text-label-3">
+                Rumbo: <span className="text-foreground font-semibold">{normBearing}° {compassHeading(normBearing)}</span>
               </span>
             </div>
             <div className="flex items-center justify-between text-[11px] mb-1">
-              <span className="font-medium text-zinc-300">Exageración vertical</span>
-              <span className="font-mono text-[10px] font-semibold text-white">
+              <span className="font-medium text-label-2">Exageración vertical</span>
+              <span className="tabular-nums text-[10px] font-semibold text-foreground">
                 {Number(exaggeration).toFixed(1)}×
               </span>
             </div>
@@ -544,7 +544,7 @@ export const Hud3DPopover = ({
               step="0.25"
               value={exaggeration}
               onChange={(e) => onChangeExaggeration?.(parseFloat(e.target.value))}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-white"
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-fill-strong accent-primary"
               aria-label="Ajustar exageración vertical de relieve"
             />
           </div>
@@ -554,8 +554,8 @@ export const Hud3DPopover = ({
           {/* 1. Inclinación de Cámara (Tilt) continua */}
           <div className="mb-3">
             <div className="mb-1 flex items-center justify-between text-[11px]">
-              <span className="font-medium text-zinc-300">Inclinación de cámara</span>
-              <span className="font-mono text-[10px] font-semibold text-white">
+              <span className="font-medium text-label-2">Inclinación de cámara</span>
+              <span className="tabular-nums text-[10px] font-semibold text-foreground">
                 {normPitch === 0 ? "0° (2D)" : `${normPitch}°`}
               </span>
             </div>
@@ -566,10 +566,10 @@ export const Hud3DPopover = ({
               step="1"
               value={normPitch}
               onChange={(e) => onChangePitch?.(parseFloat(e.target.value))}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-white"
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-fill-strong accent-primary"
               aria-label="Ajustar inclinación de cámara"
             />
-            <div className="mt-1 flex justify-between text-[9px] font-mono text-zinc-500">
+            <div className="mt-1 flex justify-between text-[9px] tabular-nums text-label-4">
               <span>0°</span>
               <span>30°</span>
               <span>45°</span>
@@ -580,8 +580,8 @@ export const Hud3DPopover = ({
           {/* 2. Exageración Vertical continua (hasta 5x) */}
           <div className="mb-3">
             <div className="mb-1 flex items-center justify-between text-[11px]">
-              <span className="font-medium text-zinc-300">Exageración vertical</span>
-              <span className="font-mono text-[10px] font-semibold text-white">
+              <span className="font-medium text-label-2">Exageración vertical</span>
+              <span className="tabular-nums text-[10px] font-semibold text-foreground">
                 {Number(exaggeration).toFixed(1)}×
               </span>
             </div>
@@ -592,10 +592,10 @@ export const Hud3DPopover = ({
               step="0.25"
               value={exaggeration}
               onChange={(e) => onChangeExaggeration?.(parseFloat(e.target.value))}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-white"
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-fill-strong accent-primary"
               aria-label="Ajustar exageración vertical de relieve"
             />
-            <div className="mt-1 flex justify-between text-[9px] font-mono text-zinc-500">
+            <div className="mt-1 flex justify-between text-[9px] tabular-nums text-label-4">
               <span>0.5×</span>
               <span>1.5×</span>
               <span>3×</span>
@@ -606,8 +606,8 @@ export const Hud3DPopover = ({
           {/* 3. Rotación Orbital continua */}
           <div>
             <div className="mb-1 flex items-center justify-between text-[11px]">
-              <span className="font-medium text-zinc-300">Orientación</span>
-              <span className="font-mono text-[10px] text-zinc-300">
+              <span className="font-medium text-label-2">Orientación</span>
+              <span className="tabular-nums text-[10px] text-label-2">
                 {normBearing}° {compassHeading(normBearing)}
               </span>
             </div>
@@ -618,7 +618,7 @@ export const Hud3DPopover = ({
               step="1"
               value={normBearing}
               onChange={(e) => onChangeBearing?.(parseFloat(e.target.value))}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-white"
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-fill-strong accent-primary"
               aria-label="Ajustar orientación horizontal"
             />
             <div className="mt-2 grid grid-cols-3 gap-1">
@@ -629,7 +629,7 @@ export const Hud3DPopover = ({
                   else onChangeBearing?.((normBearing - 45 + 360) % 360)
                 }}
                 title="Girar 45° a la izquierda suavemente"
-                className="rounded-lg border border-zinc-800 bg-zinc-900/60 py-1 text-center text-[10.5px] font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                className="rounded-lg border border-border bg-fill/70 py-1 text-center text-[10.5px] font-medium text-label-2 transition-colors hover:bg-fill-strong hover:text-foreground"
               >
                 ↺ -45°
               </button>
@@ -637,7 +637,7 @@ export const Hud3DPopover = ({
                 type="button"
                 onClick={onResetNorth}
                 title="Orientar al Norte (0°)"
-                className="rounded-lg border border-zinc-700 bg-zinc-800/80 py-1 text-center text-[10.5px] font-medium text-white transition-colors hover:bg-zinc-700"
+                className="rounded-lg bg-fill-strong py-1 text-center text-[10.5px] font-medium text-foreground transition-colors hover:bg-label-5/40"
               >
                 Norte 0°
               </button>
@@ -648,7 +648,7 @@ export const Hud3DPopover = ({
                   else onChangeBearing?.((normBearing + 45) % 360)
                 }}
                 title="Girar 45° a la derecha suavemente"
-                className="rounded-lg border border-zinc-800 bg-zinc-900/60 py-1 text-center text-[10.5px] font-medium text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                className="rounded-lg border border-border bg-fill/70 py-1 text-center text-[10.5px] font-medium text-label-2 transition-colors hover:bg-fill-strong hover:text-foreground"
               >
                 ↻ +45°
               </button>

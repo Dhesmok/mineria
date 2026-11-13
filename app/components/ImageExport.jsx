@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Download, Image as ImageIcon, Loader2, X } from "lucide-react"
+import { Download, Loader2, X } from "lucide-react"
 
 import {
   EXPORT_SCALES,
@@ -321,17 +321,19 @@ export const ImageExport = ({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 p-0 backdrop-blur-md sm:items-center sm:p-4">
-      <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-zinc-800 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl sm:rounded-2xl">
-        <div className="flex items-center gap-2.5 border-b border-zinc-800 bg-zinc-950/80 px-4 py-3">
-          <ImageIcon className="h-4 w-4 text-zinc-400" />
-          <h2 className="text-[15px] font-semibold text-white">Exportar imagen</h2>
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/25 p-0 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in duration-150">
+      <div className="glass-strong flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-[22px] text-foreground sm:rounded-[20px]">
+        <div className="flex items-start gap-2.5 px-5 pb-2 pt-5">
+          <div>
+            <p className="eyebrow">Mapa en PNG</p>
+            <h2 className="panel-title mt-1 text-[26px]">Exportar imagen</h2>
+          </div>
           <span className="flex-1" />
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+            className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-fill-strong text-label-3 transition-colors hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
@@ -339,24 +341,24 @@ export const ImageExport = ({
 
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           <div>
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="mb-2 eyebrow">
               Qué incluir
             </p>
             <div className="space-y-1">
               {PIECES.map(({ id, label, hint }) => (
                 <label
                   key={id}
-                  className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl px-2.5 transition-colors hover:bg-zinc-850/60 md:min-h-0 md:py-1.5"
+                  className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl px-2.5 transition-colors hover:bg-fill-strong md:min-h-0 md:py-1.5"
                 >
                   <input
                     type="checkbox"
                     checked={pieces[id]}
                     onChange={() => alternar(id)}
-                    className="h-4 w-4 shrink-0 accent-white rounded"
+                    className="h-4 w-4 shrink-0 accent-primary rounded"
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-medium leading-tight text-zinc-200">{label}</span>
-                    <span className="block text-[11px] leading-tight text-zinc-400">{hint}</span>
+                    <span className="block text-[13px] font-medium leading-tight text-foreground">{label}</span>
+                    <span className="block text-[11px] leading-tight text-label-3">{hint}</span>
                   </span>
                 </label>
               ))}
@@ -364,10 +366,10 @@ export const ImageExport = ({
           </div>
 
           <div>
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="mb-2 eyebrow">
               Tamaño
             </p>
-            <div className="flex rounded-xl bg-zinc-900 border border-zinc-800 p-0.5">
+            <div className="flex rounded-[10px] bg-fill-strong/80 p-[2px]">
               {EXPORT_SCALES.map((opcion) => (
                 <button
                   key={opcion.id}
@@ -377,28 +379,28 @@ export const ImageExport = ({
                   title={opcion.hint}
                   className={`flex-1 rounded-lg px-2 py-1.5 text-[12px] font-medium transition-colors ${
                     scale === opcion.id
-                      ? "bg-zinc-800 text-white font-semibold border border-zinc-700 shadow-sm"
-                      : "text-zinc-400 hover:text-zinc-200"
+                      ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_0.5px_rgba(0,0,0,0.04)]"
+                      : "text-label-3 hover:text-foreground"
                   }`}
                 >
                   {opcion.label}
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-[11px] tabular-nums text-zinc-400">
+            <p className="mt-1.5 text-[11px] tabular-nums text-label-3">
               {ancho} × {alto} píxeles
             </p>
           </div>
 
-          {error && <p className="text-[12px] text-rose-400">{error}</p>}
+          {error && <p className="text-[12px] text-danger">{error}</p>}
         </div>
 
-        <div className="border-t border-zinc-800 bg-zinc-950/80 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
+        <div className="border-t border-border bg-transparent p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
           <button
             type="button"
             onClick={exportar}
             disabled={working}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-[13px] font-semibold text-white transition-colors disabled:opacity-50 shadow-sm"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary text-[14px] font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {working ? "Generando…" : "Descargar PNG"}

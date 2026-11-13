@@ -2,60 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * El sistema de diseño del visor.
+ *
+ * Todo color de la interfaz sale de aquí. Antes cada componente escribía el
+ * suyo —zinc-800, #09090b, emerald-300, sky-400…— y el resultado eran cuatro
+ * negros distintos, tres verdes y un cian que no pegaban entre sí. Con los
+ * tokens, cambiar el aspecto entero es cambiar esta lista, y quien añada un
+ * panel nuevo no tiene que adivinar qué gris usaban los demás.
+ *
+ * La referencia es la interfaz de Apple: fondos claros, grises cálidos, un solo
+ * color de acento (el azul) y los demás colores reservados para decir algo —
+ * verde para «hecho», ámbar para «ojo», rojo para «error»—. El mapa es lo que
+ * tiene que tener color; la interfaz se queda en segundo plano.
+ *
+ * Van como tripletas HSL sin `hsl()` para que Tailwind pueda ponerles
+ * transparencia: `bg-primary/10` es el azul al 10 %.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-  }
+    /* Fondo de la página y texto principal (#F5F5F7 y #1D1D1F de apple.com) */
+    --background: 240 11% 96%;
+    --foreground: 240 3% 12%;
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* Superficies blancas: paneles, ventanas, menús */
+    --card: 0 0% 100%;
+    --card-foreground: 240 3% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 3% 12%;
+
+    /* El único color de acento: el azul de Apple */
+    --primary: 211 100% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Rellenos de controles: botones secundarios, campos, segmentos */
+    --secondary: 240 6% 94%;
+    --secondary-foreground: 240 3% 12%;
+    --muted: 240 6% 95%;
+    --muted-foreground: 240 2% 44%;
+
+    /* Fondo de lo seleccionado: azul muy lavado */
+    --accent: 211 100% 96%;
+    --accent-foreground: 211 100% 38%;
+
+    --destructive: 2 64% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Líneas finas de separación */
+    --border: 240 6% 89%;
+    --input: 240 6% 87%;
+    --ring: 211 100% 50%;
+
+    /* Escala de texto: principal, secundario, terciario, cuaternario */
+    --label-2: 240 2% 27%;
+    --label-3: 240 2% 44%;
+    --label-4: 240 2% 55%;
+    --label-5: 240 3% 70%;
+
+    /* Rellenos de control, de más claro a más marcado */
+    --fill: 240 6% 95%;
+    --fill-strong: 240 5% 90%;
+
+    /* Colores de estado, apagados para no competir con el mapa */
+    --success: 146 42% 36%;
+    --warning: 33 82% 40%;
+    --danger: 2 64% 50%;
+
+    --radius: 0.75rem;
+
+    --chart-1: 211 80% 52%;
+    --chart-2: 146 42% 42%;
+    --chart-3: 33 82% 50%;
+    --chart-4: 262 40% 58%;
+    --chart-5: 2 64% 56%;
   }
 }
 
@@ -63,21 +82,25 @@
   * {
     @apply border-border;
   }
-  html, body {
-    color-scheme: dark;
-    @apply bg-background text-foreground;
+  html,
+  body {
+    color-scheme: light;
+    @apply bg-background text-foreground font-body;
     overscroll-behavior-y: none;
     touch-action: manipulation;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
   }
   .maplibregl-canvas-container {
     touch-action: pan-x pan-y pinch-zoom;
     overscroll-behavior: none;
   }
 
-  /* Scrollbar nativa adaptada al tema oscuro obsidiana */
+  /* Barra de desplazamiento fina y gris, como la de macOS */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #3f3f46 transparent;
+    scrollbar-color: hsl(240 3% 78%) transparent;
   }
   ::-webkit-scrollbar {
     width: 6px;
@@ -87,11 +110,54 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #3f3f46;
+    background: hsl(240 3% 80%);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #52525b;
+    background: hsl(240 3% 68%);
+  }
+}
+
+@layer components {
+  /*
+   * El «material» de Apple: blanco translúcido que deja ver el mapa borroso
+   * detrás. Es lo que hace que un panel flote sobre el mapa sin taparlo como
+   * una losa. Todos los paneles y botones que van encima del mapa lo usan, para
+   * que se lean como una sola familia.
+   *
+   * El borde blanco por dentro y la sombra de medio píxel por fuera son los que
+   * separan el panel del fondo cuando el mapa es claro: sin ellos, un panel
+   * blanco sobre una carretera blanca desaparece.
+   */
+  .glass {
+    background-color: hsl(0 0% 100% / 0.84);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid hsl(0 0% 100% / 0.65);
+    box-shadow:
+      0 0 0 0.5px hsl(240 6% 10% / 0.1),
+      0 10px 30px -8px hsl(240 6% 10% / 0.18),
+      0 2px 6px -2px hsl(240 6% 10% / 0.08);
+  }
+  /* Más opaco: para paneles grandes con mucho texto, donde se lee peor */
+  .glass-strong {
+    background-color: hsl(0 0% 100% / 0.95);
+    -webkit-backdrop-filter: blur(30px) saturate(140%);
+    backdrop-filter: blur(30px) saturate(140%);
+    border: 1px solid hsl(0 0% 100% / 0.7);
+    box-shadow:
+      0 0 0 0.5px hsl(240 6% 10% / 0.1),
+      0 18px 48px -12px hsl(240 6% 10% / 0.22);
+  }
+
+  /* El rótulo de grupo: versalitas pequeñas y espaciadas, como en Ajustes */
+  .eyebrow {
+    @apply text-[10.5px] font-semibold uppercase tracking-[0.09em] text-label-4;
+  }
+
+  /* El título de un panel: la serif editorial, que es el toque de revista */
+  .panel-title {
+    @apply font-display text-[19px] font-medium leading-none tracking-[-0.01em] text-foreground;
   }
 }
 
@@ -103,33 +169,36 @@
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-/* La barra de opacidad de cada capa. */
+/* La barra de opacidad de cada capa: pista gris y tirador blanco con sombra,
+   como los deslizadores de iOS. */
 .panel-opacidad {
   -webkit-appearance: none;
   appearance: none;
-  height: 3px;
+  height: 4px;
   margin: 0;
   border-radius: 999px;
-  background: hsl(var(--border));
+  background: hsl(var(--fill-strong));
   outline: none;
   cursor: pointer;
 }
 .panel-opacidad::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   background: #ffffff;
-  border: 1.5px solid #94a3b8;
+  border: 0.5px solid hsl(240 6% 10% / 0.08);
+  box-shadow: 0 1px 4px hsl(240 6% 10% / 0.25);
   cursor: pointer;
 }
 .panel-opacidad::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   background: #ffffff;
-  border: 1.5px solid #94a3b8;
+  border: 0.5px solid hsl(240 6% 10% / 0.08);
+  box-shadow: 0 1px 4px hsl(240 6% 10% / 0.25);
   cursor: pointer;
 }
 .panel-opacidad:focus-visible {

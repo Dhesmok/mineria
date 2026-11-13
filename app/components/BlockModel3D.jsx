@@ -950,7 +950,7 @@ export default function BlockModel3D({
   }, [autoRotate])
 
   const [wireframe, setWireframe] = useState(false)
-  const [studioTheme, setStudioTheme] = useState("dark")
+  const [studioTheme, setStudioTheme] = useState("light")
   const [demLoading, setDemLoading] = useState(true)
 
   const [pins, setPins] = useState([])
@@ -1008,7 +1008,7 @@ export default function BlockModel3D({
     const height = container.clientHeight || 600
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(studioTheme === "light" ? 0xdfe6dc : 0x09090b)
+    scene.background = new THREE.Color(studioTheme === "light" ? 0xe8e8ed : 0x1c1c1e)
     sceneRef.current = scene
 
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 1000)
@@ -1357,7 +1357,7 @@ export default function BlockModel3D({
   useEffect(() => {
     if (!sceneRef.current) return
     const isLight = studioTheme === "light"
-    sceneRef.current.background = new THREE.Color(isLight ? 0xdfe6dc : 0x09090b)
+    sceneRef.current.background = new THREE.Color(isLight ? 0xe8e8ed : 0x1c1c1e)
     if (floorMeshRef.current) {
       floorMeshRef.current.material.opacity = isLight ? 0.22 : 0.45
     }
@@ -1836,7 +1836,7 @@ export default function BlockModel3D({
   const cotaMedia = Math.round((cotaMin + cotaMax) / 2)
 
   return (
-    <div className="relative w-full h-full bg-zinc-950 select-none overflow-hidden font-sans">
+    <div className="relative w-full h-full bg-background select-none overflow-hidden font-sans">
       <style>{BLOCK_CHROME_CSS}</style>
 
       {/* Lienzo WebGL a pantalla completa.
@@ -1856,9 +1856,9 @@ export default function BlockModel3D({
       <div className={`absolute top-3 left-3 z-20 overflow-hidden pointer-events-none ${PANEL_SM}`}>
         <div className="flex items-stretch">
           <div className="px-3.5 py-2">
-            <div className="text-[15px] font-mono tabular-nums text-zinc-100 leading-none">
-              {widthKm} <span className="text-zinc-500">×</span> {heightKm}
-              <span className="text-[11px] text-zinc-500 ml-1">km</span>
+            <div className="text-[15px] tabular-nums text-foreground leading-none">
+              {widthKm} <span className="text-label-4">×</span> {heightKm}
+              <span className="text-[11px] text-label-4 ml-1">km</span>
             </div>
           </div>
 
@@ -1866,9 +1866,9 @@ export default function BlockModel3D({
             <>
               <Groove />
               <div className="px-3.5 py-2" title="Desnivel del bloque: de la cota más baja a la más alta">
-                <div className="text-[15px] font-mono tabular-nums text-zinc-100 leading-none">
-                  <span className="text-zinc-500">Δ</span> {desnivel.toLocaleString("es-CO")}
-                  <span className="text-[11px] text-zinc-500 ml-1">m</span>
+                <div className="text-[15px] tabular-nums text-foreground leading-none">
+                  <span className="text-label-4">Δ</span> {desnivel.toLocaleString("es-CO")}
+                  <span className="text-[11px] text-label-4 ml-1">m</span>
                 </div>
               </div>
             </>
@@ -1929,7 +1929,7 @@ export default function BlockModel3D({
           de color con metros al lado, sobre un bloque de terreno, no es otra cosa. */}
       <div className={`hidden sm:block absolute left-3 bottom-3 z-10 px-3 py-3 pointer-events-none ${PANEL_SM}`}>
         <div className="flex items-stretch gap-2.5">
-          <div className="relative w-3 h-40 rounded-full overflow-hidden border border-black/60 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+          <div className="relative w-3 h-40 rounded-full overflow-hidden border border-black/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
             <div
               className="absolute inset-0"
               style={{ background: "linear-gradient(to top, #047857 0%, #65a30d 28%, #facc15 58%, #fb923c 80%, #fecdd3 100%)" }}
@@ -1938,19 +1938,19 @@ export default function BlockModel3D({
             {[0, 25, 50, 75, 100].map((pct) => (
               <div
                 key={pct}
-                className="absolute right-0 h-px bg-black/50"
+                className="absolute right-0 h-px bg-black/20"
                 style={{ top: `calc(${pct}% - 0.5px)`, width: pct % 50 === 0 ? "100%" : "45%" }}
               />
             ))}
           </div>
 
-          <div className="flex flex-col justify-between h-40 text-[11px] font-mono tabular-nums leading-none">
-            <span className="text-zinc-200">
+          <div className="flex flex-col justify-between h-40 text-[11px] tabular-nums leading-none">
+            <span className="text-foreground">
               {cotaMax.toLocaleString("es-CO")}
-              <span className="text-zinc-500 ml-1">m</span>
+              <span className="text-label-4 ml-1">m</span>
             </span>
-            <span className="text-zinc-500">{cotaMedia.toLocaleString("es-CO")}</span>
-            <span className="text-zinc-200">{cotaMin.toLocaleString("es-CO")}</span>
+            <span className="text-label-4">{cotaMedia.toLocaleString("es-CO")}</span>
+            <span className="text-foreground">{cotaMin.toLocaleString("es-CO")}</span>
           </div>
         </div>
       </div>
@@ -1965,12 +1965,12 @@ export default function BlockModel3D({
             ensanchaba la tecla y descolocaba la fila entera al pulsarla— ni arriba, donde
             en el teléfono chocaría con la placa y con la brújula. */}
         {isAddingPin && (
-          <div className={`flex items-center gap-2.5 pl-3 pr-2 py-1.5 text-[12px] text-zinc-100 ${PANEL_SM}`}>
-            <MapPin size={14} className="text-rose-400 shrink-0" />
+          <div className={`flex items-center gap-2.5 pl-3 pr-2 py-1.5 text-[12px] text-foreground ${PANEL_SM}`}>
+            <MapPin size={14} className="text-danger shrink-0" />
             <span>Toca el terreno para colocar el marcador</span>
             <button
               onClick={() => setIsAddingPin(false)}
-              className="flex items-center justify-center w-6 h-6 rounded-md text-zinc-500 hover:text-zinc-50 hover:bg-white/10 transition-colors shrink-0"
+              className="flex items-center justify-center w-6 h-6 rounded-md text-label-4 hover:text-foreground hover:bg-foreground/5 transition-colors shrink-0"
               title="Cancelar"
               aria-label="Cancelar colocación de marcador"
             >
@@ -1988,7 +1988,7 @@ export default function BlockModel3D({
                 escala real y todo lo demás es relieve estirado a propósito. Sin esa
                 referencia, un cerro exagerado 4× se lee como un cerro. */}
             <div className="flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3">
-              <Mountain size={18} className="text-zinc-500 shrink-0" />
+              <Mountain size={18} className="text-label-4 shrink-0" />
 
               <div className="w-20 sm:w-36 shrink-0">
                 <input
@@ -2000,14 +2000,14 @@ export default function BlockModel3D({
                   aria-label="Exageración vertical"
                   value={exaggeration}
                   onChange={(e) => setExaggeration(parseFloat(e.target.value))}
-                  className="bm3d-range text-sky-400 cursor-pointer"
+                  className="bm3d-range text-primary cursor-pointer"
                 />
                 <div className="relative h-2 mx-2" aria-hidden="true">
                   {[1, 2, 3, 4, 5].map((v) => (
                     <div
                       key={v}
                       className={`absolute top-0 w-px -translate-x-1/2 ${
-                        v === 1 ? "h-2 bg-sky-400/70" : "h-1.5 bg-white/20"
+                        v === 1 ? "h-2 bg-primary/15" : "h-1.5 bg-foreground/10"
                       }`}
                       style={{ left: `${((v - 0.5) / 4.5) * 100}%` }}
                     />
@@ -2015,7 +2015,7 @@ export default function BlockModel3D({
                 </div>
               </div>
 
-              <span className="bm3d-readout w-[44px] sm:w-[54px] text-right text-[15px] sm:text-[17px] font-mono tabular-nums text-sky-300 shrink-0">
+              <span className="bm3d-readout w-[44px] sm:w-[54px] text-right text-[15px] sm:text-[17px] tabular-nums text-primary shrink-0">
                 {exaggeration.toFixed(1)}×
               </span>
             </div>
@@ -2040,12 +2040,12 @@ export default function BlockModel3D({
                 title="Posición del sol: gira para el azimut, acerca al centro para subirlo"
               />
               <div className="flex flex-col items-end gap-1 shrink-0 w-[52px] sm:w-[58px]">
-                <span className="bm3d-readout text-[15px] sm:text-[17px] font-mono tabular-nums text-amber-300 leading-none">
-                  <span className="text-amber-500/70 mr-0.5">↑</span>
+                <span className="bm3d-readout text-[15px] sm:text-[17px] tabular-nums text-warning leading-none">
+                  <span className="text-warning mr-0.5">↑</span>
                   {sunAngle}°
                 </span>
-                <span className="text-[12px] sm:text-[13px] font-mono tabular-nums text-amber-200/70 leading-none">
-                  <span className="text-amber-500/60 mr-0.5">∠</span>
+                <span className="text-[12px] sm:text-[13px] tabular-nums text-warning leading-none">
+                  <span className="text-warning mr-0.5">∠</span>
                   {sunAltitude}°
                 </span>
               </div>
@@ -2111,7 +2111,7 @@ export default function BlockModel3D({
               )
             }}
             placeholder="Nombre o cota…"
-            className="bg-black/60 border border-black/80 rounded-lg px-3 py-2 text-[13px] text-zinc-100 placeholder:text-zinc-600 shadow-[inset_0_1px_3px_rgba(0,0,0,0.8)] focus:outline-none focus:border-sky-500/70"
+            className="bg-black/20 border border-black/10 rounded-lg px-3 py-2 text-[13px] text-foreground placeholder:text-label-5 shadow-lg focus:outline-none focus:border-primary/40"
           />
 
           <div className="flex items-center justify-between">
@@ -2127,8 +2127,8 @@ export default function BlockModel3D({
                         prev.map((p) => (p.id === selectedPinId ? { ...p, color: colorHex } : p)),
                       )
                     }}
-                    className={`w-5 h-5 rounded-full border border-black/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:scale-110 ${
-                      activo ? "ring-2 ring-white/80 ring-offset-2 ring-offset-zinc-950" : ""
+                    className={`w-5 h-5 rounded-full border border-black/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:scale-110 ${
+                      activo ? "ring-2 ring-primary ring-offset-2 ring-offset-white" : ""
                     }`}
                     style={{ backgroundColor: hex }}
                     title={`Color ${hex}`}

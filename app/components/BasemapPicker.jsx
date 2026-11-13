@@ -19,14 +19,14 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose }) => (
   <div
     role="dialog"
     aria-label="Selector de mapa base"
-    className="w-[290px] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-2.5 text-zinc-100 shadow-2xl backdrop-blur-2xl select-none"
+    className="w-[290px] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-2xl border glass-strong p-2.5 text-foreground select-none"
   >
-    <div className="mb-2 flex items-center justify-between border-b border-zinc-800/80 px-1 pb-2">
+    <div className="mb-2 flex items-center justify-between border-b border-border px-1 pb-2">
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
+        <span className="eyebrow">
           Mapa base
         </span>
-        <span className="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[9px] font-mono font-medium text-zinc-400">
+        <span className="rounded bg-fill-strong px-1.5 py-0.5 text-[9px] tabular-nums font-medium text-label-3">
           6 estilos
         </span>
       </div>
@@ -36,7 +36,7 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose }) => (
           onClick={onClose}
           aria-label="Cerrar selector de mapa base"
           title="Cerrar"
-          className="rounded-lg p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+          className="rounded-lg p-1 text-label-3 transition-colors hover:bg-fill-strong hover:text-foreground"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -64,13 +64,13 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose }) => (
             }
             className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors ${
               elegido
-                ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
-                : "border border-transparent text-zinc-300 hover:bg-zinc-800/60 hover:text-white"
+                ? "border border-transparent bg-primary/10 text-foreground"
+                : "border border-transparent text-label-2 hover:bg-fill-strong/70 hover:text-foreground"
             }`}
           >
             <span
               className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
-                elegido ? "bg-white text-zinc-950" : "border border-zinc-700 bg-zinc-900/50"
+                elegido ? "bg-primary text-primary-foreground" : "border border-input bg-fill/70"
               }`}
             >
               {elegido && <Check className="h-3 w-3" />}
@@ -78,10 +78,10 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose }) => (
 
             <span className="min-w-0 flex-1">
               <span className="flex items-baseline gap-1.5">
-                <span className="text-[13px] font-medium text-white">{basemap.name}</span>
-                <span className="text-[10px] text-zinc-500">{basemap.source}</span>
+                <span className="text-[13px] font-medium text-foreground">{basemap.name}</span>
+                <span className="text-[10px] text-label-4">{basemap.source}</span>
               </span>
-              <span className="mt-0.5 block text-[11px] leading-tight text-zinc-400">
+              <span className="mt-0.5 block text-[11px] leading-tight text-label-3">
                 {basemap.hint}
               </span>
             </span>
@@ -91,8 +91,8 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose }) => (
               <span
                 className={`flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-semibold ${
                   conNombres
-                    ? "bg-zinc-700 text-white border border-zinc-600"
-                    : "bg-zinc-900 text-zinc-500 border border-zinc-800 line-through"
+                    ? "bg-label-5/50 text-foreground border border-input"
+                    : "bg-fill text-label-4 border border-border line-through"
                 }`}
               >
                 <Type className="h-3 w-3" />
@@ -100,7 +100,7 @@ export const BasemapPicker = ({ current, showLabels, onChoose, onClose }) => (
               </span>
             )}
             {elegido && hasFixedLabels(basemap.id) && (
-              <span className="shrink-0 text-[10px] leading-tight text-zinc-500">
+              <span className="shrink-0 text-[10px] leading-tight text-label-4">
                 nombres
                 <br />
                 fijos

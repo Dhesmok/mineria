@@ -1,4 +1,4 @@
-import { Inter } from 'next/font/google'
+import { Inter, Newsreader } from 'next/font/google'
 import { cn } from '@/lib/utils'
 import './globals.css'
 
@@ -14,8 +14,17 @@ const fontBody = Inter({
   variable: '--font-body',
 })
 
+// La serif editorial de los títulos. Solo los títulos: en el cuerpo de un panel
+// lleno de cifras una serif se lee peor que una sans.
+const fontDisplay = Newsreader({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400', '500', '600'],
+  variable: '--font-display',
+})
+
 export const viewport = {
-  themeColor: "#0f172a",
+  themeColor: "#f5f5f7",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -28,7 +37,7 @@ export const metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "Visor Minero",
   },
 }
@@ -44,7 +53,8 @@ export default function Layout({ children }) {
         className={cn(
           'antialiased',
           fontHeading.variable,
-          fontBody.variable
+          fontBody.variable,
+          fontDisplay.variable
         )}
       >
         {children}

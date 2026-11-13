@@ -226,18 +226,18 @@ export const ExpedientSearch = ({
       role="dialog"
       aria-label="Buscar expediente"
       style={{ top, left }}
-      className="fixed z-50 w-[min(19rem,calc(100vw-1.5rem))] rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 text-zinc-100 shadow-2xl backdrop-blur-2xl"
+      className="fixed z-50 w-[min(19rem,calc(100vw-1.5rem))] rounded-2xl border glass-strong text-foreground"
     >
       {/* Misma cabecera que la ventana de filtros */}
-      <div className="flex items-center gap-2 border-b border-zinc-800/80 px-3.5 py-2.5">
+      <div className="flex items-center gap-2 border-b border-border px-3.5 py-2.5">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: areaColor }} />
-        <span className="text-[12.5px] font-semibold text-zinc-100">Buscar expediente</span>
+        <span className="text-[12.5px] font-semibold text-foreground">Buscar expediente</span>
         <span className="flex-1" />
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar la búsqueda"
-          className="rounded-lg p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+          className="rounded-lg p-1 text-label-3 transition-colors hover:bg-fill-strong hover:text-foreground"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -245,7 +245,7 @@ export const ExpedientSearch = ({
 
       <div className="p-3">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3" />
           <input
             ref={inputRef}
             value={code}
@@ -258,10 +258,10 @@ export const ExpedientSearch = ({
             aria-autocomplete="list"
             aria-expanded={suggestions.length > 0}
             aria-controls="sugerencias-expediente"
-            className="h-9 w-full rounded-xl border border-zinc-700/80 bg-zinc-900/90 pl-8 pr-8 text-[12.5px] text-zinc-100 outline-none focus:border-zinc-400 placeholder:text-zinc-500"
+            className="h-9 w-full rounded-xl border border-border bg-fill pl-8 pr-8 text-[12.5px] text-foreground outline-none focus:border-label-5 placeholder:text-label-4"
           />
           {loading && (
-            <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-white" />
+            <Loader2 className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-foreground" />
           )}
         </div>
 
@@ -270,7 +270,7 @@ export const ExpedientSearch = ({
             id="sugerencias-expediente"
             role="listbox"
             aria-label="Expedientes sugeridos"
-            className="mt-1.5 max-h-52 overflow-auto rounded-xl border border-zinc-800 bg-zinc-950/90"
+            className="mt-1.5 max-h-52 overflow-auto rounded-xl border glass"
           >
             {suggestions.map((item, index) => {
               const codeVal = typeof item === "string" ? item : item.code
@@ -286,7 +286,7 @@ export const ExpedientSearch = ({
                   }}
                   onMouseEnter={() => setActive(index)}
                   className={`flex items-center justify-between cursor-pointer px-3 py-2 text-[12.5px] transition-colors ${
-                    index === active ? "bg-zinc-800 text-white font-medium" : "text-zinc-200 hover:bg-zinc-800/50"
+                    index === active ? "bg-fill-strong text-foreground font-medium" : "text-foreground hover:bg-fill-strong/70"
                   }`}
                 >
                   <span className="font-mono">{codeVal}</span>
@@ -294,8 +294,8 @@ export const ExpedientSearch = ({
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
                         layerName.toLowerCase().includes("solicitud") || layerName.toLowerCase().includes("trámite")
-                          ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
-                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                          ? "bg-warning/10 text-warning border-warning/30"
+                          : "bg-success/10 text-success border-success/30"
                       }`}
                     >
                       {layerName}
@@ -307,12 +307,12 @@ export const ExpedientSearch = ({
           </ul>
         )}
 
-        {error && <p className="mt-1.5 text-[11px] text-red-400">{error}</p>}
+        {error && <p className="mt-1.5 text-[11px] text-danger">{error}</p>}
 
         <button
           type="button"
           onClick={() => buscar()}
-          className="mt-2.5 h-9 w-full rounded-xl bg-white text-[12.5px] font-semibold text-black transition-colors hover:bg-zinc-200 shadow-sm"
+          className="mt-2.5 h-9 w-full rounded-xl bg-primary text-[12.5px] font-semibold text-primary-foreground transition-colors hover:bg-fill shadow-sm"
         >
           Buscar
         </button>
