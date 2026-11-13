@@ -45,7 +45,6 @@ import {
   ChevronLeft,
   Crosshair,
   Download,
-  GripVertical,
   Loader2,
   Mountain,
   Layers,
@@ -228,8 +227,17 @@ export default function MapComponentGL({
       if (!isDraggingSplit || !splitContainerRef.current) return
       const rect = splitContainerRef.current.getBoundingClientRect()
       if (rect.width <= 0) return
+      // Los topes van en píxeles y no en porcentaje. Con el 15 % de una pantalla de
+      // portátil el mapa quedaba en una franja de doscientos píxeles, y sus
+      // controles —que van pegados a su borde derecho— se amontonaban encima del
+      // bloque. Por debajo de MIN_MAPA_PX el mapa ya no sirve de nada: para eso
+      // está el botón de maximizar, que lo quita del todo.
+      const MIN_MAPA_PX = 440
+      const MIN_BLOQUE_PX = 420
+      const minimo = Math.min(MIN_MAPA_PX / rect.width, 0.5)
+      const maximo = Math.max(1 - MIN_BLOQUE_PX / rect.width, 0.5)
       const rawRatio = (e.clientX - rect.left) / rect.width
-      const clamped = Math.max(0.15, Math.min(0.85, rawRatio))
+      const clamped = Math.max(minimo, Math.min(maximo, rawRatio))
       setSplitRatio(clamped)
       mapRef.current?.resize()
     },
@@ -1430,25 +1438,36 @@ export default function MapComponentGL({
         </div>
       </div>
 
-      {/* Divisor Arrastrable (Split Divider) */}
-      {blockModelOpen && (
+      {/* Divisor arrastrable. Una línea fina con un asa en el centro, como el de
+          las ventanas partidas de macOS; la zona que se agarra es más ancha que la
+          línea para no tener que apuntar a un píxel. Con el bloque maximizado no
+          hay nada que dividir y desaparece. */}
+      {blockModelOpen && splitRatio > 0 && (
         <div
           onPointerDown={handleSplitPointerDown}
           onPointerMove={handleSplitPointerMove}
           onPointerUp={handleSplitPointerUp}
-          className="hidden md:flex relative w-2 bg-transparent border-x border-border hover:border-success/30 cursor-col-resize items-center justify-center transition-colors z-30 select-none touch-none group shrink-0"
+          className="group relative z-50 hidden w-px shrink-0 cursor-col-resize select-none touch-none items-center justify-center bg-border md:flex"
           title="Arrastrar para ajustar la división de pantalla"
         >
-          <div className="absolute w-5 h-10 rounded-full bg-fill-strong border border-input group-hover:border-success/30 flex items-center justify-center shadow-lg transition-colors">
-            <GripVertical className="h-3.5 w-3.5 text-label-3 group-hover:text-success" />
-          </div>
+          <div className="absolute inset-y-0 -left-2 -right-2" aria-hidden="true" />
+          <div
+            aria-hidden="true"
+            className={`absolute h-10 w-[7px] rounded-full border shadow-sm transition-colors ${
+              isDraggingSplit
+                ? "border-primary bg-primary"
+                : "border-black/10 bg-card group-hover:border-black/20 group-hover:bg-fill-strong"
+            }`}
+          />
         </div>
       )}
 
       {/* Vista Bloque 3D del Terreno Derecha */}
+      {/* z-40 en escritorio para quedar por encima de la barra lateral (z-30) cuando
+          el bloque se maximiza y ocupa también el sitio del mapa. */}
       {blockModelOpen && (
         <div
-          className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto md:h-full overflow-hidden shrink-0 w-full"
+          className="fixed inset-0 z-50 md:relative md:inset-auto md:z-40 md:h-full overflow-hidden shrink-0 w-full"
           style={typeof window !== "undefined" && window.innerWidth >= 768 ? { width: `${(1 - splitRatio) * 100}%` } : undefined}
         >
           <BlockModel3D
@@ -1470,9 +1489,12 @@ export default function MapComponentGL({
             planchaOpacity={planchaOpacity}
             onRedrawRectangle={handleStartDrawBox}
             expedientCode={expedientCode}
-            isMaximized={splitRatio <= 0.05}
+            isMaximized={splitRatio === 0}
             onToggleMaximize={() => {
-              setSplitRatio((r) => (r <= 0.05 ? 0.5 : 0.02))
+              // Maximizar es quitar el mapa del todo, no dejarlo en una franja: una
+              // tira de cuarenta píxeles con sus botones encima no se puede usar y
+              // tapaba el borde del bloque.
+              setSplitRatio((r) => (r === 0 ? 0.5 : 0))
               requestAnimationFrame(() => {
                 mapRef.current?.resize()
               })

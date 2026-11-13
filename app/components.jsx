@@ -100,6 +100,23 @@ export default function Component() {
   const [mobilePanel, setMobilePanel] = useState(null)
   const [isBlockModelActive, setIsBlockModelActive] = useState(false)
 
+  // Al abrir el bloque 3D la pantalla se parte en dos, y la barra lateral abierta
+  // —360 px— se comía casi toda la mitad del mapa. Se recoge sola y vuelve a
+  // abrirse al cerrar el bloque, pero solo si estaba abierta antes: si quien usa
+  // el visor la había recogido a mano, se respeta.
+  const barraAntesDelBloqueRef = useRef(null)
+  useEffect(() => {
+    if (isBlockModelActive) {
+      setSidebarOpen((abierta) => {
+        barraAntesDelBloqueRef.current = abierta
+        return false
+      })
+    } else if (barraAntesDelBloqueRef.current !== null) {
+      setSidebarOpen(barraAntesDelBloqueRef.current)
+      barraAntesDelBloqueRef.current = null
+    }
+  }, [isBlockModelActive])
+
   const [blendMode, setBlendMode] = useState("multiply")
   const [prefsCargadas, setPrefsCargadas] = useState(false)
 

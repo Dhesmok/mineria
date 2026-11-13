@@ -3,32 +3,26 @@
 import React from "react"
 
 /**
- * Chasis del visor 3D: las piezas con las que se construye toda su instrumentación.
+ * Chasis del visor 3D: las piezas con las que se construye su instrumentación.
  *
- * La primera versión de esta pantalla resolvía cada control con un rectángulo oscuro
- * translúcido y un borde de un píxel. Funcionaba, pero podía ser el panel de cualquier
- * cosa: no se parecía ni a un instrumento de campo ni a lo único de esta pantalla que
- * sí tiene carácter propio, que es la brújula —bisel mecanizado, capas a distinta
- * profundidad, aguja que flota sobre su sombra—.
+ * Es el mismo lenguaje que el resto del visor —vidrio claro, iconos sin caja, un
+ * solo azul para lo encendido—, y no uno propio. Una versión anterior imitaba un
+ * instrumento de aluminio, con teclas abombadas, pilotos y cifras de colores en
+ * grande; junto a la barra lateral nueva parecía otra aplicación.
  *
- * Así que la brújula deja de ser la excepción y pasa a ser la regla. Todo lo demás se
- * construye con su misma gramática:
+ * - `bm3d-panel`   el vidrio: lo mismo que `.glass` de globals.css, repetido aquí
+ *                  porque esta hoja de estilo viaja con el componente.
+ * - `bm3d-groove`  la línea fina que separa una bahía de la siguiente.
+ * - `bm3d-key`     el botón de icono: transparente, gris al pasar, azul encendido.
+ * - `bm3d-readout` las cifras, con ancho fijo para que no bailen al cambiar.
  *
- * - `bm3d-panel`   la cara de aluminio anodizado: degradado vertical, filo de luz en el
- *                  borde superior y sombra propia debajo. Es lo que da el volumen.
- * - `bm3d-groove`  la ranura fresada que separa una bahía de la siguiente: una línea
- *                  negra con un filo claro a un lado. Separa sin dibujar una caja nueva.
- * - `bm3d-key`     la tecla: cara abombada, se hunde al pulsarla y enciende un piloto
- *                  cuando queda activada.
- * - `bm3d-readout` la lectura: mono de cifras de ancho fijo con un halo del propio color,
- *                  para que el número se lea como un display y no como texto suelto.
- *
- * El color queda para decir algo, no para adornar: azul y ámbar solo en las dos
- * magnitudes que se gradúan, rojo solo en lo que cierra o borra, gris en todo lo demás.
+ * La brújula es la excepción a propósito: es el único instrumento de verdad de la
+ * pantalla y conserva su volumen.
  */
 
 export const PANEL = "bm3d-panel rounded-2xl"
 export const PANEL_SM = "bm3d-panel rounded-xl"
+export const PANEL_PILL = "bm3d-panel rounded-full"
 
 /** Ranura de separación entre bahías contiguas. */
 export function Groove({ vertical = true, className = "" }) {
@@ -41,8 +35,10 @@ export function Groove({ vertical = true, className = "" }) {
 }
 
 /**
- * Tecla del panel. `active` la deja encendida con su piloto: un botón que cambia el
+ * Tecla del panel. `active` la deja encendida en azul lavado: un botón que cambia el
  * estado del visor tiene que poder verse encendido sin abrir un menú ni pasar el ratón.
+ * Basta con el color, como en las barras de macOS; el piloto que llevaba antes era
+ * una segunda señal para decir lo mismo.
  */
 export function BlockKey({
   active = false,
@@ -50,7 +46,8 @@ export function BlockKey({
   onClick,
   title,
   label,
-  size = 38,
+  size = 34,
+  round = false,
   children,
 }) {
   const tono = active
@@ -67,15 +64,9 @@ export function BlockKey({
       aria-label={label || title}
       aria-pressed={active ? true : undefined}
       style={{ width: size, height: size }}
-      className={`relative flex items-center justify-center rounded-[10px] shrink-0 transition-colors ${tono}`}
+      className={`relative flex items-center justify-center ${round ? "rounded-full" : "rounded-[9px]"} shrink-0 transition-colors ${tono}`}
     >
       {children}
-      {active && (
-        <span
-          aria-hidden="true"
-          className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary"
-        />
-      )}
     </button>
   )
 }
@@ -110,16 +101,18 @@ export const BLOCK_CHROME_CSS = `
   background: rgba(60,60,67,0.12);
 }
 
+/* Teclas sin caja: el icono solo, con un fondo gris al pasar por encima y azul
+   lavado cuando están encendidas. Antes cada una era un cuadrito gris, y una fila
+   de cinco cuadritos se leía como un teclado y no como una barra de herramientas. */
 .bm3d-key {
-  background: rgba(120,120,128,0.08);
-  border: 1px solid transparent;
+  background: transparent;
 }
-.bm3d-key:hover { background: rgba(120,120,128,0.16); }
-.bm3d-key:active { background: rgba(120,120,128,0.22); }
-.bm3d-key-on {
-  background: rgba(0,113,227,0.10);
-  border-color: rgba(0,113,227,0.22);
-  color: #0060c0;
+.bm3d-key:hover { background: rgba(120,120,128,0.12); }
+.bm3d-key:active { background: rgba(120,120,128,0.2); }
+.bm3d-key-on,
+.bm3d-key-on:hover {
+  background: rgba(0,113,227,0.11);
+  color: #0066cc;
 }
 
 .bm3d-readout { font-variant-numeric: tabular-nums; }

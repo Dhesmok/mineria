@@ -26,7 +26,7 @@ const BlockCompass = memo(function BlockCompass({
   alignedBadgeRef,
 }) {
   return (
-    <div className="absolute top-[5.25rem] right-3 z-20 flex flex-col items-center select-none">
+    <div className="absolute top-[4.6rem] right-3 z-20 flex flex-col items-center select-none">
       {/* Escenario con perspectiva 3D calibrada */}
       <div
         className="relative group"
@@ -276,50 +276,48 @@ const BlockCompass = memo(function BlockCompass({
         </button>
       </div>
 
-      {/* Píldora HUD de Telemetría (Rumbo con Flecha Activa + Inclinación) */}
-      <div className="mt-2 flex items-center gap-1.5 bg-card px-2.5 py-0.5 rounded-full border border-border text-[10px] tabular-nums tracking-tight text-label-2">
+      {/* Lectura y mandos, en una sola cápsula del mismo vidrio que el resto.
+          Eran tres piezas sueltas —la píldora del rumbo en rojo y negrita, y debajo
+          dos botoncitos con borde y sombra— que se leían como añadidos a la brújula
+          y no como parte de ella. El rumbo va en el color del texto: el rojo de la
+          brújula ya dice dónde está el norte, y repetirlo en la cifra la volvía una
+          alarma. */}
+      <div className="bm3d-panel mt-2.5 flex items-center gap-0.5 rounded-full p-[3px] text-[11px] tabular-nums">
         <span
           ref={headingRef}
-          className="font-bold text-danger min-w-[62px] text-center flex items-center justify-center gap-1"
+          className="min-w-[66px] pl-2 text-center font-medium text-foreground"
           title="Rumbo actual de la vista (Azimut)"
         >
           ↑ 000° N
         </span>
-        <span className="text-label-5">|</span>
         <span
           ref={pitchRef}
-          className="text-label-3 min-w-[34px] text-center"
+          className="min-w-[34px] text-center text-label-4"
           title="Ángulo de elevación / inclinación del terreno"
         >
           ∠ 45°
         </span>
-      </div>
-
-      {/* Botones de acción rápida: Reorientar Norte y Vista Cenital */}
-      <div className="mt-1 flex items-center gap-1">
+        <span className="mx-0.5 h-4 w-px bg-black/10" aria-hidden="true" />
         <button
           type="button"
           onClick={() => onResetNorth?.(false)}
-          className="p-1 rounded-md bg-fill hover:bg-fill-strong text-label-3 hover:text-danger border border-border transition-colors shadow"
+          className="flex h-6 w-6 items-center justify-center rounded-full text-label-3 transition-colors hover:bg-black/5 hover:text-foreground"
           title="Reorientar suavemente al Norte (0°)"
           aria-label="Reorientar al Norte"
         >
-          <RotateCcw size={11} />
+          <RotateCcw size={12} />
         </button>
-
         <button
           type="button"
           onClick={() => onToggleCenital?.()}
-          className={`px-1.5 py-0.5 rounded-md text-[9px] font-medium border transition-colors shadow flex items-center gap-1 ${
-            isCenital
-              ? "bg-danger/10 text-danger border-danger/30"
-              : "bg-fill hover:bg-fill-strong text-label-3 hover:text-primary border-border"
+          className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+            isCenital ? "bg-primary/10 text-primary" : "text-label-3 hover:bg-black/5 hover:text-foreground"
           }`}
           title={isCenital ? "Cambiar a perspectiva inclinada 3D" : "Cambiar a vista cenital 2D (90° desde arriba)"}
           aria-label="Alternar vista cenital"
+          aria-pressed={isCenital}
         >
-          <Eye size={10} />
-          <span>{isCenital ? "3D" : "Top"}</span>
+          <Eye size={12} />
         </button>
       </div>
     </div>
