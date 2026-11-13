@@ -10,8 +10,9 @@ describe("MobileBottomBar", () => {
     expect(screen.getByRole("navigation", { name: "Controles principales para móvil" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Capas" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Herramientas" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Expediente" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "3D / GPS" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Buscar" })).toBeInTheDocument()
+    // «3D / GPS» se quitó: repetía dos botones que ya están sobre el mapa.
+    expect(screen.queryByRole("button", { name: "3D / GPS" })).not.toBeInTheDocument()
   })
 
   test("marca el botón activo según activePanel", () => {
@@ -40,7 +41,7 @@ describe("MobileBottomBar", () => {
     await user.click(screen.getByRole("button", { name: "Herramientas" }))
     expect(handleSelect).toHaveBeenCalledWith("tools")
 
-    await user.click(screen.getByRole("button", { name: "Expediente" }))
+    await user.click(screen.getByRole("button", { name: "Buscar" }))
     expect(handleSelect).toHaveBeenCalledWith("expediente")
   })
 })

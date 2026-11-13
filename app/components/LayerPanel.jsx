@@ -87,22 +87,23 @@ const Casilla = ({ label, estado, sangria, fuerte, onClick, children }) => (
     type="button"
     onClick={onClick}
     aria-pressed={estado === "todo"}
-    className={`group flex w-full items-center gap-2 py-1.5 pr-4 text-left transition-colors hover:bg-zinc-800/50 ${sangria}`}
+    className={`group flex w-full items-center gap-2.5 py-1.5 pr-4 text-left transition-colors hover:bg-fill ${sangria}`}
   >
+    {/* Casilla de macOS: blanca con borde gris, azul cuando está marcada. */}
     <span
-      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
+      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors ${
         estado === "nada"
-          ? "border-zinc-500/80 bg-zinc-900/80 text-transparent group-hover:border-zinc-400"
-          : "border-zinc-400 bg-zinc-200 text-zinc-950"
+          ? "border-label-5 bg-card text-transparent group-hover:border-label-4"
+          : "border-primary bg-primary text-white"
       }`}
     >
-      {estado === "todo" && <Check className="h-3 w-3" />}
-      {estado === "parte" && <span className="h-[2px] w-[8px] rounded-full bg-zinc-950" />}
+      {estado === "todo" && <Check className="h-3 w-3" strokeWidth={3} />}
+      {estado === "parte" && <span className="h-[2px] w-[8px] rounded-full bg-white" />}
     </span>
     <span
-      className={`min-w-0 flex-1 truncate text-xs transition-colors ${
-        estado === "nada" ? "text-zinc-300 group-hover:text-white" : "text-white font-semibold"
-      } ${fuerte ? (estado === "nada" ? "font-medium text-zinc-200" : "font-bold text-white") : ""}`}
+      className={`min-w-0 flex-1 truncate text-[12.5px] transition-colors ${
+        estado === "nada" ? "text-label-2 group-hover:text-foreground" : "text-foreground"
+      } ${fuerte ? "font-medium" : ""}`}
     >
       {label}
     </span>
@@ -149,9 +150,9 @@ const Departamento = ({ grupo, marcadas, onToggle }) => {
             onClick={() => setAbierto((v) => !v)}
             aria-expanded={abierto}
             aria-label={`Capas de ${grupo?.label}`}
-            className="-ml-2 mr-2 shrink-0 rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+            className="-ml-2 mr-2 shrink-0 rounded-md p-1 text-label-4 transition-colors hover:bg-fill-strong hover:text-foreground"
           >
-            <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180 text-white" : ""}`} />
+            <ChevronDown className={`h-3 w-3 transition-transform ${abierto ? "rotate-180 text-foreground" : ""}`} />
           </button>
         )}
       </div>
@@ -202,17 +203,17 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
   return (
     <>
       {children}
-      <div className="border-b border-zinc-800/40 bg-zinc-950/60">
+      <div className="border-b border-border bg-fill/60">
         <button
           type="button"
           onClick={() => setAbierta((v) => !v)}
           aria-expanded={abierta}
-          className="flex w-full items-center justify-between gap-2 py-1.5 pl-11 pr-4 text-[11px] text-zinc-400 transition-colors hover:text-zinc-200"
+          className="flex w-full items-center justify-between gap-2 py-2 pl-12 pr-4 text-[11.5px] font-medium text-primary transition-colors hover:text-primary/80"
         >
           <span>
             {dibujados === 0 ? "Elige qué dibujar" : `${dibujados} de ${gruposValidos.length}`}
           </span>
-          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform text-zinc-400 ${abierta ? "rotate-180 text-white" : ""}`} />
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${abierta ? "rotate-180" : ""}`} />
         </button>
 
         {abierta && (
@@ -231,7 +232,7 @@ const SubLayerHost = ({ layer, state, subLayers, chosenSub, onToggleSubLayer, ch
         {/* Desmarcarlo todo deja la capa en blanco, y conviene decirlo: si no, se
             lee como que la capa dejó de funcionar. */}
         {marcadas.length === 0 && !abierta && (
-          <p className="pb-1.5 pl-11 pr-4 text-[10px] leading-tight text-zinc-500">
+          <p className="pb-2 pl-12 pr-4 text-[11px] leading-tight text-label-4">
             Sin nada marcado, esta capa no dibuja nada.
           </p>
         )}
@@ -268,14 +269,10 @@ const LayerRow = ({
   <div
     ref={(node) => registerRow(layer.key, node)}
     onClick={() => !layer.pending && onToggle(layer.key)}
-    className={`group flex h-[40px] cursor-pointer items-center gap-2 border-b border-zinc-800/50 px-3 transition-all ${
-      dragging
-        ? "bg-zinc-800/70 opacity-70"
-        : state.on
-        ? "bg-zinc-800/60 hover:bg-zinc-800/80 text-white"
-        : "text-zinc-300 hover:bg-zinc-800/40 hover:text-white"
+    className={`group flex h-11 cursor-pointer items-center gap-2.5 border-b border-border/70 pl-4 pr-3 transition-colors ${
+      dragging ? "bg-fill-strong opacity-70" : "hover:bg-fill"
     }`}
-    style={draggable ? { borderLeft: `3px solid ${area.color}`, paddingLeft: "10px" } : undefined}
+    style={draggable ? { boxShadow: `inset 3px 0 0 ${area.color}` } : undefined}
   >
     {draggable && (
       <button
@@ -287,7 +284,7 @@ const LayerRow = ({
         onClick={(e) => e.stopPropagation()}
         aria-label={`Reordenar ${layer.label}`}
         title="Arrastra para cambiar qué capa se ve encima"
-        className="-ml-1 shrink-0 cursor-grab touch-none text-zinc-500 hover:text-zinc-300 active:cursor-grabbing"
+        className="-ml-1 shrink-0 cursor-grab touch-none text-label-4 hover:text-label-2 active:cursor-grabbing"
       >
         <GripVertical className="h-3.5 w-3.5" />
       </button>
@@ -312,10 +309,10 @@ const LayerRow = ({
       title={[layer.label, layer.scale, layer.hint].filter(Boolean).join(" · ")}
       className={`min-w-0 flex-1 truncate text-left text-[13px] transition-colors ${
         state.on
-          ? "font-semibold text-white tracking-tight"
+          ? "font-medium text-foreground"
           : layer.pending
-          ? "cursor-not-allowed text-zinc-600"
-          : "text-zinc-300 group-hover:text-white"
+          ? "cursor-not-allowed text-label-5"
+          : "text-label-2 group-hover:text-foreground"
       }`}
     >
       {layer.label}
@@ -323,7 +320,7 @@ const LayerRow = ({
 
     <div
       onClick={(e) => e.stopPropagation()}
-      className="w-[64px] shrink-0 flex items-center justify-end"
+      className="w-[56px] shrink-0 flex items-center justify-end"
     >
       {state.on ? (
         <OpacitySlider
@@ -336,6 +333,24 @@ const LayerRow = ({
         <span className="w-full" />
       )}
     </div>
+
+    {/* El interruptor de iOS. Antes no había ninguno a la vista: el nombre
+        hacía de interruptor y solo el negrita decía si la capa estaba puesta,
+        así que nada invitaba a pulsar. Es solo la figura —quien conmuta es el
+        nombre, que lleva el role="switch", y la fila entera—, para no tener dos
+        controles accesibles que hacen lo mismo. */}
+    <span
+      aria-hidden="true"
+      className={`relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full transition-colors duration-200 ${
+        layer.pending ? "bg-fill-strong opacity-50" : state.on ? "bg-success" : "bg-fill-strong"
+      }`}
+    >
+      <span
+        className={`absolute left-[2px] h-[18px] w-[18px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2),0_0_0_0.5px_rgba(0,0,0,0.04)] transition-transform duration-200 ${
+          state.on ? "translate-x-4" : ""
+        }`}
+      />
+    </span>
   </div>
   </SubLayerHost>
 )
@@ -343,7 +358,7 @@ const LayerRow = ({
 /**
  * Uno de los dos botones del encabezado de un área.
  */
-const HeaderButton = ({ icon: Icon, label, color, active, disabled, onClick }) => (
+const HeaderButton = ({ icon: Icon, label, active, disabled, onClick }) => (
   <button
     type="button"
     disabled={disabled}
@@ -353,18 +368,13 @@ const HeaderButton = ({ icon: Icon, label, color, active, disabled, onClick }) =
       event.stopPropagation()
       onClick(event.currentTarget)
     }}
-    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors disabled:cursor-not-allowed disabled:opacity-20 ${
+    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
       active
-        ? "border-transparent text-white shadow-sm"
-        : "border-zinc-800 bg-zinc-900/80 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+        ? "bg-primary/10 text-primary"
+        : "text-label-4 hover:bg-fill-strong hover:text-foreground"
     }`}
-    style={
-      active
-        ? { backgroundColor: color || "#3b82f6" }
-        : undefined
-    }
   >
-    <Icon className="h-3 w-3" />
+    <Icon className="h-3.5 w-3.5" />
   </button>
 )
 
@@ -507,10 +517,11 @@ export const LayerPanel = ({
   })
 
   return (
-    <div className="-mx-4 text-slate-100">
+    <div className="-mx-4 text-foreground">
       {/* Filtro y cuenta */}
-      <div className="mb-2 flex items-center justify-between gap-2 px-4">
-        <div className="flex rounded-lg bg-zinc-950/80 p-0.5 border border-zinc-800/80">
+      <div className="mb-3 flex items-center justify-between gap-2 px-4">
+        {/* Control segmentado de iOS: carril gris y el elegido en blanco. */}
+        <div className="flex rounded-[9px] bg-fill-strong/80 p-[2px]">
           {[
             { id: "todas", label: "Todas", value: false },
             { id: "activas", label: "Activas", value: true },
@@ -520,41 +531,41 @@ export const LayerPanel = ({
               type="button"
               onClick={() => setOnlyActive(tab.value)}
               aria-pressed={onlyActive === tab.value}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${
+              className={`min-w-[68px] rounded-[7px] px-3 py-1 text-[12px] font-medium transition-all ${
                 onlyActive === tab.value
-                  ? "bg-zinc-800 text-white font-semibold shadow-sm border border-zinc-700/60"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_0.5px_rgba(0,0,0,0.04)]"
+                  : "text-label-3 hover:text-foreground"
               }`}
             >
               {tab.label}
             </button>
           ))}
         </div>
-        <span className="text-[11px] font-mono text-zinc-400">
+        <span className="text-[11.5px] tabular-nums text-label-4">
           {activeCount === 1 ? "1 activada" : `${activeCount} activadas`}
         </span>
       </div>
 
-      <div className="max-h-[calc(100vh-140px)] overflow-y-auto border-t border-zinc-800/60">
+      <div className="border-t border-border">
         {onlyActive ? (
           // ───────────── Activas: lista plana y ordenable ─────────────
           activeCount === 0 ? (
             <div className="px-4 py-8 text-center">
-              <p className="text-xs font-medium text-zinc-300">No hay capas activadas.</p>
-              <p className="mt-1.5 text-[11px] text-zinc-400">
+              <p className="text-xs font-medium text-label-2">No hay capas activadas.</p>
+              <p className="mt-1.5 text-[11px] text-label-3">
                 Explora &ldquo;Todas&rdquo; para añadir información al mapa.
               </p>
             </div>
           ) : (
             <>
-              <p className="border-b border-zinc-800/50 bg-zinc-950/60 px-4 py-2 text-[11px] leading-tight text-zinc-400">
+              <p className="border-b border-border bg-fill/60 px-4 py-2 text-[11.5px] leading-snug text-label-3">
                 Arrastra para ordenar. La de arriba se dibuja encima de las demás.
               </p>
               {activeKeys.map((key, index) => (
                 <div key={key} className="relative">
                   {/* Línea de destino mientras se arrastra. */}
                   {drag && drag.to === index && drag.from !== index && (
-                    <span className="pointer-events-none absolute inset-x-3 -top-px z-10 h-0.5 rounded bg-zinc-400" />
+                    <span className="pointer-events-none absolute inset-x-3 -top-px z-10 h-0.5 rounded bg-primary" />
                   )}
                   <LayerRow {...filaProps(capaPorClave(key), index, true)} />
                   {userByKey.has(key) && (
@@ -582,11 +593,9 @@ export const LayerPanel = ({
             const filtrada = areaHasFilter(area.id)
 
             return (
-              <div key={area.id} className="border-b border-zinc-800/50">
+              <div key={area.id} className="border-b border-border">
                 <div
-                  className={`sticky top-0 z-[2] flex items-center gap-2 px-3 py-2 transition-colors ${
-                    abierta ? "bg-[#141416]" : "bg-[#09090b]/90 hover:bg-[#141416]/70"
-                  }`}
+                  className="sticky top-0 z-[2] flex items-center gap-2 bg-card/60 py-2.5 pl-4 pr-3 backdrop-blur-xl transition-colors hover:bg-fill"
                 >
                   <button
                     type="button"
@@ -596,21 +605,32 @@ export const LayerPanel = ({
                     title="Clic para desplegar/plegar · Ctrl+Clic para todas"
                     className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
+                    {/* El icono en su cuadrito de color, como en Ajustes del
+                        iPhone: el color del área se ve sin tener que leer. */}
+                    <span
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-white shadow-[inset_0_0_0_0.5px_rgba(0,0,0,0.08)]"
+                      style={{ backgroundColor: area.color }}
+                    >
+                      <AreaIcon area={area} className="h-4 w-4" />
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                      <span className="truncate text-[14px] font-semibold text-foreground">{area.name}</span>
+                      <span className="truncate text-[11px] text-label-4">{area.source}</span>
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums ${
+                        encendidas > 0 ? "bg-success/10 text-success" : "text-label-4"
+                      }`}
+                    >
+                      {encendidas}/{delArea.length}
+                    </span>
                     <ChevronRight
-                      className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${
-                        abierta ? "rotate-90 text-white" : ""
+                      aria-hidden="true"
+                      className={`h-4 w-4 shrink-0 text-label-5 transition-transform duration-200 ${
+                        abierta ? "rotate-90" : ""
                       }`}
                     />
-                    <AreaIcon area={area} className="h-4 w-4 shrink-0 text-zinc-400" />
-                    <span className="truncate text-[13px] font-semibold tracking-wide text-zinc-100">
-                      {area.name}
-                    </span>
-                    <span className="shrink-0 text-[10.5px] font-mono text-zinc-500">{area.source}</span>
                   </button>
-
-                  <span className="shrink-0 font-mono text-[10.5px] text-zinc-400">
-                    {encendidas}/{delArea.length}
-                  </span>
 
                   {/* El área de archivos propios no lleva filtro ni lupa: no hay
                       campos conocidos que filtrar ni servicio al que preguntar.

@@ -33,7 +33,7 @@ const BlockCompass = memo(function BlockCompass({
         style={{ perspective: "800px", perspectiveOrigin: "50% 50%" }}
       >
         {/* Resplandor ambiental de fondo */}
-        <div className="absolute -inset-2.5 rounded-full bg-gradient-to-tr from-rose-500/25 via-sky-500/20 to-rose-500/25 opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300 pointer-events-none" />
+        <div className="absolute -inset-2.5 rounded-full bg-gradient-to-tr from-rose-500/25 via-primary to-rose-500/25 opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-300 pointer-events-none" />
 
         {/* Botón táctil principal que contiene el Gimbal 3D */}
         <button
@@ -42,7 +42,7 @@ const BlockCompass = memo(function BlockCompass({
           onDoubleClick={() => onToggleCenital?.()}
           title="Brújula 3D · Clic para orientar al Norte (0°) · Doble clic para vista cenital"
           aria-label="Reorientar bloque 3D al Norte"
-          className="relative w-[78px] h-[78px] sm:w-[86px] sm:h-[86px] flex items-center justify-center p-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/70 active:scale-95 transition-transform duration-150 cursor-pointer bg-transparent"
+          className="relative w-[78px] h-[78px] sm:w-[86px] sm:h-[86px] flex items-center justify-center p-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/30 active:scale-95 transition-transform duration-150 cursor-pointer bg-transparent"
         >
           {/* Caret Superior Fijo de Proa (Marcador de mira a las 12h con halo luminoso) */}
           <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex flex-col items-center">
@@ -62,19 +62,19 @@ const BlockCompass = memo(function BlockCompass({
           >
             {/* CAPA 1: Placa de Base y Sombra Profunda 3D (Z = -14px) */}
             <div
-              className="absolute inset-0 rounded-full bg-black/85 shadow-[0_22px_40px_rgba(0,0,0,0.9)] border border-zinc-900 pointer-events-none"
+              className="absolute inset-0 rounded-full bg-black/20 shadow-lg border border-border pointer-events-none"
               style={{ transform: "translateZ(-14px)" }}
             />
 
             {/* CAPA 2: Pared Cilíndrica Inferior de Titanio (Z = -8px) */}
             <div
-              className="absolute inset-[1px] rounded-full bg-gradient-to-b from-zinc-750 via-zinc-900 to-black border border-zinc-700/60 shadow-inner pointer-events-none"
+              className="absolute inset-[1px] rounded-full bg-gradient-to-b from-card via-card to-black border border-border shadow-inner pointer-events-none"
               style={{ transform: "translateZ(-8px)" }}
             />
 
             {/* CAPA 3: Bisel Exterior con Moleteado (Z = 0px) */}
             <div
-              className="absolute inset-[2px] rounded-full bg-zinc-950/95 backdrop-blur-xl border border-zinc-700/80 shadow-[inset_0_1px_2px_rgba(255,255,255,0.25)] pointer-events-none"
+              className="absolute inset-[2px] rounded-full bg-white border border-border pointer-events-none"
               style={{ transform: "translateZ(0px)" }}
             />
 
@@ -86,13 +86,13 @@ const BlockCompass = memo(function BlockCompass({
               <svg viewBox="0 0 100 100" className="w-full h-full">
                 <defs>
                   <radialGradient id="dialInnerFace" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#1c1917" stopOpacity="0.5" />
-                    <stop offset="65%" stopColor="#09090b" stopOpacity="0.9" />
-                    <stop offset="100%" stopColor="#000000" stopOpacity="1" />
+                    <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+                    <stop offset="65%" stopColor="#fbfbfd" stopOpacity="1" />
+                    <stop offset="100%" stopColor="#ececf0" stopOpacity="1" />
                   </radialGradient>
                 </defs>
-                <circle cx="50" cy="50" r="46" fill="url(#dialInnerFace)" stroke="#3f3f46" strokeWidth="0.6" />
-                <circle cx="50" cy="50" r="37.5" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" strokeDasharray="1 2" />
+                <circle cx="50" cy="50" r="46" fill="url(#dialInnerFace)" stroke="#d1d1d6" strokeWidth="0.6" />
+                <circle cx="50" cy="50" r="37.5" fill="none" stroke="rgba(60,60,67,0.18)" strokeWidth="0.5" strokeDasharray="1 2" />
 
                 {/* Marcas perimetrales graduadas cada 15° y 45° */}
                 {Array.from({ length: 24 }).map((_, idx) => {
@@ -104,11 +104,11 @@ const BlockCompass = memo(function BlockCompass({
                   const width = isCardinal ? 1.8 : isInter ? 1.1 : 0.6
                   const color = isCardinal
                     ? deg === 0
-                      ? "#f43f5e"
-                      : "#f4f4f5"
+                      ? "#ff3b30"
+                      : "#1d1d1f"
                     : isInter
-                    ? "rgba(255,255,255,0.65)"
-                    : "rgba(255,255,255,0.3)"
+                    ? "rgba(60,60,67,0.6)"
+                    : "rgba(60,60,67,0.3)"
 
                   return (
                     <line
@@ -126,16 +126,16 @@ const BlockCompass = memo(function BlockCompass({
                 })}
 
                 {/* Puntos Cardinales de Fondo en el Dial */}
-                <text x="50" y="21" fill="#f43f5e" fontSize="9" fontWeight="800" textAnchor="middle" dominantBaseline="central">
+                <text x="50" y="21" fill="#ff3b30" fontSize="9" fontWeight="800" textAnchor="middle" dominantBaseline="central">
                   N
                 </text>
-                <text x="79" y="50" fill="#a1a1aa" fontSize="7.5" fontWeight="700" textAnchor="middle" dominantBaseline="central">
+                <text x="79" y="50" fill="#6e6e73" fontSize="7.5" fontWeight="700" textAnchor="middle" dominantBaseline="central">
                   E
                 </text>
-                <text x="50" y="79" fill="#a1a1aa" fontSize="7.5" fontWeight="700" textAnchor="middle" dominantBaseline="central">
+                <text x="50" y="79" fill="#6e6e73" fontSize="7.5" fontWeight="700" textAnchor="middle" dominantBaseline="central">
                   S
                 </text>
-                <text x="21" y="50" fill="#a1a1aa" fontSize="7.5" fontWeight="700" textAnchor="middle" dominantBaseline="central">
+                <text x="21" y="50" fill="#6e6e73" fontSize="7.5" fontWeight="700" textAnchor="middle" dominantBaseline="central">
                   O
                 </text>
               </svg>
@@ -247,17 +247,17 @@ const BlockCompass = memo(function BlockCompass({
               className="absolute w-4 h-4 rounded-full flex items-center justify-center pointer-events-none"
               style={{
                 transform: "translateZ(24px)",
-                background: "radial-gradient(circle, #3f3f46 0%, #18181b 100%)",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.7)",
-                border: "0.8px solid #71717a",
+                background: "radial-gradient(circle, #ffffff 0%, #e5e5ea 100%)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                border: "0.8px solid #c7c7cc",
               }}
             >
-              <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,1)] border border-white/50" />
+              <div className="w-1.5 h-1.5 rounded-full bg-danger" />
             </div>
 
             {/* CAPA 8: Cúpula de Cristal de Zafiro Curvo con Brillo Especular (Z = 28px) */}
             <div
-              className="absolute inset-[2px] rounded-full pointer-events-none border border-white/20"
+              className="absolute inset-[2px] rounded-full pointer-events-none border border-primary/40"
               style={{
                 transform: "translateZ(28px)",
                 background:
@@ -269,7 +269,7 @@ const BlockCompass = memo(function BlockCompass({
             {/* CAPA 9: Aro exterior de pulso de alineación exacta al Norte */}
             <div
               ref={alignedBadgeRef}
-              className="absolute inset-0 rounded-full border-2 border-rose-500 pointer-events-none opacity-0 transition-opacity duration-200 shadow-[0_0_16px_rgba(244,63,94,0.75)]"
+              className="absolute inset-0 rounded-full border-2 border-danger/30 pointer-events-none opacity-0 transition-opacity duration-200 shadow-[0_0_16px_rgba(244,63,94,0.75)]"
               style={{ transform: "translateZ(12px)" }}
             />
           </div>
@@ -277,18 +277,18 @@ const BlockCompass = memo(function BlockCompass({
       </div>
 
       {/* Píldora HUD de Telemetría (Rumbo con Flecha Activa + Inclinación) */}
-      <div className="mt-2 flex items-center gap-1.5 bg-zinc-950/95 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-zinc-800/90 shadow-xl text-[10px] font-mono tracking-tight text-zinc-300">
+      <div className="mt-2 flex items-center gap-1.5 bg-card px-2.5 py-0.5 rounded-full border border-border text-[10px] tabular-nums tracking-tight text-label-2">
         <span
           ref={headingRef}
-          className="font-bold text-rose-400 min-w-[62px] text-center flex items-center justify-center gap-1"
+          className="font-bold text-danger min-w-[62px] text-center flex items-center justify-center gap-1"
           title="Rumbo actual de la vista (Azimut)"
         >
           ↑ 000° N
         </span>
-        <span className="text-zinc-600">|</span>
+        <span className="text-label-5">|</span>
         <span
           ref={pitchRef}
-          className="text-zinc-400 min-w-[34px] text-center"
+          className="text-label-3 min-w-[34px] text-center"
           title="Ángulo de elevación / inclinación del terreno"
         >
           ∠ 45°
@@ -300,7 +300,7 @@ const BlockCompass = memo(function BlockCompass({
         <button
           type="button"
           onClick={() => onResetNorth?.(false)}
-          className="p-1 rounded-md bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 border border-zinc-800/80 transition-colors shadow"
+          className="p-1 rounded-md bg-fill hover:bg-fill-strong text-label-3 hover:text-danger border border-border transition-colors shadow"
           title="Reorientar suavemente al Norte (0°)"
           aria-label="Reorientar al Norte"
         >
@@ -312,8 +312,8 @@ const BlockCompass = memo(function BlockCompass({
           onClick={() => onToggleCenital?.()}
           className={`px-1.5 py-0.5 rounded-md text-[9px] font-medium border transition-colors shadow flex items-center gap-1 ${
             isCenital
-              ? "bg-rose-950/60 text-rose-300 border-rose-800/60"
-              : "bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-sky-300 border-zinc-800/80"
+              ? "bg-danger/10 text-danger border-danger/30"
+              : "bg-fill hover:bg-fill-strong text-label-3 hover:text-primary border-border"
           }`}
           title={isCenital ? "Cambiar a perspectiva inclinada 3D" : "Cambiar a vista cenital 2D (90° desde arriba)"}
           aria-label="Alternar vista cenital"

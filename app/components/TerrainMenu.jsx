@@ -82,13 +82,13 @@ export const TerrainMenu = ({
     <div
       role="dialog"
       aria-label="Herramientas y análisis del terreno"
-      className="w-[305px] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-2xl border border-zinc-800/90 bg-[#09090b]/95 p-2.5 text-zinc-100 shadow-2xl backdrop-blur-2xl select-none"
+      className="w-[305px] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-2xl border glass-strong p-2.5 text-foreground select-none"
     >
       {/* Cabecera */}
-      <div className="mb-2 flex items-center justify-between border-b border-zinc-800/80 px-1 pb-2">
+      <div className="mb-2 flex items-center justify-between border-b border-border px-1 pb-2">
         <div className="flex items-center gap-1.5">
-          <Mountain className="h-4 w-4 text-emerald-400" />
-          <span className="text-[11.5px] font-semibold uppercase tracking-wider text-zinc-200">
+          <Mountain className="h-4 w-4 text-success" />
+          <span className="eyebrow">
             Análisis de Terreno
           </span>
         </div>
@@ -97,7 +97,7 @@ export const TerrainMenu = ({
             type="button"
             onClick={handleResetAll}
             title="Desactivar todos los análisis de terreno activos"
-            className="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[9.5px] font-medium text-zinc-400 hover:bg-zinc-700 hover:text-white transition-colors"
+            className="rounded bg-fill-strong px-1.5 py-0.5 text-[9.5px] font-medium text-label-3 hover:bg-label-5/50 hover:text-foreground transition-colors"
           >
             Limpiar
           </button>
@@ -116,15 +116,15 @@ export const TerrainMenu = ({
               aria-pressed={item.active}
               className={`flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-all ${
                 item.active
-                  ? "border border-zinc-700 bg-zinc-800 text-white shadow-sm"
-                  : "border border-transparent text-zinc-300 hover:bg-zinc-800/60 hover:text-white"
+                  ? "border border-transparent bg-primary/10 text-foreground"
+                  : "border border-transparent text-label-2 hover:bg-fill-strong/70 hover:text-foreground"
               }`}
             >
               <span
                 className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${
                   item.active
-                    ? "border-emerald-500/40 bg-emerald-950/60 text-emerald-300 shadow-sm"
-                    : "border-zinc-800 bg-zinc-900/80 text-zinc-400"
+                    ? "border-success/30 bg-success/10 text-success shadow-sm"
+                    : "border-border bg-fill text-label-3"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -132,16 +132,16 @@ export const TerrainMenu = ({
 
               <span className="min-w-0 flex-1">
                 <span className="flex items-center justify-between gap-1">
-                  <span className="text-[12.5px] font-medium text-zinc-100">
+                  <span className="text-[12.5px] font-medium text-foreground">
                     {item.title}
                   </span>
                   {item.active && (
-                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-zinc-950">
+                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-white">
                       <Check className="h-2.5 w-2.5 stroke-[3]" />
                     </span>
                   )}
                 </span>
-                <span className="mt-0.5 block text-[10.5px] leading-tight text-zinc-400">
+                <span className="mt-0.5 block text-[10.5px] leading-tight text-label-3">
                   {item.desc}
                 </span>
               </span>

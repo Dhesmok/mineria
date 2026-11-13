@@ -2,14 +2,12 @@
 
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react"
 import dynamic from "next/dynamic"
-import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table"
 import {
-  Layers,
-  Wrench,
-  Pin,
-  PinOff,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   X,
   Loader2,
@@ -21,7 +19,6 @@ import {
   Square,
   Trash2,
   Linkedin,
-  Compass,
   Crosshair,
   MapPin,
   Image as ImageIcon,
@@ -53,12 +50,15 @@ import {
 // el servidor.
 const MapComponent = dynamic(() => import("./MapComponentGL"), {
   ssr: false,
-  loading: () => <p className="text-slate-400 p-4 text-sm">Cargando mapa...</p>,
+  loading: () => <p className="text-label-3 p-4 text-sm">Cargando mapa...</p>,
 })
 
 export default function Component() {
-  const [isPinned, setIsPinned] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
+  // La barra lateral arranca abierta y se recoge con su botón. Antes se abría
+  // al pasar el ratón por un riel negro de dos iconos: se desplegaba sola al
+  // cruzar hacia el mapa, se cerraba al ir a usar un menú que salía fuera de
+  // ella, y no había forma de saber que estaba ahí sin tropezar con ella.
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [drawerTab, setDrawerTab] = useState("capas")
   const [showTable, setShowTable] = useState(false)
   const [coordinates, setCoordinates] = useState([])
@@ -89,18 +89,8 @@ export default function Component() {
   const [islandLoading, setIslandLoading] = useState(false)
   const [islandResultsOpen, setIslandResultsOpen] = useState(false)
   const [islandSelectedIndex, setIslandSelectedIndex] = useState(-1)
-  const [isIslandHovered, setIsIslandHovered] = useState(false)
-  const [isIslandFocused, setIsIslandFocused] = useState(false)
   const islandAbortRef = useRef(null)
   const islandInputRef = useRef(null)
-
-  const isIslandExpanded =
-    (typeof process !== "undefined" && process.env.NODE_ENV === "test") ||
-    isIslandHovered ||
-    isIslandFocused ||
-    Boolean(islandSearchText) ||
-    islandResultsOpen ||
-    islandLoading
 
   // Ventanas flotantes
   const [filterPopover, setFilterPopover] = useState(null)
@@ -143,7 +133,8 @@ export default function Component() {
     const handleGlobalKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key?.toLowerCase() === "k") {
         e.preventDefault()
-        setIsIslandFocused(true)
+        // Si la barra está recogida el buscador sigue a la vista —va en la
+        // cápsula—, así que basta con enfocarlo.
         islandInputRef.current?.focus()
       }
     }
@@ -475,241 +466,250 @@ export default function Component() {
     buscarExpediente(code)
   }
 
-  const isDrawerOpen = isPinned || isHovered
+  /** Elegir la sugerencia marcada con el teclado o, si no hay, lo escrito. */
+  const confirmarBusqueda = () => {
+    if (islandSelectedIndex >= 0 && islandSuggestions[islandSelectedIndex]) {
+      const sel = islandSuggestions[islandSelectedIndex]
+      const code = typeof sel === "string" ? sel : sel?.code
+      if (code) handleSelectIslandExpedient(code)
+    } else if (islandSearchText.trim()) {
+      handleSelectIslandExpedient(islandSearchText.trim())
+    }
+  }
+
+  const cerrarExpediente = () => {
+    handleReset()
+    setIslandSearchText("")
+    setIslandResultsOpen(false)
+  }
+
+  const abrirCrs = (event) => {
+    const el = event.currentTarget
+    setCrsPopover((actual) => (actual ? null : el))
+  }
+
+  const layerPanel = (
+    <LayerPanel
+      layers={layers}
+      order={layerOrder}
+      onToggle={alternarCapa}
+      onOpacity={cambiarOpacidad}
+      onColor={cambiarColor}
+      onReorder={setLayerOrder}
+      subLayers={sgcState.subLayers}
+      chosenSub={sgcState.chosenSub}
+      onToggleSubLayer={sgcState.onToggleSubLayer}
+      areaHasFilter={areaHasFilter}
+      onOpenFilters={(areaId, el) =>
+        setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
+      }
+      userLayers={userLayers}
+      userLayersLoading={userLayersLoading}
+      userLayerProblems={userLayerProblems}
+      onImportFiles={cargarArchivos}
+      onDismissImportProblems={clearUserLayerProblems}
+      onRemoveUserLayer={removeUserLayer}
+      onFocusUserLayer={encuadrarCapaCargada}
+      onChooseUserLayerCrs={setUserLayerCrs}
+    />
+  )
 
   return (
-    <div className="relative flex w-full h-screen bg-[#000000] overflow-hidden">
+    <div
+      className="relative flex w-full h-screen bg-background overflow-hidden"
+      // Cuánto tapa la barra lateral por la izquierda. Lo lee el CSS del mapa
+      // para correr la barra de escala, que si no quedaba debajo del panel.
+      style={{ "--sidebar-offset": sidebarOpen ? "384px" : "12px" }}
+    >
       <OfflineIndicator />
-      {/* Dock lateral pegado al borde izquierdo con rail colapsable y drawer fluido */}
+
+      {/* ─────────────────────── Barra lateral (escritorio) ───────────────────────
+          Flota sobre el mapa con un margen, en vez de ir pegada al borde: así se
+          lee como una hoja encima del mapa y no como un marco que lo recorta. */}
       <aside
+        ref={panelRef}
         aria-label="Panel lateral"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        className="fixed left-0 top-0 bottom-0 z-30 hidden md:flex select-none pointer-events-auto"
+        className={`glass-strong fixed left-3 top-3 z-30 hidden md:flex flex-col rounded-[20px] text-foreground select-none pointer-events-auto transition-[width,bottom] duration-300 ease-out ${
+          sidebarOpen ? "bottom-3 w-[360px]" : "w-[320px]"
+        }`}
       >
-        {/* Rail de iconos (barra de tareas tipo dock, 56px) */}
-        <div className="flex w-14 flex-col items-center justify-between border-r border-zinc-800/80 bg-[#000000]/95 py-3.5 backdrop-blur-2xl text-zinc-200 z-10 shadow-[4px_0_24px_rgba(0,0,0,0.6)]">
-          {/* Iconos de navegación del rail */}
-          <div className="flex flex-col items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setDrawerTab("capas")}
-              title="Capas del proyecto"
-              aria-label="Pestaña Capas"
-              className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
-                drawerTab === "capas" && isDrawerOpen
-                  ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-              }`}
-            >
-              <Layers className="h-5 w-5" />
-              {activeCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-1 text-[9px] font-bold text-black shadow">
-                  {activeCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setDrawerTab("herramientas")}
-              title="Herramientas y configuración"
-              aria-label="Pestaña Herramientas"
-              className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
-                drawerTab === "herramientas" && isDrawerOpen
-                  ? "bg-zinc-800 text-white border border-zinc-700 shadow-sm"
-                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-              }`}
-            >
-              <Wrench className="h-5 w-5" />
-            </button>
+        {/* Cabecera: el nombre en la serif, que es el toque editorial */}
+        {sidebarOpen && (
+          <div className="flex items-start justify-between px-5 pt-5">
+            <div>
+              <h1 className="font-display text-[26px] font-medium leading-none tracking-[-0.015em] text-foreground">
+                Visor Minero
+              </h1>
+              <p className="eyebrow mt-1.5">Colombia · Datos abiertos del Estado</p>
+            </div>
+            <SidebarToggle open onClick={() => setSidebarOpen(false)} />
           </div>
+        )}
 
-          {/* Enlace al perfil de LinkedIn en la base de la barra */}
-          <div className="flex flex-col items-center gap-2">
-            <a
-              href="https://www.linkedin.com/in/fabio-espinosa/"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Fabio A. Espinosa en LinkedIn"
-              aria-label="Perfil de LinkedIn de Fabio A. Espinosa"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 transition-colors"
-            >
-              <Linkedin className="h-4.5 w-4.5" />
-            </a>
-          </div>
-        </div>
-
-        {/* Drawer desplegable en negro obsidiana glass (~360px) */}
-        <div
-          ref={panelRef}
-          className={`flex flex-col border-r border-zinc-800/80 bg-[#09090b]/95 text-zinc-100 backdrop-blur-2xl transition-all duration-300 ease-out overflow-hidden ${
-            isDrawerOpen
-              ? "w-[360px] opacity-100 shadow-[20px_0_40px_rgba(0,0,0,0.6)]"
-              : "w-0 opacity-0 pointer-events-none"
-          }`}
-        >
-          {/* Cabecera del drawer con título de sección y controles */}
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800/80 px-4 bg-[#000000]/70">
-            <div className="flex items-center gap-2">
-              {drawerTab === "capas" ? (
-                <Layers className="h-4 w-4 text-zinc-300" />
+        {/* Buscador: siempre a la vista, abierta o recogida la barra */}
+        <div className={`relative flex items-center gap-2 ${sidebarOpen ? "px-4 pt-4" : "p-2"}`}>
+          {!sidebarOpen && (
+            <SidebarToggle open={false} badge={activeCount} onClick={() => setSidebarOpen(true)} />
+          )}
+          <div className="relative min-w-0 flex-1">
+            <div className="flex h-9 items-center gap-2 rounded-[10px] bg-fill-strong/70 px-2.5 transition-colors focus-within:bg-card focus-within:ring-2 focus-within:ring-primary/40">
+              {islandLoading ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-label-4" />
               ) : (
-                <Wrench className="h-4 w-4 text-zinc-300" />
+                <Search className="h-4 w-4 shrink-0 text-label-4" />
               )}
-              <span className="text-sm font-semibold tracking-tight text-white">
-                {drawerTab === "capas" ? "Capas" : "Herramientas"}
-              </span>
-              {drawerTab === "capas" && activeCount > 0 && (
-                <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300 border border-zinc-700">
-                  {activeCount}
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setIsPinned((p) => !p)}
-                title={isPinned ? "Desfijar panel lateral" : "Fijar panel lateral"}
-                className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
-                  isPinned
-                    ? "bg-zinc-800 text-white border border-zinc-700"
-                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                }`}
-              >
-                {isPinned ? <Pin className="h-3.5 w-3.5 fill-white" /> : <PinOff className="h-3.5 w-3.5" />}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPinned(false)
-                  setIsHovered(false)
-                }}
-                title="Cerrar panel"
-                aria-label="Cerrar panel"
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100 transition-colors"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Cuerpo con scroll interno del drawer */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 space-y-4">
-            {drawerTab === "capas" ? (
-              <>
-                <LayerPanel
-                  layers={layers}
-                  order={layerOrder}
-                  onToggle={alternarCapa}
-                  onOpacity={cambiarOpacidad}
-                  onColor={cambiarColor}
-                  onReorder={setLayerOrder}
-                  subLayers={sgcState.subLayers}
-                  chosenSub={sgcState.chosenSub}
-                  onToggleSubLayer={sgcState.onToggleSubLayer}
-                  areaHasFilter={areaHasFilter}
-                  onOpenFilters={(areaId, el) =>
-                    setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
+              <input
+                ref={islandInputRef}
+                type="text"
+                value={islandSearchText}
+                onChange={handleIslandSearchChange}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault()
+                    setIslandSelectedIndex((i) => Math.min(i + 1, islandSuggestions.length - 1))
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault()
+                    setIslandSelectedIndex((i) => Math.max(i - 1, 0))
+                  } else if (e.key === "Enter") {
+                    e.preventDefault()
+                    confirmarBusqueda()
+                  } else if (e.key === "Escape") {
+                    setIslandResultsOpen(false)
+                    islandInputRef.current?.blur()
                   }
-                  userLayers={userLayers}
-                  userLayersLoading={userLayersLoading}
-                  userLayerProblems={userLayerProblems}
-                  onImportFiles={cargarArchivos}
-                  onDismissImportProblems={clearUserLayerProblems}
-                  onRemoveUserLayer={removeUserLayer}
-                  onFocusUserLayer={encuadrarCapaCargada}
-                  onChooseUserLayerCrs={setUserLayerCrs}
-                />
-              </>
-            ) : (
-              <div className="space-y-3.5">
-                {/* 1. Sistema de Coordenadas (PRIMERO) */}
-                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
-                      Sistema de Coordenadas
-                    </Label>
-                    <span className="font-mono text-[10px] text-zinc-300 bg-zinc-800/90 px-2 py-0.5 rounded-md border border-zinc-700/60">
-                      EPSG:{selectedCoordinateSystem}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      const el = event.currentTarget
-                      setCrsPopover((actual) => (actual ? null : el))
-                    }}
-                    className="flex h-10 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Globe2 className="h-4 w-4 shrink-0 text-zinc-300" />
-                      <span className="min-w-0 truncate text-[12.5px] font-medium text-white">
-                        {crsById(selectedCoordinateSystem).label}
-                      </span>
-                    </div>
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-                  </button>
-                </div>
+                }}
+                placeholder="Buscar expediente..."
+                aria-label="Buscar expediente"
+                className="h-full min-w-0 flex-1 bg-transparent text-[13.5px] text-foreground placeholder:text-label-4 focus:outline-none"
+              />
+              {islandSearchText ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIslandSearchText("")
+                    setIslandSuggestions([])
+                    setIslandResultsOpen(false)
+                  }}
+                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-label-5 text-white transition-colors hover:bg-label-4"
+                  title="Limpiar búsqueda"
+                  aria-label="Limpiar búsqueda"
+                >
+                  <X className="h-2.5 w-2.5" strokeWidth={3} />
+                </button>
+              ) : (
+                <kbd className="hidden shrink-0 rounded-[5px] border border-border bg-card px-1.5 py-px font-sans text-[10.5px] text-label-4 lg:inline">
+                  ⌘K
+                </kbd>
+              )}
+            </div>
 
-                {/* 3. Medición y Captura */}
-                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 backdrop-blur-xl space-y-2">
-                  <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block">
-                    Medición y Captura
-                  </Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => mapRef.current?.startMode?.("draw_line_string")}
-                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
-                      title="Medir distancia lineal entre puntos"
+            {islandResultsOpen && islandSuggestions.length > 0 && (
+              <div
+                role="listbox"
+                aria-label="Sugerencias de expediente"
+                className="glass-strong absolute left-0 right-0 top-full z-40 mt-1.5 max-h-64 overflow-y-auto rounded-xl p-1"
+              >
+                {islandSuggestions.map((item, index) => {
+                  const code = typeof item === "string" ? item : item?.code || ""
+                  const layerName = typeof item === "object" ? item?.layerName : null
+                  const isSelected = index === islandSelectedIndex
+                  return (
+                    <div
+                      key={code || index}
+                      role="option"
+                      aria-selected={isSelected}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleSelectIslandExpedient(code)}
+                      className={`flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5 py-2 transition-colors ${
+                        isSelected ? "bg-primary text-white" : "hover:bg-fill"
+                      }`}
                     >
-                      <Spline className="h-4 w-4 text-zinc-200" />
-                      <span className="text-[11px] font-medium">Distancia</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => mapRef.current?.startMode?.("draw_polygon")}
-                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
-                      title="Medir área y perímetro de un polígono"
-                    >
-                      <Square className="h-4 w-4 text-zinc-200" />
-                      <span className="text-[11px] font-medium">Área</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => mapRef.current?.startMode?.("draw_point")}
-                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.98]"
-                      title="Marcar un punto o ir a una coordenada"
-                    >
-                      <MapPin className="h-4 w-4 text-zinc-200" />
-                      <span className="text-[11px] font-medium">Punto / Coord.</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => mapRef.current?.clearDrawings?.()}
-                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-2.5 text-zinc-400 hover:border-rose-900/60 hover:bg-rose-950/30 hover:text-rose-300 transition-all active:scale-[0.98]"
-                      title="Limpiar dibujos y mediciones"
-                    >
-                      <Trash2 className="h-4 w-4 text-zinc-400" />
-                      <span className="text-[11px] font-medium">Limpiar</span>
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => mapRef.current?.openImageExport?.()}
-                    className="flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-[11.5px] font-medium text-zinc-200 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all active:scale-[0.99]"
-                    title="Exportar el mapa actual como imagen PNG con leyenda, norte y escala"
-                  >
-                    <ImageIcon className="h-3.5 w-3.5 text-sky-400" />
-                    <span>Exportar mapa en PNG</span>
-                  </button>
-                </div>
+                      <span className="font-mono text-[12.5px] font-medium">{code}</span>
+                      <ExpedientTag layerName={layerName} inverted={isSelected} />
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
         </div>
+
+        {/* El expediente encontrado, como tarjeta: código, de qué capa es y
+            sus tres acciones. Antes era una cápsula aparte bajo el buscador
+            flotante, con un punto verde parpadeando. */}
+        {showToggle && (
+          <div className={sidebarOpen ? "px-4 pt-3" : "px-2 pb-2"}>
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-2 py-1.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] animate-in fade-in slide-in-from-top-1">
+              <button
+                type="button"
+                onClick={centerOnActiveExpedient}
+                title="Centrar mapa en este expediente"
+                aria-label={`Centrar mapa en expediente ${expedientCode}`}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-fill"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Crosshair className="h-3.5 w-3.5" />
+                </span>
+                <span className="flex min-w-0 flex-col leading-tight">
+                  <span className="truncate font-mono text-[13px] font-semibold text-foreground">
+                    {expedientCode || "Expediente activo"}
+                  </span>
+                  <span className="text-[11px] text-label-4">Centrar en el mapa</span>
+                </span>
+              </button>
+              {coordinatesAvailable && (
+                <IconAction icon={TableIcon} label="Ver coordenadas" title="Ver tabla de coordenadas" onClick={handleShowCoordinates} />
+              )}
+              <IconAction icon={Download} label="Exportar expediente" title="Exportar expediente" onClick={handleExportSHP} />
+              <IconAction icon={X} label="Borrar expediente activo" title="Borrar expediente activo" onClick={cerrarExpediente} />
+            </div>
+          </div>
+        )}
+
+        {sidebarOpen && (
+          <>
+            <div className="px-4 pb-1 pt-4">
+              <Segmented
+                value={drawerTab}
+                onChange={setDrawerTab}
+                options={[
+                  { id: "capas", label: "Capas", badge: activeCount || null },
+                  { id: "herramientas", label: "Herramientas" },
+                ]}
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3">
+              {drawerTab === "capas" ? (
+                layerPanel
+              ) : (
+                <ToolsPanel
+                  crsLabel={crsById(selectedCoordinateSystem).label}
+                  epsg={selectedCoordinateSystem}
+                  onOpenCrs={abrirCrs}
+                  onMode={(modo) => mapRef.current?.startMode?.(modo)}
+                  onClear={() => mapRef.current?.clearDrawings?.()}
+                  onExportImage={() => mapRef.current?.openImageExport?.()}
+                />
+              )}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border px-5 py-2.5 text-[11px] text-label-4">
+              <span>ANM · SGC · ANH · IGAC</span>
+              <a
+                href="https://www.linkedin.com/in/fabio-espinosa/"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Fabio A. Espinosa en LinkedIn"
+                aria-label="Perfil de LinkedIn de Fabio A. Espinosa"
+                className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
+              >
+                Fabio A. Espinosa
+                <Linkedin className="h-3 w-3" />
+              </a>
+            </div>
+          </>
+        )}
       </aside>
 
       {/* Mapa en el centro / fondo */}
@@ -726,249 +726,37 @@ export default function Component() {
           filters={filters}
           onLayerData={setLayerData}
           onSgcState={setSgcState}
-          panelOpen={isDrawerOpen}
+          // Solo la hoja del móvil tapa los controles del mapa; la barra de
+          // escritorio va al otro lado y no estorba.
+          panelOpen={mobilePanel !== null}
           blendMode={blendMode}
           onBlendModeChange={setBlendMode}
           onBlockModelChange={setIsBlockModelActive}
         />
       </div>
 
-      {/* Buscador modo isla centrado en la parte superior (solo desktop) */}
-      <div
-        className="fixed top-4 left-1/2 -translate-x-1/2 z-30 hidden md:flex flex-col items-center pointer-events-auto p-1.5"
-        onMouseEnter={() => setIsIslandHovered(true)}
-        onMouseLeave={() => setIsIslandHovered(false)}
-      >
-        {/* Barra de búsqueda estilo cápsula flotante contraíble/expansible */}
-        <div
-          className={`relative flex items-center h-12 rounded-full border bg-[#09090b]/95 backdrop-blur-2xl transition-all duration-300 ease-out shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8)] ${
-            isIslandExpanded
-              ? "w-[92vw] sm:w-[460px] px-4 border-sky-500/50 ring-1 ring-sky-500/25 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.8),0_0_24px_rgba(56,189,248,0.18)]"
-              : "w-12 px-0 justify-center border-zinc-800 hover:border-sky-500/50 hover:shadow-[0_0_20px_rgba(56,189,248,0.2)] cursor-pointer overflow-hidden"
-          }`}
-          onClick={() => setIsIslandFocused(true)}
-        >
-          <input
-            ref={islandInputRef}
-            type="text"
-            value={islandSearchText}
-            onChange={handleIslandSearchChange}
-            onFocus={() => setIsIslandFocused(true)}
-            onBlur={() => setIsIslandFocused(false)}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown") {
-                e.preventDefault()
-                setIslandSelectedIndex((i) => Math.min(i + 1, islandSuggestions.length - 1))
-              } else if (e.key === "ArrowUp") {
-                e.preventDefault()
-                setIslandSelectedIndex((i) => Math.max(i - 1, 0))
-              } else if (e.key === "Enter") {
-                e.preventDefault()
-                if (islandSelectedIndex >= 0 && islandSuggestions[islandSelectedIndex]) {
-                   const sel = islandSuggestions[islandSelectedIndex]
-                  const code = typeof sel === "string" ? sel : sel?.code
-                  if (code) handleSelectIslandExpedient(code)
-                } else if (islandSearchText.trim()) {
-                  handleSelectIslandExpedient(islandSearchText.trim())
-                }
-              } else if (e.key === "Escape") {
-                setIslandResultsOpen(false)
-                setIsIslandFocused(false)
-                islandInputRef.current?.blur()
-              }
-            }}
-            placeholder="Buscar expediente..."
-            className={`h-full bg-transparent text-[13.5px] text-zinc-100 placeholder:text-zinc-500 focus:outline-none transition-all duration-300 ${
-              isIslandExpanded ? "w-full opacity-100 min-w-0" : "w-0 opacity-0 px-0 pointer-events-none"
-            }`}
-          />
-          {islandLoading && <Loader2 className="h-4 w-4 shrink-0 text-sky-400 animate-spin mr-1.5" />}
-          {islandSearchText && !islandLoading && isIslandExpanded && (
-            <button
-              type="button"
-              onClick={() => {
-                setIslandSearchText("")
-                setIslandSuggestions([])
-                setIslandResultsOpen(false)
-              }}
-              className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 transition-colors ml-1"
-              title="Limpiar búsqueda"
-              aria-label="Limpiar búsqueda"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              if (islandSelectedIndex >= 0 && islandSuggestions[islandSelectedIndex]) {
-                const sel = islandSuggestions[islandSelectedIndex]
-                const code = typeof sel === "string" ? sel : sel?.code
-                if (code) handleSelectIslandExpedient(code)
-              } else if (islandSearchText.trim()) {
-                handleSelectIslandExpedient(islandSearchText.trim())
-              }
-            }}
-            className={`shrink-0 flex items-center justify-center rounded-full transition-all duration-200 ${
-              isIslandExpanded
-                ? "ml-2 p-2 text-zinc-400 hover:text-sky-400 hover:bg-zinc-800/80"
-                : "h-11 w-11 text-zinc-400 hover:text-sky-400"
-            }`}
-            title="Buscar"
-            aria-label="Buscar"
-          >
-            <Search className="h-4.5 w-4.5" />
-          </button>
-
-          {/* Desplegable de sugerencias que emerge hacia abajo */}
-          {islandResultsOpen && islandSuggestions.length > 0 && (
-            <div
-              role="listbox"
-              aria-label="Sugerencias de expediente"
-              className="absolute top-full left-0 right-0 mt-2 max-h-60 overflow-y-auto rounded-2xl border border-zinc-800 bg-[#09090b]/95 p-1.5 shadow-2xl backdrop-blur-2xl z-30"
-            >
-              {islandSuggestions.map((item, index) => {
-                const code = typeof item === "string" ? item : (item?.code || "")
-                const layerName = typeof item === "object" ? item?.layerName : null
-                const isSelected = index === islandSelectedIndex
-                return (
-                  <div
-                    key={code || index}
-                    role="option"
-                    aria-selected={isSelected}
-                    onClick={() => handleSelectIslandExpedient(code)}
-                    className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-xs transition-colors ${
-                      isSelected ? "bg-zinc-800 text-white font-medium" : "text-zinc-300 hover:bg-zinc-800/60"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Search className="h-3.5 w-3.5 text-zinc-400" />
-                      <span className="font-mono font-medium text-zinc-100">{code}</span>
-                    </div>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
-                        layerName?.toLowerCase().includes("solicitud") ||
-                        layerName?.toLowerCase().includes("trámite") ||
-                        layerName?.toLowerCase().includes("tramite")
-                          ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
-                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
-                      }`}
-                    >
-                      {layerName || "Expediente"}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Acciones de expediente activo si existe */}
-        {showToggle && (
-          <div className="mt-2.5 flex items-center gap-2.5 rounded-full border border-zinc-800/90 bg-[#09090b]/95 px-4 py-1.5 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2">
-            <button
-              type="button"
-              onClick={centerOnActiveExpedient}
-              title="Centrar mapa en este expediente"
-              aria-label={`Centrar mapa en expediente ${expedientCode}`}
-              className="flex items-center gap-2 font-mono text-[12.5px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              {expedientCode || "Expediente activo"}
-            </button>
-
-            <div className="h-3.5 w-px bg-zinc-800" />
-
-            <div className="flex items-center gap-1.5">
-              {coordinatesAvailable && (
-                <button
-                  type="button"
-                  onClick={handleShowCoordinates}
-                  title="Ver tabla de coordenadas"
-                  aria-label="Ver coordenadas"
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all shadow-sm active:scale-95"
-                >
-                  <TableIcon className="h-3.5 w-3.5" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={handleExportSHP}
-                title="Exportar expediente"
-                aria-label="Exportar expediente"
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800 hover:text-white transition-all shadow-sm active:scale-95"
-              >
-                <Download className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  handleReset()
-                  setIslandSearchText("")
-                  setIslandResultsOpen(false)
-                }}
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-900 hover:text-zinc-200 transition-all active:scale-95"
-                title="Borrar expediente activo"
-                aria-label="Borrar expediente activo"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Cápsula de expediente activo en móvil */}
+      {/* Expediente activo en móvil: una cápsula arriba, sobre el mapa */}
       {showToggle && !isBlockModelActive && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-30 flex md:hidden items-center gap-1.5 max-w-[92vw] px-3 py-1.5 rounded-full border border-sky-500/40 bg-[#09090b]/90 backdrop-blur-xl shadow-lg">
+        <div className="glass fixed top-3 left-1/2 -translate-x-1/2 z-30 flex md:hidden items-center gap-0.5 max-w-[92vw] rounded-full py-1 pl-3 pr-1">
           <button
             type="button"
             onClick={centerOnActiveExpedient}
-            className="flex items-center gap-1 font-mono text-xs font-bold text-sky-400 hover:text-sky-300 active:scale-95 transition-all truncate max-w-[130px]"
+            className="flex items-center gap-1.5 truncate max-w-[150px] font-mono text-[12.5px] font-semibold text-foreground active:opacity-60"
             title="Centrar mapa en este expediente"
             aria-label={`Centrar mapa en expediente ${expedientCode}`}
           >
-            <Crosshair className="h-3 w-3 shrink-0 text-sky-400" />
+            <Crosshair className="h-3.5 w-3.5 shrink-0 text-primary" />
             <span className="truncate">{expedientCode}</span>
           </button>
-          <div className="h-3 w-px bg-zinc-700 mx-0.5" />
+          <div className="mx-1 h-4 w-px bg-border" />
           {coordinatesAvailable && (
-            <button
-              type="button"
-              onClick={() => setShowTable(true)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-300 hover:text-white"
-              title="Ver coordenadas"
-              aria-label="Ver coordenadas móvil"
-            >
-              <TableIcon className="h-3.5 w-3.5" />
-            </button>
+            <IconAction icon={TableIcon} label="Ver coordenadas móvil" title="Ver coordenadas" onClick={() => setShowTable(true)} />
           )}
-          <button
-            type="button"
-            onClick={handleExportSHP}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-300 hover:text-white"
-            title="Descargar expediente"
-            aria-label="Descargar expediente móvil"
-          >
-            <Download className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              handleReset()
-              setIslandSearchText("")
-              setIslandResultsOpen(false)
-            }}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:text-rose-400"
-            title="Cerrar expediente móvil"
-            aria-label="Cerrar expediente móvil"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <IconAction icon={Download} label="Descargar expediente móvil" title="Descargar expediente" onClick={handleExportSHP} />
+          <IconAction icon={X} label="Cerrar expediente móvil" title="Cerrar expediente" onClick={cerrarExpediente} />
         </div>
       )}
 
-      {/* Barra de navegación inferior móvil */}
       {!isBlockModelActive && (
         <MobileBottomBar
           activePanel={mobilePanel}
@@ -977,143 +765,40 @@ export default function Component() {
         />
       )}
 
-      {/* Hoja deslizante inferior (Bottom Sheet) */}
       <MobileBottomSheet
         isOpen={mobilePanel !== null}
         onClose={() => setMobilePanel(null)}
         title={
           mobilePanel === "layers"
-            ? "Capas del mapa"
+            ? "Capas"
             : mobilePanel === "tools"
             ? "Herramientas"
             : mobilePanel === "expediente"
-            ? "Buscar Expediente"
-            : mobilePanel === "view-location"
-            ? "Vista y Ubicación"
+            ? "Buscar"
             : ""
         }
       >
-        {mobilePanel === "layers" && (
-          <LayerPanel
-            layers={layers}
-            order={layerOrder}
-            onToggle={alternarCapa}
-            onOpacity={cambiarOpacidad}
-            onColor={cambiarColor}
-            onReorder={setLayerOrder}
-            subLayers={sgcState.subLayers}
-            chosenSub={sgcState.chosenSub}
-            onToggleSubLayer={sgcState.onToggleSubLayer}
-            areaHasFilter={areaHasFilter}
-            onOpenFilters={(areaId, el) =>
-              setFilterPopover((a) => (a?.areaId === areaId ? null : { areaId, el }))
-            }
-            userLayers={userLayers}
-            userLayersLoading={userLayersLoading}
-            userLayerProblems={userLayerProblems}
-            onImportFiles={cargarArchivos}
-            onDismissImportProblems={clearUserLayerProblems}
-            onRemoveUserLayer={removeUserLayer}
-            onFocusUserLayer={encuadrarCapaCargada}
-            onChooseUserLayerCrs={setUserLayerCrs}
-          />
-        )}
+        {mobilePanel === "layers" && layerPanel}
 
         {mobilePanel === "tools" && (
-          <div className="space-y-4">
-            {/* 1. Sistema de Coordenadas */}
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3">
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400">
-                  Sistema de Coordenadas
-                </Label>
-                <span className="font-mono text-[10px] text-zinc-300 bg-zinc-800/90 px-2 py-0.5 rounded-md border border-zinc-700/60">
-                  EPSG:{selectedCoordinateSystem}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={(event) => {
-                  const el = event.currentTarget
-                  setCrsPopover((actual) => (actual ? null : el))
-                }}
-                className="flex h-11 w-full items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-left transition-all active:bg-zinc-800"
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Globe2 className="h-4 w-4 shrink-0 text-zinc-300" />
-                  <span className="min-w-0 truncate text-[13px] font-medium text-white">
-                    {crsById(selectedCoordinateSystem).label}
-                  </span>
-                </div>
-                <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
-              </button>
-            </div>
-
-            {/* 3. Medición */}
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3 space-y-2">
-              <Label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-400 block">
-                Medición y Dibujo
-              </Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    mapRef.current?.startMode?.("draw_line_string")
-                    setMobilePanel(null)
-                  }}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-300 active:scale-95"
-                >
-                  <Spline className="h-5 w-5 text-zinc-200" />
-                  <span className="text-xs font-medium">Distancia</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    mapRef.current?.startMode?.("draw_polygon")
-                    setMobilePanel(null)
-                  }}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-300 active:scale-95"
-                >
-                  <Square className="h-5 w-5 text-zinc-200" />
-                  <span className="text-xs font-medium">Área</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    mapRef.current?.startMode?.("draw_point")
-                    setMobilePanel(null)
-                  }}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-300 active:scale-95"
-                >
-                  <MapPin className="h-5 w-5 text-zinc-200" />
-                  <span className="text-xs font-medium">Punto / Coord.</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    mapRef.current?.clearDrawings?.()
-                    setMobilePanel(null)
-                  }}
-                  className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-zinc-400 active:scale-95"
-                >
-                  <Trash2 className="h-5 w-5 text-zinc-400" />
-                  <span className="text-xs font-medium">Limpiar</span>
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  mapRef.current?.openImageExport?.()
-                  setMobilePanel(null)
-                }}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 text-xs font-medium text-zinc-200 active:scale-[0.99]"
-              >
-                <ImageIcon className="h-4 w-4 text-sky-400" />
-                <span>Exportar mapa en PNG</span>
-              </button>
-            </div>
-
-            {/* 4. Aplicación Móvil y Gestión de Memoria */}
+          <div className="space-y-5">
+            <ToolsPanel
+              crsLabel={crsById(selectedCoordinateSystem).label}
+              epsg={selectedCoordinateSystem}
+              onOpenCrs={abrirCrs}
+              onMode={(modo) => {
+                mapRef.current?.startMode?.(modo)
+                setMobilePanel(null)
+              }}
+              onClear={() => {
+                mapRef.current?.clearDrawings?.()
+                setMobilePanel(null)
+              }}
+              onExportImage={() => {
+                mapRef.current?.openImageExport?.()
+                setMobilePanel(null)
+              }}
+            />
             <MobileStorageManager />
           </div>
         )}
@@ -1121,8 +806,8 @@ export default function Component() {
         {mobilePanel === "expediente" && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+              <div className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl bg-fill-strong/70 px-3 focus-within:bg-card focus-within:ring-2 focus-within:ring-primary/40">
+                <Search className="h-4 w-4 shrink-0 text-label-4" />
                 <input
                   type="text"
                   value={islandSearchText}
@@ -1134,8 +819,8 @@ export default function Component() {
                       setMobilePanel(null)
                     }
                   }}
-                  placeholder="Código de expediente (ej. ICQ-08005)..."
-                  className="w-full h-11 pl-9 pr-9 bg-zinc-900/90 border border-zinc-800 rounded-xl text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                  placeholder="Código, p. ej. ICQ-08005"
+                  className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-foreground placeholder:text-label-4 focus:outline-none"
                 />
                 {islandSearchText && (
                   <button
@@ -1144,9 +829,10 @@ export default function Component() {
                       setIslandSearchText("")
                       setIslandSuggestions([])
                     }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200"
+                    aria-label="Limpiar búsqueda"
+                    className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-label-5 text-white"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3 w-3" strokeWidth={3} />
                   </button>
                 )}
               </div>
@@ -1158,23 +844,23 @@ export default function Component() {
                     setMobilePanel(null)
                   }
                 }}
-                className="h-11 px-4 rounded-xl bg-sky-500 text-zinc-950 font-semibold text-xs active:scale-95 transition-all"
+                className="h-11 rounded-xl bg-primary px-4 text-[15px] font-semibold text-white active:opacity-80 transition-opacity"
               >
                 Buscar
               </button>
             </div>
 
             {islandLoading && (
-              <div className="flex items-center justify-center py-4 text-zinc-400 text-xs gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-sky-400" />
-                Buscando expedientes...
+              <div className="flex items-center justify-center gap-2 py-4 text-[13px] text-label-3">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Buscando expedientes…
               </div>
             )}
 
             {islandSuggestions.length > 0 && (
-              <div className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800 overflow-hidden max-h-60 overflow-y-auto">
+              <div className="divide-y divide-border overflow-hidden rounded-xl bg-card max-h-72 overflow-y-auto">
                 {islandSuggestions.map((sug, index) => {
-                  const code = typeof sug === "string" ? sug : (sug?.code || "")
+                  const code = typeof sug === "string" ? sug : sug?.code || ""
                   const layerName = typeof sug === "object" ? sug?.layerName : null
                   return (
                     <button
@@ -1184,83 +870,38 @@ export default function Component() {
                         handleSelectIslandExpedient(code)
                         setMobilePanel(null)
                       }}
-                      className="w-full px-3.5 py-2.5 text-left flex items-center justify-between hover:bg-zinc-900/80 active:bg-zinc-800 transition-colors"
+                      className="flex w-full items-center justify-between px-4 py-3 text-left active:bg-fill"
                     >
-                      <span className="font-mono text-xs font-semibold text-white">{code}</span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
-                          layerName?.toLowerCase().includes("solicitud") ||
-                          layerName?.toLowerCase().includes("trámite") ||
-                          layerName?.toLowerCase().includes("tramite")
-                            ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
-                            : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
-                        }`}
-                      >
-                        {layerName || "Expediente"}
-                      </span>
+                      <span className="font-mono text-[14px] font-medium text-foreground">{code}</span>
+                      <ExpedientTag layerName={layerName} />
                     </button>
                   )
                 })}
               </div>
             )}
-
-          </div>
-        )}
-
-        {mobilePanel === "view-location" && (
-          <div className="space-y-3">
-            <p className="text-xs text-zinc-400">
-              Controla la perspectiva del mapa y obtén tu posición satelital en tiempo real.
-            </p>
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  mapRef.current?.toggle3D?.()
-                  setMobilePanel(null)
-                }}
-                className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 active:scale-95 transition-all"
-              >
-                <Compass className="h-6 w-6 text-sky-400" />
-                <span className="text-xs font-semibold text-zinc-200">Relieve 3D</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  mapRef.current?.handleLocateUser?.()
-                  setMobilePanel(null)
-                }}
-                className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border border-zinc-800 bg-zinc-900/60 active:scale-95 transition-all"
-              >
-                <Crosshair className="h-6 w-6 text-emerald-400" />
-                <span className="text-xs font-semibold text-zinc-200">Mi Ubicación GPS</span>
-              </button>
-            </div>
           </div>
         )}
       </MobileBottomSheet>
 
       {showTable && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md">
-          <div className="bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
-            <div className="mb-4 flex items-baseline gap-2">
-              <h2 className="text-xl font-semibold text-zinc-100">Coordenadas</h2>
-              <span className="text-[13px] text-zinc-400">
-                {crsById(selectedCoordinateSystem).label}
-              </span>
-              <span className="font-mono text-[10px] text-zinc-300 bg-zinc-800/80 px-1.5 py-0.5 rounded border border-zinc-700">
-                EPSG:{selectedCoordinateSystem}
-              </span>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/25 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="glass-strong m-4 w-full max-w-md rounded-[20px] p-6 text-foreground animate-in zoom-in-95 duration-150">
+            <div className="mb-4">
+              <p className="eyebrow">Expediente {expedientCode}</p>
+              <h2 className="panel-title mt-1 text-[26px]">Coordenadas</h2>
+              <p className="mt-1.5 text-[12.5px] text-label-3">
+                {crsById(selectedCoordinateSystem).label} · EPSG:{selectedCoordinateSystem}
+              </p>
             </div>
-            <div className="overflow-auto max-h-[60vh] rounded-xl border border-zinc-800">
+            <div className="overflow-auto max-h-[60vh] rounded-xl border border-border bg-card">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-zinc-800 bg-zinc-900/80 hover:bg-zinc-900/80">
-                    <TableHead className="text-zinc-300">Punto</TableHead>
-                    <TableHead className="text-zinc-300">
+                  <TableRow className="border-border bg-fill hover:bg-fill">
+                    <TableHead className="text-label-2">Punto</TableHead>
+                    <TableHead className="text-label-2">
                       {axisLabels(selectedCoordinateSystem).first}
                     </TableHead>
-                    <TableHead className="text-zinc-300">
+                    <TableHead className="text-label-2">
                       {axisLabels(selectedCoordinateSystem).second}
                     </TableHead>
                   </TableRow>
@@ -1269,21 +910,21 @@ export default function Component() {
                   {transformedCoordinates.map((coord, index) => (
                     <Fragment key={index}>
                       {coordinateRings.length > 1 && ringStartLabels.has(index) && (
-                        <TableRow className="border-zinc-800 bg-zinc-900/50">
+                        <TableRow className="border-border bg-fill/70">
                           <TableCell
                             colSpan={3}
-                            className="text-xs font-semibold text-zinc-300 text-center"
+                            className="text-xs font-semibold text-label-2 text-center"
                           >
                             {ringStartLabels.get(index)}
                           </TableCell>
                         </TableRow>
                       )}
-                      <TableRow className="border-zinc-800/50 hover:bg-zinc-800/40">
-                        <TableCell className="text-center font-mono text-xs text-zinc-400">{index + 1}</TableCell>
-                        <TableCell className="text-center font-mono text-xs text-zinc-200">
+                      <TableRow className="border-border hover:bg-fill-strong/70">
+                        <TableCell className="text-center font-mono text-xs text-label-3">{index + 1}</TableCell>
+                        <TableCell className="text-center font-mono text-xs text-foreground">
                           {formatCoordinate(coord[1], selectedCoordinateSystem)}
                         </TableCell>
-                        <TableCell className="text-center font-mono text-xs text-zinc-200">
+                        <TableCell className="text-center font-mono text-xs text-foreground">
                           {formatCoordinate(coord[0], selectedCoordinateSystem)}
                         </TableCell>
                       </TableRow>
@@ -1294,7 +935,7 @@ export default function Component() {
             </div>
             <Button
               onClick={handleCloseTable}
-              className="mt-4 w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 rounded-xl"
+              className="mt-4 w-full rounded-xl bg-primary text-white hover:bg-primary/90"
             >
               Cerrar
             </Button>
@@ -1353,17 +994,20 @@ export default function Component() {
       )}
 
       {showExportModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md">
-          <div className="relative bg-[#09090b] border border-zinc-800 p-6 rounded-2xl shadow-2xl w-full max-w-md m-4 text-zinc-100">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold tracking-tight text-zinc-100">Tipo de archivo para exportar</h2>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/25 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="glass-strong relative m-4 w-full max-w-md rounded-[20px] p-6 text-foreground animate-in zoom-in-95 duration-150">
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <p className="eyebrow">Expediente {expedientCode}</p>
+                <h2 className="panel-title mt-1 text-[26px]">Exportar</h2>
+              </div>
               <button
                 type="button"
                 onClick={handleCloseExportModal}
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+                className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-fill-strong text-label-3 transition-colors hover:text-foreground"
                 aria-label="Cerrar modal de descarga"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" strokeWidth={2.5} />
               </button>
             </div>
             <ExportComponent
@@ -1374,6 +1018,237 @@ export default function Component() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ───────────────────────────── Piezas del armazón ─────────────────────────────
+//
+// Viven aquí y no en archivos propios porque solo las usa este componente. Las
+// herramientas en particular estaban escritas dos veces —una para el panel de
+// escritorio y otra para la hoja del móvil— con diferencias de detalle que nadie
+// había decidido: ahora son una sola.
+
+/** El botón que abre y recoge la barra lateral, con el icono de macOS. */
+function SidebarToggle({ open, badge = 0, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={open ? "Recoger el panel" : "Abrir el panel de capas"}
+      aria-label={open ? "Recoger el panel lateral" : "Abrir el panel lateral"}
+      aria-expanded={open}
+      className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-label-3 transition-colors hover:bg-fill-strong hover:text-foreground"
+    >
+      {open ? <PanelLeftClose className="h-[18px] w-[18px]" /> : <PanelLeftOpen className="h-[18px] w-[18px]" />}
+      {!open && badge > 0 && (
+        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9.5px] font-semibold text-white ring-2 ring-white">
+          {badge}
+        </span>
+      )}
+    </button>
+  )
+}
+
+/** Control segmentado de iOS: carril gris y la opción elegida en blanco. */
+function Segmented({ value, onChange, options }) {
+  return (
+    <div role="tablist" className="flex rounded-[10px] bg-fill-strong/80 p-[2px]">
+      {options.map((opcion) => {
+        const elegida = value === opcion.id
+        return (
+          <button
+            key={opcion.id}
+            type="button"
+            role="tab"
+            aria-selected={elegida}
+            aria-label={`Pestaña ${opcion.label}`}
+            onClick={() => onChange(opcion.id)}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-[8px] py-1.5 text-[13px] font-medium transition-all ${
+              elegida
+                ? "bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_0.5px_rgba(0,0,0,0.04)]"
+                : "text-label-3 hover:text-foreground"
+            }`}
+          >
+            {opcion.label}
+            {opcion.badge ? (
+              <span className="rounded-full bg-primary px-1.5 text-[10.5px] font-semibold leading-[16px] text-white">
+                {opcion.badge}
+              </span>
+            ) : null}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Un botón de solo icono, redondo y discreto. */
+function IconAction({ icon: Icon, label, title, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={label}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-label-3 transition-colors hover:bg-fill-strong hover:text-foreground active:opacity-60"
+    >
+      <Icon className="h-4 w-4" />
+    </button>
+  )
+}
+
+/**
+ * De qué capa es un expediente: título o solicitud.
+ *
+ * Verde para el título y ámbar para la solicitud porque es lo que se pregunta
+ * con prisa —«¿está otorgado?»—, y el color lo contesta antes de leer.
+ */
+function ExpedientTag({ layerName, inverted = false }) {
+  const nombre = layerName?.toLowerCase() ?? ""
+  const esSolicitud = nombre.includes("solicitud") || nombre.includes("trámite") || nombre.includes("tramite")
+  const tono = inverted
+    ? "bg-white/20 text-white"
+    : esSolicitud
+    ? "bg-warning/10 text-warning"
+    : "bg-success/10 text-success"
+  return (
+    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${tono}`}>
+      {layerName || "Expediente"}
+    </span>
+  )
+}
+
+/**
+ * Un grupo de filas, como en Ajustes del iPhone: rótulo pequeño encima y las
+ * filas dentro de una tarjeta blanca, separadas por una línea fina.
+ */
+function ToolGroup({ title, children }) {
+  return (
+    <section>
+      <h3 className="eyebrow mb-1.5 px-1">{title}</h3>
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+/**
+ * Una fila de herramienta: el icono en su cuadrito de color, nombre, una línea
+ * de explicación y, a la derecha, un valor o la flecha.
+ *
+ * El color del cuadrito no es adorno: agrupa. Las de medir van en azul, la de
+ * borrar en rojo y la de exportar en verde, y con eso se encuentra cada una sin
+ * leer los nombres.
+ */
+function ToolRow({ icon: Icon, tint, label, detail, trailing, onClick, title, danger = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-fill active:bg-fill-strong"
+    >
+      <span
+        className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-white"
+        style={{ backgroundColor: tint }}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col leading-tight">
+        <span className={`truncate text-[13.5px] font-medium ${danger ? "text-danger" : "text-foreground"}`}>
+          {label}
+        </span>
+        {detail && <span className="truncate text-[11.5px] text-label-4">{detail}</span>}
+      </span>
+      {trailing ?? <ChevronRight className="h-4 w-4 shrink-0 text-label-5" />}
+    </button>
+  )
+}
+
+/** Los colores de los cuadritos: los de sistema de iOS, un punto más apagados. */
+const TINT = {
+  azul: "#3478f6",
+  indigo: "#5e5ce6",
+  verde: "#30a46c",
+  gris: "#8e8e93",
+  rojo: "#e5484d",
+  naranja: "#f08c2e",
+}
+
+function ToolsPanel({ crsLabel, epsg, onOpenCrs, onMode, onClear, onExportImage }) {
+  return (
+    <div className="space-y-5">
+      <ToolGroup title="Coordenadas">
+        <ToolRow
+          icon={Globe2}
+          tint={TINT.indigo}
+          label="Sistema de referencia"
+          detail={crsLabel}
+          onClick={onOpenCrs}
+          title="Cambiar el sistema en que se leen y exportan las coordenadas"
+          trailing={
+            <span className="flex shrink-0 items-center gap-1 text-[11.5px] tabular-nums text-label-4">
+              EPSG:{epsg}
+              <ChevronDown className="h-3.5 w-3.5 text-label-5" />
+            </span>
+          }
+        />
+      </ToolGroup>
+
+      <ToolGroup title="Medir y dibujar">
+        <ToolRow
+          icon={Spline}
+          tint={TINT.azul}
+          label="Distancia"
+          detail="Traza una línea sobre el mapa"
+          onClick={() => onMode("draw_line_string")}
+          title="Medir distancia lineal entre puntos"
+        />
+        <ToolRow
+          icon={Square}
+          tint={TINT.azul}
+          label="Área y perímetro"
+          detail="Dibuja un polígono"
+          onClick={() => onMode("draw_polygon")}
+          title="Medir área y perímetro de un polígono"
+        />
+        <ToolRow
+          icon={MapPin}
+          tint={TINT.azul}
+          label="Punto o coordenada"
+          detail="Marca un sitio o escribe sus coordenadas"
+          onClick={() => onMode("draw_point")}
+          title="Marcar un punto o ir a una coordenada"
+        />
+        <ToolRow
+          icon={Trash2}
+          tint={TINT.rojo}
+          label="Borrar dibujos"
+          detail="Quita las figuras y sus medidas"
+          onClick={onClear}
+          title="Limpiar dibujos y mediciones"
+          danger
+          trailing={<span />}
+        />
+      </ToolGroup>
+
+      <ToolGroup title="Exportar">
+        <ToolRow
+          icon={ImageIcon}
+          tint={TINT.verde}
+          label="Mapa en PNG"
+          detail="Con leyenda, norte y escala"
+          onClick={onExportImage}
+          title="Exportar el mapa actual como imagen PNG con leyenda, norte y escala"
+        />
+      </ToolGroup>
+
+      <p className="px-1 text-[11.5px] leading-relaxed text-label-4">
+        Para descargar las capas de una zona, dibuja un área y pulsa{" "}
+        <span className="font-medium text-label-2">Descargar área</span> junto a los controles del mapa.
+      </p>
     </div>
   )
 }

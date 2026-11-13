@@ -142,7 +142,7 @@ export default function SunDial({
   const sy = 50 - largoSombra * Math.cos(radSombra)
 
   return (
-    <div className="relative shrink-0 rounded-full focus-within:ring-2 focus-within:ring-amber-400/70 focus-within:ring-offset-2 focus-within:ring-offset-zinc-950">
+    <div className="relative shrink-0 rounded-full focus-within:ring-2 focus-within:ring-warning/30 focus-within:ring-offset-2 focus-within:ring-offset-white">
       <input
         type="range"
         min="0"
@@ -179,20 +179,20 @@ export default function SunDial({
         <svg viewBox="0 0 100 100" className="w-full h-full">
           <defs>
             <radialGradient id="bm3dSkyFace" cx="50%" cy="36%" r="64%">
-              <stop offset="0%" stopColor="#1c1917" />
-              <stop offset="68%" stopColor="#0a0a0c" />
-              <stop offset="100%" stopColor="#000000" />
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="68%" stopColor="#f5f5f7" />
+              <stop offset="100%" stopColor="#e8e8ed" />
             </radialGradient>
             <filter id="bm3dSunGlow" x="-60%" y="-60%" width="220%" height="220%">
-              <feDropShadow dx="0" dy="0" stdDeviation="3.2" floodColor="#fbbf24" floodOpacity="0.95" />
+              <feDropShadow dx="0" dy="0" stdDeviation="3.2" floodColor="#fbbf24" floodOpacity="0.55" />
             </filter>
           </defs>
 
-          <circle cx="50" cy="50" r="47" fill="url(#bm3dSkyFace)" stroke="#3f3f46" strokeWidth="1" />
+          <circle cx="50" cy="50" r="47" fill="url(#bm3dSkyFace)" stroke="#d1d1d6" strokeWidth="1" />
 
           {/* Almucantarates: las circunferencias de altura constante de una carta solar.
               El borde es el horizonte (0°) y el centro el cenit (90°). */}
-          <circle cx="50" cy="50" r={R_CIELO} fill="none" stroke="rgba(255,255,255,0.20)" strokeWidth="0.7" />
+          <circle cx="50" cy="50" r={R_CIELO} fill="none" stroke="rgba(60,60,67,0.18)" strokeWidth="0.7" />
           {[30, 60].map((grados) => (
             <circle
               key={grados}
@@ -200,7 +200,7 @@ export default function SunDial({
               cy="50"
               r={R_CIELO * (1 - grados / 90)}
               fill="none"
-              stroke="rgba(255,255,255,0.13)"
+              stroke="rgba(60,60,67,0.12)"
               strokeWidth="0.6"
               strokeDasharray="1.4 2.2"
             />
@@ -217,7 +217,7 @@ export default function SunDial({
                 y1={cuadrante ? 4 : 5.5}
                 x2="50"
                 y2="9.5"
-                stroke={cuadrante ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.22)"}
+                stroke={cuadrante ? "rgba(60,60,67,0.5)" : "rgba(60,60,67,0.2)"}
                 strokeWidth={cuadrante ? 1.6 : 0.9}
                 strokeLinecap="round"
                 transform={`rotate(${deg} 50 50)`}
@@ -235,7 +235,7 @@ export default function SunDial({
             strokeWidth="1.4"
             strokeLinecap="round"
           />
-          <circle cx={sx} cy={sy} r="2.6" fill="rgba(226,232,240,0.45)" />
+          <circle cx={sx} cy={sy} r="2.6" fill="rgba(60,60,67,0.25)" />
 
           {/* Radio del sol, del centro a su posición */}
           <line
@@ -251,7 +251,7 @@ export default function SunDial({
             <circle cx={sol.x} cy={sol.y} r="7.2" fill="#fbbf24" stroke="#fffbeb" strokeWidth="1" />
           </g>
 
-          <circle cx="50" cy="50" r="1.8" fill="#52525b" stroke="#18181b" strokeWidth="0.6" />
+          <circle cx="50" cy="50" r="1.8" fill="#8e8e93" stroke="#ffffff" strokeWidth="0.6" />
         </svg>
       </div>
     </div>

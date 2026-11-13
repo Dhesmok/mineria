@@ -241,6 +241,36 @@ descarga por área. Lo segundo es a propósito —ese ZIP es dato oficial del Es
 mezclarle un plano propio confunde la procedencia—; lo primero es trabajo
 pendiente.
 
+## Cómo se ve: el sistema de diseño
+
+La interfaz sigue el lenguaje de Apple —fondos claros, grises cálidos, un solo
+color de acento— con un toque editorial: los títulos van en serif (Newsreader).
+La razón es de oficio, no de gusto: **el mapa es lo que tiene que tener color**.
+Antes la interfaz era negra con cuatro negros distintos, tres verdes y un cian, y
+competía con la imagen de satélite y con la simbología de la geología.
+
+- **Ningún color se escribe a mano en un componente.** Todos salen de los tokens
+  de `app/globals.css` (`--foreground`, `--label-2` … `--label-5`, `--fill`,
+  `--primary`, `--success`, `--warning`, `--danger`) y Tailwind los expone con
+  esos nombres: `text-label-3`, `bg-fill-strong`, `bg-primary/10`. Si un panel
+  nuevo necesita un gris, ya existe. Las excepciones son lo que se dibuja *sobre
+  el mapa* (rótulos con halo, el punto del GPS, el color de una capa), que es
+  dato y no interfaz.
+- **Azul = acción y selección; verde, ámbar y rojo = estado.** El botón principal
+  de cada ventana es azul sólido; lo elegido en una lista lleva `bg-primary/10`;
+  lo elegido en un control segmentado va en blanco elevado. El verde solo dice
+  «encendido» u «otorgado».
+- **`glass` y `glass-strong`** son el material translúcido de los paneles que
+  flotan sobre el mapa. El primero para botones y paneles pequeños; el segundo,
+  más opaco, para la barra lateral, las hojas del móvil y **todo menú emergente**,
+  que se abre encima de otros paneles y con el vidrio fino dejaba leer el texto de
+  debajo. Nunca dentro de otro: una cabecera dentro de un panel va transparente.
+- **`eyebrow`** es el rótulo de sección en versalitas y **`panel-title`** el
+  título en serif. Había siete variantes del primero.
+- **La monoespaciada solo para códigos y coordenadas.** Un contador o la escala
+  de un deslizador van en la tipografía normal con `tabular-nums`, que alinea las
+  cifras igual sin parecer una consola.
+
 ## Trampas conocidas (no las vuelvas a pisar)
 
 1. **Los índices de capa de la ANM cambian entre despliegues.** Nunca los
@@ -680,6 +710,21 @@ pendiente.
     ya estaba en el proyecto, y a la librería se le entregan las cuatro partes de
     cada shapefile — que de paso es lo que permite que un `.zip` con tres
     shapefiles entre como tres capas con su nombre.
+
+38. **El vidrio (`backdrop-filter`) abre su propio contexto de apilado.** Un menú
+    que vive dentro de un grupo con `glass` no puede subir por encima de nada que
+    esté fuera del grupo, por mucho `z-index` que lleve: el suyo solo cuenta
+    dentro del grupo. Los menús de terreno, mapa base y 3D se abrían **por
+    detrás** del panel de dibujo. El `z-index` hay que ponérselo al grupo entero
+    (ver la columna de controles de `MapComponentGL`). Si un menú nuevo queda
+    tapado, mira primero qué antepasado suyo lleva vidrio.
+
+39. **`!== null` no descarta `undefined`.** La barra de pestañas del móvil
+    pintaba una insignia vacía —un punto de color sin número— en todas las
+    pestañas que no tienen cuenta, porque su `badge` era `undefined` y la guarda
+    comparaba con `null`. Llevaba ahí desde que se escribió la barra: en el tema
+    oscuro el punto era verde y parecía un aviso de algo. Para «no hay valor»,
+    `!= null` (con un solo `=`) cubre los dos casos.
 
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
   actual documenta el bug que motivó cada decisión — mantenlo, es lo que hace

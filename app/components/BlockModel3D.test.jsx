@@ -195,9 +195,10 @@ describe("BlockModel3D", () => {
       />
     )
 
-    const themeBtn = screen.getByTitle("Cambiar a fondo claro")
+    // Arranca en claro, como el resto del visor.
+    const themeBtn = screen.getByTitle("Cambiar a fondo oscuro")
     fireEvent.click(themeBtn)
-    expect(screen.getByTitle("Cambiar a fondo oscuro")).toBeInTheDocument()
+    expect(screen.getByTitle("Cambiar a fondo claro")).toBeInTheDocument()
   })
 
   it("acepta layerState y loadedFeatures sin errores", () => {

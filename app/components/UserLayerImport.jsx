@@ -57,8 +57,8 @@ export const UserLayerImport = ({ loading, problems = [], onFiles, onDismissProb
       }}
       onDragLeave={() => setEncima(false)}
       onDrop={soltar}
-      className={`border-b border-zinc-800/50 px-3 py-2.5 transition-colors ${
-        encima ? "bg-sky-950/40 ring-1 ring-inset ring-sky-500/60" : "bg-zinc-950/40"
+      className={`border-b border-border px-3 py-2.5 transition-colors ${
+        encima ? "bg-primary/15 ring-1 ring-inset ring-primary/40" : "bg-card/70"
       }`}
     >
       <input
@@ -82,7 +82,7 @@ export const UserLayerImport = ({ loading, problems = [], onFiles, onDismissProb
         type="button"
         onClick={elegir}
         disabled={loading}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-zinc-700 bg-zinc-900/60 px-3 py-2 text-[12px] font-medium text-zinc-200 transition-colors hover:border-zinc-500 hover:bg-zinc-800/80 disabled:cursor-wait disabled:opacity-60"
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-input bg-fill/70 px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:border-label-5 hover:bg-fill-strong disabled:cursor-wait disabled:opacity-60"
       >
         {loading ? (
           <>
@@ -97,30 +97,30 @@ export const UserLayerImport = ({ loading, problems = [], onFiles, onDismissProb
         )}
       </button>
 
-      <p className="mt-1.5 text-[10.5px] leading-tight text-zinc-500">
+      <p className="mt-1.5 text-[10.5px] leading-tight text-label-4">
         {QUE_SE_PUEDE}. También se pueden arrastrar aquí. Los archivos se leen en tu navegador y no
         se suben a ningún servidor.
       </p>
 
       {problems.length > 0 && (
-        <div className="mt-2 rounded-lg border border-rose-900/60 bg-rose-950/30 p-2">
+        <div className="mt-2 rounded-lg border border-danger/30 bg-danger/10 p-2">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-[11px] font-semibold text-rose-200">
+            <p className="text-[11px] font-semibold text-danger">
               {problems.length === 1 ? "Un archivo no se pudo cargar" : `${problems.length} archivos no se pudieron cargar`}
             </p>
             <button
               type="button"
               onClick={onDismissProblems}
               aria-label="Descartar los avisos"
-              className="shrink-0 rounded p-0.5 text-rose-300/80 transition-colors hover:bg-rose-900/40 hover:text-rose-100"
+              className="shrink-0 rounded p-0.5 text-danger transition-colors hover:bg-danger/10 hover:text-danger"
             >
               <X className="h-3 w-3" />
             </button>
           </div>
           <ul className="mt-1 space-y-1">
             {problems.map((problema, i) => (
-              <li key={`${problema.name}-${i}`} className="text-[10.5px] leading-tight text-rose-100/90">
-                <span className="font-mono text-rose-200">{problema.name}</span>: {problema.message}
+              <li key={`${problema.name}-${i}`} className="text-[10.5px] leading-tight text-danger">
+                <span className="font-mono text-danger">{problema.name}</span>: {problema.message}
               </li>
             ))}
           </ul>
@@ -154,9 +154,9 @@ export const UserLayerDetails = ({ layer, onRemove, onFocus, onChooseCrs }) => {
   ]
 
   return (
-    <div className="border-b border-zinc-800/40 bg-zinc-950/60 px-3 pb-2 pl-11">
+    <div className="border-b border-border bg-card/70 px-3 pb-2 pl-11">
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-[10.5px] text-zinc-400" title={layer.source}>
+        <span className="min-w-0 flex-1 truncate text-[10.5px] text-label-3" title={layer.source}>
           {layer.hint} · <span className="font-mono">{layer.source}</span>
         </span>
 
@@ -166,7 +166,7 @@ export const UserLayerDetails = ({ layer, onRemove, onFocus, onChooseCrs }) => {
           disabled={!layer.bbox}
           title="Llevar el mapa hasta esta capa"
           aria-label={`Encuadrar ${layer.label}`}
-          className="shrink-0 rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-30"
+          className="shrink-0 rounded p-1 text-label-3 transition-colors hover:bg-fill-strong hover:text-foreground disabled:opacity-30"
         >
           <Crosshair className="h-3.5 w-3.5" />
         </button>
@@ -175,7 +175,7 @@ export const UserLayerDetails = ({ layer, onRemove, onFocus, onChooseCrs }) => {
           onClick={() => onRemove(layer.key)}
           title="Quitar esta capa del visor"
           aria-label={`Quitar ${layer.label}`}
-          className="shrink-0 rounded p-1 text-zinc-400 transition-colors hover:bg-rose-950/50 hover:text-rose-300"
+          className="shrink-0 rounded p-1 text-label-3 transition-colors hover:bg-danger/10 hover:text-danger"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -187,20 +187,20 @@ export const UserLayerDetails = ({ layer, onRemove, onFocus, onChooseCrs }) => {
         title="Cambiar el sistema de coordenadas en que se leyó el archivo"
         className={`mt-1 flex w-full items-center gap-1.5 rounded border px-1.5 py-1 text-left text-[10.5px] transition-colors ${
           layer.crsGuessed
-            ? "border-amber-700/70 bg-amber-950/40 text-amber-100 hover:bg-amber-900/40"
-            : "border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800/80"
+            ? "border-warning/30 bg-warning/10 text-warning hover:bg-warning/10"
+            : "border-border bg-fill/70 text-label-2 hover:bg-fill-strong"
         }`}
       >
-        {layer.crsGuessed && <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />}
+        {layer.crsGuessed && <AlertTriangle className="h-3 w-3 shrink-0 text-warning" />}
         <span className="min-w-0 flex-1 truncate">
           {crs.label}
           {layer.crsGuessed ? " (supuesto)" : ""}
         </span>
-        <span className="shrink-0 font-mono text-[9.5px] opacity-70">EPSG:{layer.crsId}</span>
+        <span className="shrink-0 tabular-nums text-[9.5px] opacity-70">EPSG:{layer.crsId}</span>
       </button>
 
       {avisos.map((aviso, i) => (
-        <p key={i} className="mt-1 text-[10px] leading-tight text-amber-200/80">
+        <p key={i} className="mt-1 text-[10px] leading-tight text-warning">
           {aviso}
         </p>
       ))}

@@ -144,20 +144,20 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
         type="button"
         onClick={exportSHP}
         disabled={isExportingSHP || isExportingKML}
-        className="group relative flex flex-col items-start gap-2.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
+        className="group relative flex flex-col items-start gap-3 rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-primary/30 hover:shadow-[0_6px_20px_-8px_rgba(0,0,0,0.18)] disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-700/60 bg-zinc-800 text-emerald-400 transition-transform group-hover:scale-105 shadow-sm">
+        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#30a46c] text-white">
           {isExportingSHP ? (
-            <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+            <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
             <Layers className="h-5 w-5" />
           )}
         </div>
         <div>
-          <div className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors">
+          <div className="text-[14px] font-semibold text-foreground">
             {isExportingSHP ? 'Exportando...' : 'Exportar SHP'}
           </div>
-          <p className="mt-1 text-[11px] text-zinc-400 leading-tight">
+          <p className="mt-1 text-[11.5px] text-label-4 leading-snug">
             Shapefile georreferenciado con sistema EPSG:{selectedCoordinateSystem}
           </p>
         </div>
@@ -167,20 +167,20 @@ export default function ExportComponent({ geoJsonData, selectedCoordinateSystem,
         type="button"
         onClick={exportKML}
         disabled={isExportingSHP || isExportingKML}
-        className="group relative flex flex-col items-start gap-2.5 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4 text-left transition-all hover:border-zinc-700 hover:bg-zinc-850 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
+        className="group relative flex flex-col items-start gap-3 rounded-2xl border border-border bg-card p-4 text-left transition-all hover:border-primary/30 hover:shadow-[0_6px_20px_-8px_rgba(0,0,0,0.18)] disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-700/60 bg-zinc-800 text-amber-400 transition-transform group-hover:scale-105 shadow-sm">
+        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#3478f6] text-white">
           {isExportingKML ? (
-            <Loader2 className="h-5 w-5 animate-spin text-amber-400" />
+            <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
             <Globe className="h-5 w-5" />
           )}
         </div>
         <div>
-          <div className="text-sm font-semibold text-zinc-100 group-hover:text-white transition-colors">
+          <div className="text-[14px] font-semibold text-foreground">
             {isExportingKML ? 'Exportando...' : 'Exportar KML'}
           </div>
-          <p className="mt-1 text-[11px] text-zinc-400 leading-tight">
+          <p className="mt-1 text-[11.5px] text-label-4 leading-snug">
             Archivo Google Earth KML en coordenadas geográficas WGS84
           </p>
         </div>

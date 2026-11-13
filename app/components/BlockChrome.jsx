@@ -54,10 +54,10 @@ export function BlockKey({
   children,
 }) {
   const tono = active
-    ? "bm3d-key bm3d-key-on text-sky-200"
+    ? "bm3d-key bm3d-key-on text-primary"
     : danger
-    ? "bm3d-key text-zinc-400 hover:text-rose-300"
-    : "bm3d-key text-zinc-400 hover:text-zinc-50"
+    ? "bm3d-key text-label-3 hover:text-danger"
+    : "bm3d-key text-label-3 hover:text-foreground"
 
   return (
     <button
@@ -73,7 +73,7 @@ export function BlockKey({
       {active && (
         <span
           aria-hidden="true"
-          className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-sky-300 shadow-[0_0_6px_rgba(56,189,248,0.95)]"
+          className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary"
         />
       )}
     </button>
@@ -91,83 +91,78 @@ export function BlockKey({
  */
 export const BLOCK_CHROME_CSS = `
 .bm3d-panel {
-  background: linear-gradient(180deg, #1d1d22 0%, #141418 42%, #0a0a0c 100%);
-  border: 1px solid #2c2c33;
+  background: rgba(255,255,255,0.82);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.7);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.10),
-    inset 0 -1px 0 rgba(0,0,0,0.75),
-    0 12px 34px rgba(0,0,0,0.70);
+    0 0 0 0.5px rgba(29,29,31,0.10),
+    0 10px 30px -8px rgba(29,29,31,0.18);
 }
 
 .bm3d-groove {
   width: 1px;
-  background: #000000;
-  box-shadow: 1px 0 0 rgba(255,255,255,0.07);
+  background: rgba(60,60,67,0.12);
 }
 
 .bm3d-groove-h {
   height: 1px;
-  background: #000000;
-  box-shadow: 0 1px 0 rgba(255,255,255,0.07);
+  background: rgba(60,60,67,0.12);
 }
 
 .bm3d-key {
-  background: linear-gradient(180deg, #2a2a31 0%, #17171b 100%);
-  border: 1px solid #35353d;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 1px 3px rgba(0,0,0,0.7);
+  background: rgba(120,120,128,0.08);
+  border: 1px solid transparent;
 }
-.bm3d-key:hover { background: linear-gradient(180deg, #32323a 0%, #1c1c21 100%); }
-.bm3d-key:active {
-  background: linear-gradient(180deg, #131317 0%, #212127 100%);
-  box-shadow: inset 0 2px 5px rgba(0,0,0,0.85);
-}
+.bm3d-key:hover { background: rgba(120,120,128,0.16); }
+.bm3d-key:active { background: rgba(120,120,128,0.22); }
 .bm3d-key-on {
-  background: linear-gradient(180deg, #0f3c53 0%, #07212e 100%);
-  border-color: #0e7490;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 0 14px rgba(56,189,248,0.28);
+  background: rgba(0,113,227,0.10);
+  border-color: rgba(0,113,227,0.22);
+  color: #0060c0;
 }
 
-.bm3d-readout { text-shadow: 0 0 12px currentColor; }
+.bm3d-readout { font-variant-numeric: tabular-nums; }
 
-/* Bisel circular: el mismo aro mecanizado de la brújula, para el dial del sol */
+/* Aro del dial del sol: un círculo blanco con borde fino, como la brújula */
 .bm3d-bezel {
-  background: linear-gradient(180deg, #2e2e36 0%, #0a0a0c 100%);
-  border: 1px solid #35353d;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 3px 8px rgba(0,0,0,0.85);
+  background: #ffffff;
+  border: 1px solid rgba(60,60,67,0.14);
+  box-shadow: 0 1px 4px rgba(29,29,31,0.10);
 }
 
-/* Deslizador graduado: carril hundido y tirador con luz propia */
+/* Deslizador: carril gris y tirador blanco con sombra, como los de iOS. El
+   tirador lleva un anillo del color de su magnitud (currentColor) para que se
+   siga sabiendo cuál es cuál sin el brillo de neón de antes. */
 .bm3d-range { -webkit-appearance: none; appearance: none; background: transparent; height: 20px; width: 100%; }
 .bm3d-range:focus { outline: none; }
 .bm3d-range::-webkit-slider-runnable-track {
-  height: 5px; border-radius: 9999px;
-  background: linear-gradient(180deg, #000000 0%, #1b1b20 100%);
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.95), 0 1px 0 rgba(255,255,255,0.07);
+  height: 4px; border-radius: 9999px;
+  background: rgba(120,120,128,0.2);
 }
 .bm3d-range::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: 17px; height: 17px; margin-top: -6px; border-radius: 9999px;
-  background: radial-gradient(circle at 50% 28%, #ffffff 0%, currentColor 58%, rgba(0,0,0,0.6) 100%);
-  border: 1px solid rgba(0,0,0,0.65);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.85), 0 0 10px currentColor;
+  width: 18px; height: 18px; margin-top: -7px; border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid currentColor;
+  box-shadow: 0 1px 4px rgba(29,29,31,0.25);
 }
 .bm3d-range::-moz-range-track {
-  height: 5px; border-radius: 9999px;
-  background: linear-gradient(180deg, #000000 0%, #1b1b20 100%);
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.95);
+  height: 4px; border-radius: 9999px;
+  background: rgba(120,120,128,0.2);
 }
 .bm3d-range::-moz-range-thumb {
-  width: 17px; height: 17px; border-radius: 9999px;
-  background: radial-gradient(circle at 50% 28%, #ffffff 0%, currentColor 58%, rgba(0,0,0,0.6) 100%);
-  border: 1px solid rgba(0,0,0,0.65);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.85), 0 0 10px currentColor;
+  width: 16px; height: 16px; border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid currentColor;
+  box-shadow: 0 1px 4px rgba(29,29,31,0.25);
 }
 
 /* Barra de carga del modelo de elevación: dice "estoy trabajando" sin escribirlo */
-.bm3d-load { position: relative; overflow: hidden; background: rgba(255,255,255,0.07); }
+.bm3d-load { position: relative; overflow: hidden; background: rgba(120,120,128,0.14); }
 .bm3d-load::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 38%;
-  background: linear-gradient(90deg, transparent, #38bdf8, transparent);
+  background: linear-gradient(90deg, transparent, #0071e3, transparent);
   animation: bm3dLoad 1.15s linear infinite;
 }
 @keyframes bm3dLoad {
