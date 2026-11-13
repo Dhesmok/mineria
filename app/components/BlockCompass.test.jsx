@@ -43,8 +43,8 @@ describe("BlockCompass", () => {
     expect(onToggleCenital).toHaveBeenCalledTimes(1)
   })
 
-  it("muestra 3D en el botón cuando isCenital es true", () => {
+  it("marca el botón de vista cenital como encendido cuando isCenital es true", () => {
     render(<BlockCompass isCenital={true} />)
-    expect(screen.getByText("3D")).toBeInTheDocument()
+    expect(screen.getByLabelText("Alternar vista cenital")).toHaveAttribute("aria-pressed", "true")
   })
 })

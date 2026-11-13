@@ -60,6 +60,10 @@ export default function SunDial({
   azimuthLabel,
   altitudeLabel,
   title,
+  // El diámetro en píxeles. La consola del bloque lo usa más chico que el de
+  // siempre: a 66 px era el mando más grande de la pantalla después de la brújula
+  // y se llevaba la atención que le toca al relieve.
+  size = DIAM,
 }) {
   const discoRef = useRef(null)
   const arrastrandoRef = useRef(false)
@@ -173,7 +177,7 @@ export default function SunDial({
           aplicar(ev)
         }}
         title={title}
-        style={{ width: DIAM, height: DIAM, padding: 3 }}
+        style={{ width: size, height: size, padding: 2 }}
         className="bm3d-bezel rounded-full cursor-pointer touch-none active:scale-95 transition-transform duration-100"
       >
         <svg viewBox="0 0 100 100" className="w-full h-full">

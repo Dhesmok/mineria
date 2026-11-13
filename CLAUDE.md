@@ -267,6 +267,12 @@ competía con la imagen de satélite y con la simbología de la geología.
   debajo. Nunca dentro de otro: una cabecera dentro de un panel va transparente.
 - **`eyebrow`** es el rótulo de sección en versalitas y **`panel-title`** el
   título en serif. Había siete variantes del primero.
+- **El bloque 3D habla el mismo idioma**, no uno propio de «instrumento»: ficha
+  arriba a la izquierda (rótulo, medidas en serif y la escala de cotas tumbada
+  debajo), mandos de ventana en una cápsula, consola de vidrio abajo y botones de
+  icono sin caja. La brújula es la única pieza con volumen, a propósito. La
+  consola mide el ancho **del visor** y no el de la ventana para decidir si se
+  parte en dos filas: el bloque vive en lo que el divisor le deje.
 - **La monoespaciada solo para códigos y coordenadas.** Un contador o la escala
   de un deslizador van en la tipografía normal con `tabular-nums`, que alinea las
   cifras igual sin parecer una consola.
@@ -725,6 +731,14 @@ competía con la imagen de satélite y con la simbología de la geología.
     comparaba con `null`. Llevaba ahí desde que se escribió la barra: en el tema
     oscuro el punto era verde y parecía un aviso de algo. Para «no hay valor»,
     `!= null` (con un solo `=`) cubre los dos casos.
+
+40. **Los topes de un divisor van en píxeles, no en porcentaje.** El de la
+    pantalla partida (mapa | bloque 3D) dejaba bajar el mapa al 15 %, y en un
+    portátil eso son doscientos píxeles con los controles del mapa —que van
+    pegados a su borde derecho— amontonados encima del bloque. Maximizar lo
+    dejaba en el 2 %, una tira inservible. Ahora el mapa no baja de 440 px ni el
+    bloque de 420, y maximizar quita el mapa del todo (ver
+    `handleSplitPointerMove` en `MapComponentGL`).
 
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
   actual documenta el bug que motivó cada decisión — mantenlo, es lo que hace
