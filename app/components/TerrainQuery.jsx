@@ -16,10 +16,14 @@ import { ACCURACY_WARNING } from "../utils/terrainAnalysis"
  *
  * El primero es la resolución: con un modelo global de 30 m estos números sirven
  * para leer el terreno y descartar zonas, y no para un diseño de banco ni para
- * un cálculo de estabilidad. El segundo es el dátum de la altura: los modelos
- * globales dan alturas elipsoidales, y una cota ortométrica —la que aparece en
- * un plano— se saca aplicando geoide. En Colombia la diferencia ronda los 25 m,
- * que es mucho más de lo que nadie perdonaría en una cota.
+ * un cálculo de estabilidad. El segundo es el dátum de la altura, y aquí este
+ * comentario decía lo contrario de la verdad: que las alturas eran elipsoidales
+ * y había que aplicarles geoide. En Colombia las teselas son SRTM, que ya viene
+ * referido al geoide EGM96 —lo dice su cabecera `x-amz-meta-x-imagery-sources`
+ * y la documentación de SRTM—. Aplicarle un geoide encima descuadra la cota
+ * los ~25 m que se pretendía corregir. Lo que sí queda es que EGM96 no es la
+ * red de nivelación del IGAC: frente a una cota de plano puede haber unos
+ * metros, además del error propio de SRTM. Ver `utils/demClip.js`.
  */
 
 const Fila = ({ label, value, hint }) => (
@@ -62,7 +66,7 @@ export const TerrainQuery = ({ result, onClose }) => (
           <Fila
             label="Cota"
             value={`${Math.round(result.elevation)} m`}
-            hint="elipsoidal, sin geoide"
+            hint="sobre el geoide EGM96 · SRTM ±16 m"
           />
           <Fila
             label="Pendiente"

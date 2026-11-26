@@ -215,7 +215,13 @@ export const fetchLayerFeatures = async (layerUrl, bounds, options, where = null
     }
   }
 
-  const data = await fetchArcgisJson(buildFeatureQueryUrl(layerUrl, bounds, where), options)
+  // `skipCache` se salta también la caché de la red (ver `toAnmFetchUrl`), y se
+  // quita de las opciones: `fetch` no lo entiende.
+  const { skipCache: _omitida, ...fetchOptions } = options ?? {}
+  const data = await fetchArcgisJson(buildFeatureQueryUrl(layerUrl, bounds, where), {
+    ...fetchOptions,
+    fresh: skipCache,
+  })
   const featureCollection = arcgisResponseToGeoJSON(data)
 
   const result = {

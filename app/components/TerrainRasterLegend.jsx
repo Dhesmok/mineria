@@ -211,7 +211,7 @@ export const TerrainRasterLegend = ({ mode, unavailable, progress, cellSize }) =
           </p>
 
           <p className="mt-2 border-t border-border pt-1.5 text-[10px] leading-tight text-label-4">
-            Terrain Tiles (AWS Open Data). Alturas elipsoidales.
+            Terrain Tiles (AWS Open Data), SRTM. Alturas sobre el geoide EGM96.
           </p>
         </div>
       ) : null}

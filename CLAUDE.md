@@ -94,7 +94,9 @@ app/
     exportUtils.js        KML, empaquetado
     mapStyles.js          Estilo declarativo: fuentes y capas del mapa
     anmLayers.js          Consulta de capas ANM por bbox
-    bboxDownload.js       Armado del ZIP y su README
+    bboxDownload.js       Armado del ZIP y su README: GeoJSON, KML, SHP y el DEM
+    demClip.js            Recortar el modelo de elevación al área y escribirlo en GeoTIFF
+    shareLink.js          El enlace «Compartir vista»: posición, 3D y capas en la dirección
     measure.js            Áreas y distancias en CTM-12 (las definiciones, de crs.js)
     layerFields.js        Qué campos declara una capa ANM, preguntados en runtime
     demTiles.js           Qué teselas del modelo de elevación hacen falta y dónde va cada una
@@ -116,6 +118,7 @@ app/
   components/PlanchaPanel.jsx  La plancha colocada: opacidad, encuadre y con qué error se ajustó
   components/AttributeTable.jsx  La tabla de atributos, paginada
   components/UserLayerImport.jsx Cargar archivos propios y la ficha de cada uno cargado
+  api/anm/route.js        Intermediario de la ANM, con lista cerrada de servicios
   api/sgc/route.js        Intermediario del SGC: imagen, árbol de capas, campos, identify y leyenda
   api/anh/route.js        Lo mismo para la ANH
   api/plancha/route.js    Intermediario para el PDF de una plancha, con lista de dominios permitidos
@@ -136,9 +139,12 @@ https://srvags.sgc.gov.co/arcgis|arcprod/rest/services/...  → geología (ver u
 recordcenter.sgc.gov.co, www2.sgc.gov.co  → los PDF de las planchas (vía /api/plancha)
 ```
 
-**La ANM sí permite CORS desde el navegador.** No asumas lo mismo de otras
-entidades (IGAC, SGC, IDEAM, ANLA): hay que probar cada una, y si bloquean,
-montar un proxy en una API route de Next.
+**La ANM permitía CORS desde el navegador, y dejó de hacerlo.** Desde octubre de
+2026 `annamineria.anm.gov.co` solo responde la cabecera a su propio origen, y por
+eso todo lo de la ANM pasa por `app/api/anm/route.js` (lo hace `toAnmFetchUrl`
+en `utils/arcgis.js`). Es la prueba de que un permiso de CORS no es un contrato:
+de ninguna entidad (IGAC, SGC, IDEAM, ANLA) se puede dar por hecho, y aunque hoy
+funcione, mañana puede no hacerlo.
 
 **Del SGC no se pudo comprobar**, porque el proxy de la máquina de desarrollo
 bloquea `sgc.gov.co`. Por eso sus capas pasan por `app/api/sgc/route.js`, que
@@ -564,7 +570,10 @@ competía con la imagen de satélite y con la simbología de la geología.
       descarta entradas con más de 5 minutos de antigüedad.
     - **La descarga oficial por área (`utils/bboxDownload.js`) salta la caché:**
       Usa `skipCache: true` para que el ZIP entregado se construya siempre con
-      datos directos del servidor estatal en ese instante.
+      datos directos del servidor estatal en ese instante. **Y eso incluye la
+      CDN de Vercel**: `/api/anm` deja guardar las consultas un par de minutos,
+      así que saltarse solo la caché del navegador no bastaba. `skipCache` viaja
+      como `fresco=1` y esa respuesta sale con `no-store`.
     - **Acierta en vistas repetidas exactas:** La clave de 4 decimales (~11 m)
       está pensada para el vaivén de zoom, el reencuadre (`fitBounds`) tras una
       búsqueda o las consultas simultáneas, no para el arrastre continuo a mano.
@@ -740,6 +749,45 @@ competía con la imagen de satélite y con la simbología de la geología.
     bloque de 420, y maximizar quita el mapa del todo (ver
     `handleSplitPointerMove` en `MapComponentGL`).
 
+41. **Un intermediario de Next tiene una caché que no se ve, y un reloj.**
+    Las cuatro rutas de `app/api/` hacían `fetch` al servicio del Estado sin
+    decir nada de caché. En Next 14 eso puede dejar la respuesta en su caché de
+    datos, que **no caduca hasta el próximo despliegue**: un título que dejó de
+    estar vigente se seguiría viendo vigente. Todas llevan `cache: "no-store"`;
+    la única caché que se quiere es la que dicen las cabeceras, con su caducidad.
+
+    Y el reloj: `/api/anm`, `/api/sgc` y `/api/anh` esperaban 20–25 segundos al
+    servicio sin declarar `maxDuration`, así que la plataforma las cortaba antes.
+    Es exactamente la trampa de las planchas, repetida en tres rutas más. Si
+    creas un intermediario, `maxDuration` va en la misma línea que el `TIMEOUT_MS`.
+
+42. **Un servicio caído no puede parecer un mapa vacío.** Con la ANM sin
+    responder, las capas de minería salían en blanco y el banner decía «Error al
+    actualizar las capas del mapa: Failed to fetch». Lo que un minero lee en un
+    mapa sin títulos es «zona libre». `fetchArcgisJson` distingue ahora la
+    caída (`ServiceUnavailableError`: sin red, 502, 503, 504) de un error del
+    servicio, y `describeLayerFailure` lo dice con todas las letras.
+
+    Y la descarga por área **omitía en silencio** una capa encendida que no se
+    podía resolver: con la ANM caída salía un ZIP con solo el relieve y un README
+    que aseguraba «ninguna capa vectorial estaba encendida». Ahora se detiene y
+    dice por qué. Un archivo que miente sobre su contenido es peor que ninguno.
+
+43. **`map.remove()` borra la vista de la dirección.** La opción `hash` de
+    MapLibre limpia su parámetro al destruir el mapa, y React en desarrollo monta
+    y desmonta una vez de prueba: el enlace compartido llegaba al mapa bueno sin
+    vista y abría en el centro del país. En producción no se veía. La limpieza
+    del mapa guarda la dirección y la repone. Lo mismo con las capas del enlace,
+    que se leían en un efecto que corre dos veces: la segunda ya no las
+    encontraba porque la primera las había borrado. Se leen una vez, en un `ref`.
+
+44. **Un panel que nace fijo no se entera de que su vecino creció.** El panel
+    de dibujo se coloca al costado de la columna de botones y ahí se queda. Al
+    cerrar un polígono aparecía el botón «Descargar área» en esa columna, la
+    ensanchaba, y quedaba **debajo del panel**: tapado justo cuando se quiere
+    pulsar. Trampa nº 10 otra vez, vista en una captura. El botón vive ahora
+    suelto arriba a la derecha.
+
 - **Comentarios en español**, y que expliquen *por qué*, no *qué*. El estilo
   actual documenta el bug que motivó cada decisión — mantenlo, es lo que hace
   el código legible para alguien sin background en programación.
@@ -755,8 +803,16 @@ competía con la imagen de satélite y con la simbología de la geología.
 - **CTM-12** (EPSG:9377) para cálculos de área y distancia.
 - Los servicios ANM entregan en Web Mercator (EPSG:3857) o geográficas;
   verifica siempre antes de calcular áreas.
-- Alturas de DEMs globales son **elipsoidales**. Para cotas ortométricas hay que
-  aplicar geoide (EGM2008 o GEOCOL). Anótalo en el README de las descargas.
+- Las alturas del visor **no son elipsoidales**, aunque este archivo lo dijo
+  durante meses. En Colombia las teselas son SRTM (lo dice su cabecera
+  `x-amz-meta-x-imagery-sources`), y SRTM está referido al **geoide EGM96**:
+  son cotas sobre el nivel medio del mar según ese modelo. Aplicarles un geoide
+  encima —que es lo que recomendaban el README de la descarga y la consulta de
+  cota— las descuadra entre 0 y 30 m. Lo que sí hay que decir es que EGM96 no
+  es la red de nivelación del IGAC (GEOCOL) y que SRTM tiene ±16 m de error
+  absoluto. El GeoTIFF lo declara en sus claves (`VerticalCSTypeGeoKey` 5773).
+  Copernicus GLO-30, si algún día se usa, está referido a EGM2008: tampoco es
+  elipsoidal.
 
 ## Comandos
 

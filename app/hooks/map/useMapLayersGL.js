@@ -18,7 +18,12 @@ import { bboxOfGeometry } from "../../utils/bboxDownload"
 import { labelElementFor } from "../../utils/mapLabelsGL"
 import { selectVisibleLabels } from "../../utils/labelPlacement"
 import { createPopupContent, getFeatureLabel, getLabelCoordinates } from "../../utils/mapUtils"
-import { findTenureLayerNumbers, tenureLayerUrl } from "../../utils/tenureLayers"
+import { ServiceUnavailableError, describeLayerFailure } from "../../utils/arcgis"
+import {
+  findTenureLayerNumbers,
+  tenureLayerUrl,
+  tenureServiceUnreachable,
+} from "../../utils/tenureLayers"
 import { onMapTap } from "../../utils/tapGesture"
 import { debounce } from "@/lib/utils"
 
@@ -355,6 +360,11 @@ export const useMapLayersGL = (
           if (!layerUrl) {
             const layerNumber = layerNumbers[tenureName]
             if (layerNumber === undefined) {
+              // Sin índice puede ser que la capa cambió de nombre… o que la
+              // ANM no contestó a nada. Lo segundo se dice como caída.
+              if (tenureServiceUnreachable()) {
+                throw new ServiceUnavailableError("La ANM no respondió al descubrir sus capas")
+              }
               throw new Error(`No se encontró la capa "${tenureName}" en el servicio de la ANM`)
             }
             layerUrl = tenureLayerUrl(layerNumber)
@@ -421,7 +431,7 @@ export const useMapLayersGL = (
       if (error?.name === "AbortError" || controller.signal.aborted || isStale()) return
       console.error("Error al actualizar las capas:", error)
       setShowErrorBanner(true)
-      setError(`Error al actualizar las capas del mapa: ${error.message}`)
+      setError(describeLayerFailure(error, "la ANM"))
     }
   }, [clearLayerData, filtroDeCapa, labelCandidatesFor, mapRef, redrawLabels, setError, setShowErrorBanner])
 

@@ -63,7 +63,7 @@ export const MAX_TILES = 64
 
 /** Radio de la esfera con que se define Web Mercator. */
 const EARTH_RADIUS_M = 6378137
-const EARTH_CIRCUMFERENCE_M = 2 * Math.PI * EARTH_RADIUS_M
+export const EARTH_CIRCUMFERENCE_M = 2 * Math.PI * EARTH_RADIUS_M
 
 /** Hasta dónde llega Web Mercator. Más allá el mapa no existe. */
 export const MERCATOR_MAX_LAT = 85.0511287798066

@@ -19,6 +19,15 @@
  * el visor para evitar que el endpoint funcione como un proxy abierto.
  */
 
+/**
+ * Cuánto puede durar esta función antes de que Vercel la corte. Sin declararlo,
+ * la plataforma la mata a los pocos segundos —diez en el plan gratuito—, mucho
+ * antes de que salte nuestro propio tope de espera, y el visor recibe un fallo
+ * sin explicación: es exactamente lo que le pasó a `/api/plancha` (ver
+ * CLAUDE.md). Tiene que ser mayor que TIMEOUT_MS.
+ */
+export const maxDuration = 30
+
 const TIMEOUT_MS = 25_000
 
 const PREFIJOS_PERMITIDOS = [
@@ -71,6 +80,12 @@ export const GET = async (request) => {
 
   try {
     const respuesta = await fetch(destino, {
+      // `no-store`: que Next no guarde la respuesta en su caché de datos. La
+      // única caché que se quiere es la que dicen las cabeceras de abajo, con su
+      // caducidad; la de Next, por omisión, no caduca hasta el próximo despliegue,
+      // y un título mostrado como vigente con datos de hace semanas es justo lo
+      // que este visor no puede hacer.
+      cache: "no-store",
       signal: control.signal,
       headers: {
         Accept: "application/json, */*",
@@ -92,7 +107,12 @@ export const GET = async (request) => {
 
     // Metadatos de capas se pueden cachear un rato; consultas de figuras (query) más breves
     const esConsulta = new URL(destino).pathname.endsWith("/query")
-    const cacheHeader = esConsulta
+    // La descarga oficial pide `fresco=1`: esa respuesta no se guarda en ningún
+    // sitio, para que el ZIP lleve lo que la ANM dice ahora (trampa nº 28).
+    const fresco = params.get("fresco") === "1"
+    const cacheHeader = fresco
+      ? "no-store"
+      : esConsulta
       ? "public, max-age=60, s-maxage=120, stale-while-revalidate=300"
       : "public, max-age=600, s-maxage=3600, stale-while-revalidate=3600"
 
