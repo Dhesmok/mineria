@@ -70,4 +70,38 @@ describe("/api/anm route", () => {
     const json = await res.json()
     expect(json).toEqual({ type: "FeatureCollection", features: [] })
   })
+
+  describe("caché", () => {
+    const target =
+      "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query?where=1%3D1&f=json"
+    const responde = () =>
+      jest.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        body: "{}",
+      }))
+
+    it("le pide a Next que no guarde la respuesta en su caché de datos", async () => {
+      // La de Next no caduca hasta el próximo despliegue: un título se vería
+      // vigente con datos de hace semanas.
+      global.fetch = responde()
+      await GET(new Request("http://localhost/api/anm?url=" + encodeURIComponent(target)))
+      expect(global.fetch).toHaveBeenCalledWith(target, expect.objectContaining({ cache: "no-store" }))
+    })
+
+    it("una consulta normal se deja guardar un rato en la CDN", async () => {
+      global.fetch = responde()
+      const res = await GET(new Request("http://localhost/api/anm?url=" + encodeURIComponent(target)))
+      expect(res.headers.get("cache-control")).toMatch(/s-maxage=/)
+    })
+
+    it("la descarga oficial (fresco=1) no se guarda en ningún sitio", async () => {
+      global.fetch = responde()
+      const res = await GET(
+        new Request("http://localhost/api/anm?url=" + encodeURIComponent(target) + "&fresco=1"),
+      )
+      expect(res.headers.get("cache-control")).toBe("no-store")
+    })
+  })
 })

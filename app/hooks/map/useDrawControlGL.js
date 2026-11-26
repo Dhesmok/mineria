@@ -4,7 +4,7 @@ import MapboxDraw from "@mapbox/mapbox-gl-draw"
 
 import { createDrawStyles, DEFAULT_DRAWING_COLOR } from "../../utils/drawStyles"
 import { areaInHectares, areaInSquareMeters, lengthInMeters } from "../../utils/measure"
-import { formatArea, formatDistance, getLabelCoordinates } from "../../utils/mapUtils"
+import { formatArea, formatDistance, formatNumber, getLabelCoordinates } from "../../utils/mapUtils"
 import { formatCoordinate, fromGeographic, SOURCE_CRS } from "../../utils/crs"
 
 /**
@@ -78,7 +78,9 @@ const measurementOf = (feature, crsId) => {
     // Metros/hectáreas/km² según el tamaño, y siempre las hectáreas al lado: es
     // la unidad en que se habla de títulos mineros, aunque para un cuadro
     // pequeño resulte un número incómodo.
-    const text = `${formatArea(metros)}  (${areaInHectares(geometry).toFixed(4)} ha)`
+    // Cuatro decimales en las hectáreas porque es como las da la ANM en sus
+    // certificados de área; así la cifra se puede cotejar dígito a dígito.
+    const text = `${formatArea(metros)}  (${formatNumber(areaInHectares(geometry), 4)} ha)`
     const point = getLabelCoordinates(feature)
     return point ? { text, point } : null
   }

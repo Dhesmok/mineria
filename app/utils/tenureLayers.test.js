@@ -1,4 +1,9 @@
-import { findTenureLayerNumbers, resetTenureLayerCache, tenureLayerUrl } from "./tenureLayers"
+import {
+  findTenureLayerNumbers,
+  resetTenureLayerCache,
+  tenureLayerUrl,
+  tenureServiceUnreachable,
+} from "./tenureLayers"
 
 const layerMetadata = { 3: "Título Vigente", 4: "Solicitud Vigente" }
 
@@ -54,6 +59,9 @@ describe("findTenureLayerNumbers", () => {
     })
 
     await expect(findTenureLayerNumbers()).resolves.toEqual({})
+    // …y se sabe por qué: no contestó nada, que es una caída y no un cambio de
+    // nombre de la capa.
+    expect(tenureServiceUnreachable()).toBe(true)
 
     global.fetch = respondWithMetadata()
     await expect(findTenureLayerNumbers()).resolves.toEqual({

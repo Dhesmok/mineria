@@ -1,21 +1,41 @@
 import * as turf from "@turf/turf"
 import polylabel from "polylabel"
 
+/**
+ * Números a la colombiana: coma decimal y punto de miles.
+ *
+ * Las medidas salían con `toFixed`, o sea con punto decimal y sin separar los
+ * miles —«2689.6496 ha»—, justo al lado de la lectura del cursor, el perfil y
+ * el bloque 3D, que ya escribían «0,70730» y «1.487 m». En un mismo mapa, «2.689»
+ * podía ser dos mil o dos coma siete según de qué recuadro se leyera. Con
+ * hectáreas y cotas, esa ambigüedad no es de estilo.
+ */
+const formatoCon = (decimales) =>
+  new Intl.NumberFormat("es-CO", {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  })
+const DOS_DECIMALES = formatoCon(2)
+const CUATRO_DECIMALES = formatoCon(4)
+
+export const formatNumber = (value, decimales = 2) =>
+  (decimales === 2 ? DOS_DECIMALES : decimales === 4 ? CUATRO_DECIMALES : formatoCon(decimales)).format(value)
+
 export const formatDistance = (meters) => {
   if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(2)} km`
+    return `${formatNumber(meters / 1000)} km`
   }
-  return `${meters.toFixed(2)} m`
+  return `${formatNumber(meters)} m`
 }
 
 export const formatArea = (squareMeters) => {
   if (squareMeters >= 1000000) {
-    return `${(squareMeters / 1000000).toFixed(2)} km²`
+    return `${formatNumber(squareMeters / 1000000)} km²`
   }
   if (squareMeters >= 10000) {
-    return `${(squareMeters / 10000).toFixed(2)} ha`
+    return `${formatNumber(squareMeters / 10000)} ha`
   }
-  return `${squareMeters.toFixed(2)} m²`
+  return `${formatNumber(squareMeters)} m²`
 }
 
 /**

@@ -38,6 +38,7 @@ import { MobileStorageManager } from "./components/MobileStorageManager"
 import { matchesFilters } from "./utils/layerFilters"
 import { useUserLayers } from "./hooks/useUserLayers"
 import { readPreferences, writePreferences } from "./utils/preferences"
+import { applySharedLayers, parseSharedLayers, withoutSharedLayers } from "./utils/shareLink"
 import { debounce } from "@/lib/utils"
 import {
   PANEL_HEIGHT_DEFAULT,
@@ -119,11 +120,31 @@ export default function Component() {
 
   const [blendMode, setBlendMode] = useState("multiply")
   const [prefsCargadas, setPrefsCargadas] = useState(false)
+  // Las capas de un enlace compartido, leídas una sola vez. En desarrollo React
+  // ejecuta los efectos dos veces seguidas; la primera lee el enlace y lo borra
+  // de la dirección, y la segunda ya no lo encontraba y devolvía las capas
+  // guardadas, deshaciendo lo que pedía el enlace. `undefined` = sin leer.
+  const capasCompartidasRef = useRef(undefined)
 
   useEffect(() => {
     const prefs = readPreferences()
     setSelectedCoordinateSystem(prefs.crs)
-    setLayers(prefs.layers)
+    // Un enlace compartido manda sobre qué capas van encendidas —es lo que vio
+    // quien lo mandó—, y después se borra de la dirección para que no quede
+    // desfasado al primer interruptor. Ver `utils/shareLink.js`.
+    if (capasCompartidasRef.current === undefined) {
+      capasCompartidasRef.current = parseSharedLayers(window.location.hash, Object.keys(prefs.layers))
+    }
+    const compartidas = capasCompartidasRef.current
+    setLayers(applySharedLayers(prefs.layers, compartidas))
+    if (compartidas) {
+      const limpio = withoutSharedLayers(window.location.hash)
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${window.location.search}${limpio}`,
+      )
+    }
     setLayerOrder(prefs.layerOrder)
     setBlendMode(prefs.blendMode || "multiply")
     const cabe = fitPanelToViewport(

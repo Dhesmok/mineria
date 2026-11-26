@@ -1,9 +1,12 @@
 import JSZip from "jszip"
+import { ServiceUnavailableError } from "./arcgis"
+import { resetTenureLayerCache } from "./tenureLayers"
 import {
   bboxOfFeatureCollection,
   bboxOfGeometry,
   buildAreaZip,
   buildReadme,
+  collectDem,
   collectLayerData,
   resolveActiveLayers,
   sanitizeName,
@@ -75,6 +78,14 @@ describe("sanitizeName", () => {
   })
 })
 
+const demFalso = {
+  tiff: new Uint8Array([0x49, 0x49, 42, 0]),
+  plan: { cellMeters: 19.1, window: { width: 3, height: 2 }, reducedResolution: false },
+  stats: { min: 1480, max: 2310, mean: 1820, noData: 0, valid: 6 },
+  missing: 0,
+  total: 4,
+}
+
 describe("buildReadme", () => {
   const bbox = { west: -75.6, south: 6.2, east: -75.4, north: 6.4 }
   const generatedAt = new Date("2026-08-20T09:58:00Z")
@@ -134,12 +145,36 @@ describe("buildReadme", () => {
     expect(readme).toContain("EPSG:9377")
   })
 
-  it("advierte de las alturas elipsoidales del DEM", () => {
-    // La nota tiene que estar aunque el DEM todavía no se incluya: es una
-    // advertencia sobre cómo se interpretan las cotas, no sobre el archivo.
-    const readme = buildReadme({ bbox, generatedAt, layers: [] })
-    expect(readme).toMatch(/ELIPSOIDAL/)
-    expect(readme).toMatch(/geoide/)
+  it("dice que las alturas del DEM están sobre el geoide, no sobre el elipsoide", () => {
+    // La versión anterior aseguraba lo contrario y mandaba a aplicar un geoide,
+    // que sobre SRTM —ya referido a EGM96— descuadra la cota hasta 30 m.
+    const readme = buildReadme({ bbox, generatedAt, layers: [], dem: demFalso })
+    expect(readme).toMatch(/GEOIDE EGM96, NO AL ELIPSOIDE/)
+    expect(readme).toMatch(/NO les apliques otro geoide/)
+    expect(readme).toContain("dem.tif")
+    expect(readme).toContain("SRTM")
+  })
+
+  it("explica por qué falta el DEM si no llegó, sin tumbar el resto", () => {
+    const readme = buildReadme({ bbox, generatedAt, layers: [], dem: { error: "sin red" } })
+    expect(readme).toMatch(/No incluido/)
+    expect(readme).toContain("sin red")
+  })
+
+  it("avisa si el área era grande y se bajó la resolución", () => {
+    const grande = { ...demFalso, plan: { ...demFalso.plan, reducedResolution: true } }
+    expect(buildReadme({ bbox, generatedAt, layers: [], dem: grande })).toMatch(/bajó la resolución/)
+  })
+
+  it("avisa de las teselas que faltaron", () => {
+    const incompleto = { ...demFalso, missing: 2, total: 9 }
+    expect(buildReadme({ bbox, generatedAt, layers: [], dem: incompleto })).toMatch(/2 de 9 teselas/)
+  })
+
+  it("sin capas encendidas dice que solo va el relieve", () => {
+    expect(buildReadme({ bbox, generatedAt, layers: [], dem: demFalso })).toMatch(
+      /Ninguna capa vectorial/,
+    )
   })
 
   it("pone las coordenadas del área con precisión suficiente", () => {
@@ -180,6 +215,25 @@ describe("resolveActiveLayers", () => {
   it("usa la dirección fija de las capas que no se descubren", async () => {
     const result = await resolveActiveLayers({ anmService: true })
     expect(result[0].serviceUrl).toContain("ServiciosANM/MapServer/3")
+  })
+
+  it("con la ANM caída no entrega un ZIP sin los títulos que se pidieron", async () => {
+    // Se omitía la capa en silencio: el ZIP salía con solo el relieve y el
+    // README aseguraba que no había ninguna capa encendida.
+    resetTenureLayerCache()
+    global.fetch = jest.fn(async () => {
+      throw new TypeError("Failed to fetch")
+    })
+    await expect(resolveActiveLayers({ title: true })).rejects.toBeInstanceOf(ServiceUnavailableError)
+  })
+
+  it("si la capa cambió de nombre lo dice, en vez de omitirla", async () => {
+    resetTenureLayerCache()
+    global.fetch = jest.fn(async (url) => ({
+      ok: true,
+      json: async () => ({ id: Number(url.match(/MapServer\/(\d+)\?/)[1]), name: "otra" }),
+    }))
+    await expect(resolveActiveLayers({ title: true })).rejects.toThrow(/ya no publica/)
   })
 })
 
@@ -240,6 +294,36 @@ describe("buildAreaZip", () => {
     expect(names).toContain("titulos_vigentes.kml")
   })
 
+  it("cada capa lleva su shapefile completo, con .prj, en su carpeta", async () => {
+    const buffer = await buildAreaZip({ JSZipCtor: JSZip, layers, areaGeoJSON, bbox, generatedAt })
+    const zip = await JSZip.loadAsync(buffer)
+    const shp = Object.keys(zip.files).filter((n) => n.startsWith("shp/titulos_vigentes/"))
+    ;["shp", "shx", "dbf", "prj"].forEach((ext) =>
+      expect(shp).toContain(`shp/titulos_vigentes/titulos_vigentes.${ext}`),
+    )
+    const prj = await zip.file("shp/titulos_vigentes/titulos_vigentes.prj").async("string")
+    expect(prj).toMatch(/MAGNA/)
+  })
+
+  it("mete el DEM cuando llegó, y no deja un dem.tif vacío cuando no", async () => {
+    const con = await JSZip.loadAsync(
+      await buildAreaZip({ JSZipCtor: JSZip, layers, areaGeoJSON, bbox, generatedAt, dem: demFalso }),
+    )
+    expect(con.file("dem.tif")).not.toBeNull()
+
+    const sin = await JSZip.loadAsync(
+      await buildAreaZip({
+        JSZipCtor: JSZip,
+        layers,
+        areaGeoJSON,
+        bbox,
+        generatedAt,
+        dem: { error: "x" },
+      }),
+    )
+    expect(sin.file("dem.tif")).toBeNull()
+  })
+
   it("el GeoJSON del archivo conserva los atributos de la ANM", async () => {
     const buffer = await buildAreaZip({ JSZipCtor: JSZip, layers, areaGeoJSON, bbox, generatedAt })
     const zip = await JSZip.loadAsync(buffer)
@@ -283,5 +367,43 @@ describe("buildAreaZip", () => {
 
     expect(zip.file("titulos_vigentes.geojson")).not.toBeNull()
     expect(zip.file("titulos_vigentes_2.geojson")).not.toBeNull()
+  })
+})
+
+describe("collectDem", () => {
+  const bbox = { west: -75.6, south: 6.2, east: -75.5, north: 6.3 }
+
+  it("recorta el mosaico y lo devuelve como GeoTIFF con sus estadísticas", async () => {
+    const loadMosaicFn = jest.fn(async (template, tiles, { cols, rows }) => ({
+      heights: new Float32Array(cols * rows).fill(1500),
+      missing: 0,
+    }))
+    const dem = await collectDem(bbox, { loadMosaicFn })
+
+    expect(loadMosaicFn).toHaveBeenCalledTimes(1)
+    expect(loadMosaicFn.mock.calls[0][0]).toMatch(/terrarium/)
+    expect(String.fromCharCode(dem.tiff[0], dem.tiff[1])).toBe("II")
+    expect(dem.stats.min).toBe(1500)
+    expect(dem.stats.max).toBe(1500)
+    expect(dem.missing).toBe(0)
+  })
+
+  it("si no llega ninguna tesela devuelve el motivo en vez de un archivo vacío", async () => {
+    const loadMosaicFn = async (template, tiles, { cols, rows }) => ({
+      heights: new Float32Array(cols * rows).fill(NaN),
+      missing: tiles.length,
+    })
+    const dem = await collectDem(bbox, { loadMosaicFn })
+    expect(dem.tiff).toBeUndefined()
+    expect(dem.error).toMatch(/no respondió/)
+  })
+
+  it("un fallo de red no tumba la descarga: devuelve el error", async () => {
+    const dem = await collectDem(bbox, {
+      loadMosaicFn: async () => {
+        throw new Error("boom")
+      },
+    })
+    expect(dem).toEqual({ error: "boom" })
   })
 })

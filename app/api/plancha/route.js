@@ -35,12 +35,12 @@ const error = (mensaje, estado) =>
  */
 const traer = async (url, signal) => {
   try {
-    const cifrada = await fetch(url, { signal })
+    const cifrada = await fetch(url, { signal, cache: "no-store" })
     if (cifrada.ok) return cifrada
-    return await fetch(sinCifrar(url), { signal })
+    return await fetch(sinCifrar(url), { signal, cache: "no-store" })
   } catch (fallo) {
     if (fallo?.name === "AbortError") throw fallo
-    return await fetch(sinCifrar(url), { signal })
+    return await fetch(sinCifrar(url), { signal, cache: "no-store" })
   }
 }
 

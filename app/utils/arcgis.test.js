@@ -1,4 +1,10 @@
-import { ArcgisError, fetchArcgisJson, toAnmFetchUrl } from "./arcgis"
+import {
+  ArcgisError,
+  ServiceUnavailableError,
+  describeLayerFailure,
+  fetchArcgisJson,
+  toAnmFetchUrl,
+} from "./arcgis"
 
 describe("toAnmFetchUrl", () => {
   it("envuelve las URLs de annamineria.anm.gov.co y geo.anm.gov.co por /api/anm en navegador", () => {
@@ -58,5 +64,61 @@ describe("fetchArcgisJson", () => {
     })
 
     await expect(fetchArcgisJson("https://ejemplo/query")).rejects.toBe(abort)
+  })
+})
+
+describe("toAnmFetchUrl en modo fresco", () => {
+  it("añade fresco=1 para que la CDN no sirva una copia vieja", () => {
+    const u = "https://geo.anm.gov.co/webgis/rest/services/ANM/ServiciosANM/MapServer/3/query?f=json"
+    expect(toAnmFetchUrl(u, true, true)).toBe(`/api/anm?url=${encodeURIComponent(u)}&fresco=1`)
+  })
+})
+
+describe("un servicio caído no se confunde con un mapa vacío", () => {
+  afterEach(() => jest.restoreAllMocks())
+
+  it("sin red es ServiceUnavailableError", async () => {
+    global.fetch = jest.fn(async () => {
+      throw new TypeError("Failed to fetch")
+    })
+    await expect(fetchArcgisJson("https://ejemplo/query")).rejects.toBeInstanceOf(ServiceUnavailableError)
+  })
+
+  it("un 502 o 504 del intermediario también, con su explicación", async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: false,
+      status: 504,
+      text: async () => "El servicio de la ANM tardó demasiado en responder.",
+    }))
+    const fallo = fetchArcgisJson("https://ejemplo/query")
+    await expect(fallo).rejects.toBeInstanceOf(ServiceUnavailableError)
+    await expect(fetchArcgisJson("https://ejemplo/query")).rejects.toThrow(/tardó demasiado/)
+  })
+
+  it("un 400 es un error normal, no una caída", async () => {
+    global.fetch = jest.fn(async () => ({ ok: false, status: 400, text: async () => "" }))
+    const error = await fetchArcgisJson("https://ejemplo/query").catch((e) => e)
+    expect(error).not.toBeInstanceOf(ServiceUnavailableError)
+  })
+
+  it("abortar sigue siendo abortar", async () => {
+    global.fetch = jest.fn(async () => {
+      throw Object.assign(new Error("aborted"), { name: "AbortError" })
+    })
+    const error = await fetchArcgisJson("https://ejemplo/query").catch((e) => e)
+    expect(error.name).toBe("AbortError")
+  })
+
+  it("no le pasa a fetch la opción fresh, que no entiende", async () => {
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({}) }))
+    await fetchArcgisJson("https://ejemplo/query", { fresh: true, signal: undefined })
+    expect(global.fetch.mock.calls[0][1]).not.toHaveProperty("fresh")
+  })
+
+  it("el aviso dice que un mapa vacío no es una zona libre", () => {
+    expect(describeLayerFailure(new ServiceUnavailableError("x"), "la ANM")).toMatch(
+      /ANM no responde.*NO significa que la zona esté libre/,
+    )
+    expect(describeLayerFailure(new Error("campo raro"))).toMatch(/campo raro/)
   })
 })

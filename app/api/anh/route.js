@@ -9,6 +9,15 @@ import { ANH_MAX_IMAGE_PX as MAX_PX, anhExportUrl, anhLayerByKey } from "../../u
 
 const CACHE_IMAGEN = 60 * 60 * 24 * 7
 const CACHE_METADATOS = 60 * 60 * 24
+/**
+ * Cuánto puede durar esta función antes de que Vercel la corte. Sin declararlo,
+ * la plataforma la mata a los pocos segundos —diez en el plan gratuito—, mucho
+ * antes de que salte nuestro propio tope de espera, y el visor recibe un fallo
+ * sin explicación: es exactamente lo que le pasó a `/api/plancha` (ver
+ * CLAUDE.md). Tiene que ser mayor que TIMEOUT_MS.
+ */
+export const maxDuration = 30
+
 const TIMEOUT_MS = 25000
 
 const RECUADRO = /^-?\d+(\.\d+)?(,-?\d+(\.\d+)?){3}$/
@@ -23,7 +32,7 @@ const alAnh = async (url) => {
   const control = new AbortController()
   const reloj = setTimeout(() => control.abort(), TIMEOUT_MS)
   try {
-    return await fetch(url, { signal: control.signal })
+    return await fetch(url, { signal: control.signal, cache: "no-store" })
   } finally {
     clearTimeout(reloj)
   }

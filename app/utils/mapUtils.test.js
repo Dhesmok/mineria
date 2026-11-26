@@ -296,3 +296,20 @@ describe("createPopupContent", () => {
     })
   })
 })
+
+describe("formatArea y formatDistance, a la colombiana", () => {
+  const { formatArea, formatDistance, formatNumber } = require("./mapUtils")
+
+  it("coma decimal y punto de miles, como el resto del visor", () => {
+    // Salían con punto decimal y sin miles: «2689.65 ha» al lado de «1.487 m».
+    expect(formatArea(26_896_496)).toBe("26,90 km²")
+    expect(formatArea(26_896.496)).toBe("2,69 ha")
+    expect(formatArea(512.3)).toBe("512,30 m²")
+    expect(formatDistance(1234.5)).toBe("1,23 km")
+    expect(formatDistance(12.345)).toBe("12,35 m")
+  })
+
+  it("los miles se separan también en cuatro cifras", () => {
+    expect(formatNumber(2689.6496, 4)).toBe("2.689,6496")
+  })
+})

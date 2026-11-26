@@ -13,6 +13,13 @@ export const tenureLayerUrl = (layerNumber) => `${TENURE_LAYERS_URL}/${layerNumb
 
 let cachedLayerNumbers = null
 let inFlightRequest = null
+// Si en la última vuelta no respondió ni una sola de las capas sondeadas. Es lo
+// que separa «la ANM renombró la capa» de «la ANM está caída», que devuelven lo
+// mismo —un índice sin descubrir— y piden avisos opuestos.
+let lastProbeAllFailed = false
+
+/** ¿Falló el último descubrimiento porque el servicio no respondió a nada? */
+export const tenureServiceUnreachable = () => lastProbeAllFailed
 
 /**
  * Descubre en qué índice publica la ANM cada capa. Los números cambian entre
@@ -45,6 +52,8 @@ export const findTenureLayerNumbers = async () => {
       }),
     )
 
+    lastProbeAllFailed = probes.every((probe) => probe === null)
+
     const foundLayers = {}
     probes.forEach((probe) => {
       if (probe && REQUIRED_LAYER_NAMES.includes(probe[0])) {
@@ -73,4 +82,5 @@ export const findTenureLayerNumbers = async () => {
 export const resetTenureLayerCache = () => {
   cachedLayerNumbers = null
   inFlightRequest = null
+  lastProbeAllFailed = false
 }

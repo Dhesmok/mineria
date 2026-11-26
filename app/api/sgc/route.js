@@ -17,6 +17,15 @@ const CACHE_METADATOS = 60 * 60 * 24
 /**
  * Cuánto se espera al SGC antes de rendirse.
  */
+/**
+ * Cuánto puede durar esta función antes de que Vercel la corte. Sin declararlo,
+ * la plataforma la mata a los pocos segundos —diez en el plan gratuito—, mucho
+ * antes de que salte nuestro propio tope de espera, y el visor recibe un fallo
+ * sin explicación: es exactamente lo que le pasó a `/api/plancha` (ver
+ * CLAUDE.md). Tiene que ser mayor que TIMEOUT_MS.
+ */
+export const maxDuration = 30
+
 const TIMEOUT_MS = 20_000
 
 const MAX_PIXELES = Math.min(MAX_PX * MAX_PX, 4096 * 4096)
@@ -95,7 +104,7 @@ const alSgc = async (url, signalCliente) => {
   }
 
   try {
-    return await fetch(url, { signal: control.signal })
+    return await fetch(url, { signal: control.signal, cache: "no-store" })
   } finally {
     clearTimeout(reloj)
     if (signalCliente) signalCliente.removeEventListener("abort", alDesconectar)

@@ -295,8 +295,17 @@ export const useTerrainGL = (mapRef, mapInstance) => {
    * perfil longitudinal: React puede ejecutar ese actualizador más de una vez
    * para el mismo cambio, y ahí dentro no puede haber nada que no se pueda
    * repetir. Aquí, además, ahora hay una espera de por medio.
+   *
+   * **`pose`, para abrir un enlace compartido en 3D.** Quien lo mandó estaba
+   * mirando un valle con un giro y una inclinación concretos, y eso es lo que
+   * tiene que ver quien lo abre — no la pose genérica de entrar en 3D. La pose
+   * se aplica *después* de esperar al terreno, por la misma razón que el resto:
+   * aplicada antes, MapLibre la calcula con cota cero (trampa nº 12). Llega como
+   * `{ pose }` y no como argumento suelto porque este manejador también se
+   * engancha a botones, que le pasan el evento del clic.
    */
-  const toggle3D = useCallback(async () => {
+  const toggle3D = useCallback(async (opciones) => {
+    const pose = opciones?.pose ?? null
     const map = mapRef.current
     if (!map) return
 
@@ -336,6 +345,11 @@ export const useTerrainGL = (mapRef, mapInstance) => {
     const zoom = zoomParaMirarElRelieve(map, PITCH_3D, exaggerationRef.current)
     // Mientras se consultaba el modelo pudo pulsarse otra vez el botón.
     if (!is3DRef.current) return
+
+    if (pose) {
+      map.jumpTo(pose)
+      return
+    }
 
     // Un solo movimiento, no dos: alejarse y luego inclinarse se ve como si el
     // mapa dudara.
@@ -648,8 +662,9 @@ export const useTerrainGL = (mapRef, mapInstance) => {
    * directamente. De ahí también el aviso bajo el slider: la exageración es un
    * efecto visual y no cambia ningún dato.
    *
-   * Recordatorio aparte, ya anotado en CLAUDE.md: las alturas de los DEM
-   * globales son elipsoidales. Para cotas ortométricas hay que aplicar geoide.
+   * Recordatorio aparte, anotado en CLAUDE.md: estas alturas son SRTM y ya
+   * están referidas al geoide EGM96 —no son elipsoidales, como se creyó—, así
+   * que no hay que aplicarles otro geoide. Ver `utils/demClip.js`.
    *
    * @returns {number|null} metros, o null si no hay terreno o el dato no ha
    *   llegado todavía

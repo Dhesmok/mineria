@@ -8,7 +8,8 @@ Hechos también los ajustes de uso (Fase 8), el panel por áreas (Fase 9) y los 
 lectura (Fase 10). Pendiente: recorte de DEM (Fase 5, fuente ya decidida), las
 entidades nuevas (Fase 6, faltan sus direcciones) y filtrar por departamento y
 municipio (Fase 8, falta sondear qué campos traen los servicios).
-**Última actualización:** 2026-08-28
+**Última actualización:** 2026-11-26 — DEM recortado y shapefiles en el ZIP,
+enlace «Compartir vista», aviso de servicio caído (ver «Fase 14»).
 
 ---
 
@@ -118,8 +119,17 @@ tests de `utils/` son la red de seguridad de todo este trabajo.
 - [x] Dado el polígono dibujado, consultar cada capa activa por su envolvente
       (`geometryType=esriGeometryEnvelope`). Se reusa `fetchLayerFeatures` de la
       Fase 2, así que la salida es GeoJSON aunque el cable vaya en `f=json`.
-- [~] Recortar DEM al bbox — pendiente de implementar, **pero la fuente ya está
-      decidida: Copernicus GLO-30.** Fabio puso la condición de que fuera
+- [x] Recortar DEM al bbox — **hecho en noviembre de 2026, con las teselas
+      SRTM que ya usa el visor y no con GLO-30** (ver `utils/demClip.js`). GLO-30
+      no deja leerse desde el navegador —su bucket no permite CORS, comprobado—, y
+      usarlo exigía un intermediario con tope de duración y una librería de TIFF.
+      Las teselas SRTM cumplen la misma condición que lo había decidido (gratis,
+      sin clave, sin cuota) y ya funcionaban. Sale `dem.tif`, GeoTIFF Float32 en
+      la rejilla nativa (EPSG:3857), sin remuestrear. Cambiar de fuente es cambiar
+      de dónde sale el mosaico. **Corrección importante:** el README decía que
+      las alturas eran elipsoidales; SRTM está sobre el geoide EGM96.
+      Lo que sigue es el razonamiento original, que se conserva:
+      **la fuente decidida entonces: Copernicus GLO-30.** Fabio puso la condición de que fuera
       gratuita para mucha gente, y eso descarta OpenTopography, que es gratis
       pero exige una clave por usuario y tiene cuota diaria: en cuanto el visor
       lo use más de un puñado de personas, la cuota se agota y las descargas
@@ -208,6 +218,24 @@ herramienta.
 - [x] Brújula legible: rótulos derechos, grados cada 45°, banda oscura para que
       se lean sobre el mapa claro, y la lectura del rumbo dentro de la rosa.
 - [x] Los botones del mapa comparten tipografía, color y forma con el panel.
+
+## Fase 14 — Hacia «dibuja un cuadro y sal con los archivos»
+
+- [x] El ZIP de la descarga por área lleva el **DEM recortado** (`dem.tif`) y
+      cada capa también en **shapefile** (`shp/<capa>/`, con su `.prj`). Es la
+      lista completa de la visión: GeoJSON, SHP, KML, DEM y README.
+- [x] Descargar **solo el relieve** de un área sin títulos ya no es un error.
+- [x] **Compartir vista**: un enlace con la posición, el giro, la inclinación
+      (abre en 3D si venía en 3D) y las capas encendidas. Recargar la página ya
+      no devuelve al centro del país.
+- [x] **Servicio caído ≠ zona libre**: aviso explícito cuando la ANM no responde,
+      y la descarga se niega a entregar un ZIP sin las capas pedidas.
+- [x] Intermediarios con `maxDuration` y sin la caché de datos de Next; la
+      descarga oficial se salta también la CDN (`fresco=1`).
+- [x] Medidas en formato colombiano (coma decimal, punto de miles).
+- [x] El botón «Descargar área» ya no queda tapado por el panel de dibujo.
+- [ ] Siguiente natural: la tabla de atributos para las capas del usuario, y un
+      DEM de más resolución donde el IGAC publique LiDAR.
 
 ## Fase 13 — La auditoría, aplicada
 

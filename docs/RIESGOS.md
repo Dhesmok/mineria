@@ -95,8 +95,11 @@ Lo que el visor ya hace bien:
 
 Lo que **no** hace, y sería lo siguiente:
 
-- **Decir con claridad «el servicio de la ANM no responde»** cuando se cae, en
-  vez de un mapa vacío que se parece demasiado a «aquí no hay títulos».
+- ~~**Decir con claridad «el servicio de la ANM no responde»** cuando se cae, en
+  vez de un mapa vacío que se parece demasiado a «aquí no hay títulos».~~
+  **Hecho (2026-11-26):** el banner dice que el servicio no responde y que un
+  mapa sin polígonos no significa zona libre; la descarga por área se niega a
+  salir sin las capas pedidas. Ver la trampa nº 42 del `CLAUDE.md`.
 - **Guardar la última respuesta buena** para poder seguir mirando algo mientras
   el servicio vuelve.
 - **Notar que los campos cambiaron de nombre.** Hoy, si la ANM renombra

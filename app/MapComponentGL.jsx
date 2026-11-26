@@ -21,6 +21,7 @@ import { BASE_LAYERS, createBaseStyle, INITIAL_CENTER, INITIAL_ZOOM, MAX_ZOOM } 
 import { COMPASS_SIZE_MAX, COMPASS_SIZE_MIN } from "./hooks/map/useGeolocationGL"
 import { basemapById } from "./utils/basemaps"
 import { readPreferences } from "./utils/preferences"
+import { buildShareUrl, VIEW_HASH_KEY } from "./utils/shareLink"
 import { onMapTap } from "./utils/tapGesture"
 import { crsById } from "./utils/crs"
 import { whenSized } from "./utils/whenSized"
@@ -50,6 +51,7 @@ import {
   Layers,
   Map as MapIcon,
   PencilRuler,
+  Share2,
   Square,
   X,
 } from "lucide-react"
@@ -529,6 +531,65 @@ export default function MapComponentGL({
     [layerState],
   )
 
+  // Un enlace que viene con inclinación es de alguien que estaba en 3D: se
+  // entra en 3D con su misma cámara. Sin esto el mapa abría inclinado pero
+  // plano —sin terreno—, que es una vista que el visor nunca enseña por sí mismo.
+  // Una sola vez, al aparecer el mapa: después manda el usuario.
+  const poseCompartidaAplicadaRef = useRef(false)
+  useEffect(() => {
+    const map = mapRef.current
+    if (!mapInstance || !map || poseCompartidaAplicadaRef.current) return
+    poseCompartidaAplicadaRef.current = true
+    if (map.getPitch() < 1) return
+    toggle3D({
+      pose: {
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
+      },
+    })
+  }, [mapInstance, toggle3D])
+
+  // Compartir la vista: el enlace lleva dónde se mira y qué capas hay
+  // encendidas. El aviso de «copiado» se va solo; un botón que copia sin decir
+  // nada deja la duda de si hizo algo.
+  const [shareNotice, setShareNotice] = useState(null)
+  useEffect(() => {
+    if (!shareNotice) return undefined
+    const t = setTimeout(() => setShareNotice(null), shareNotice.tone === "warning" ? 12000 : 3500)
+    return () => clearTimeout(t)
+  }, [shareNotice])
+
+  const shareView = useCallback(async () => {
+    const activas = Object.entries(layerState)
+      .filter(([, estado]) => estado?.on)
+      .map(([clave]) => clave)
+    const url = buildShareUrl(window.location.href, activas)
+
+    // En el teléfono, la hoja de compartir del sistema —WhatsApp, correo—, que
+    // es como se manda un enlace allí. En el escritorio esa hoja existe en
+    // algunos navegadores pero estorba: lo que se espera es tenerlo copiado.
+    const tactil = window.matchMedia?.("(pointer: coarse)")?.matches
+    if (tactil && navigator.share) {
+      try {
+        await navigator.share({ title: "Visor Minero", url })
+        return
+      } catch (error) {
+        if (error?.name === "AbortError") return
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setShareNotice({ tone: "info", text: "Enlace copiado: abre el visor en esta vista y con estas capas." })
+    } catch {
+      // Sin permiso de portapapeles —una página sin https, un navegador
+      // estricto— se enseña el enlace para copiarlo a mano antes que fallar
+      // en silencio.
+      setShareNotice({ tone: "warning", text: url })
+    }
+  }, [layerState])
+
   const { isDownloading, downloadArea } = useAreaDownloadGL(
     getDrawnFeatures,
     layerVisibility,
@@ -724,6 +785,12 @@ export default function MapComponentGL({
         center: INITIAL_CENTER,
         zoom: INITIAL_ZOOM,
         maxZoom: MAX_ZOOM,
+        // La vista viaja en la dirección: `#vista=zoom/lat/lng/giro/inclinación`.
+        // Si el enlace la trae, manda sobre `center` y `zoom`; si no, MapLibre la
+        // escribe al primer movimiento. Es lo que hace que «Compartir vista»
+        // funcione y que recargar no devuelva al centro del país. Con nombre,
+        // para convivir con el parámetro de capas (ver `utils/shareLink.js`).
+        hash: VIEW_HASH_KEY,
         // Por defecto MapLibre no deja pasar de 60° de inclinación. Con terreno
         // real conviene poder acercarse más al horizonte para leer un valle a
         // contraluz, que es justo lo que uno quiere mirar en 3D.
@@ -830,7 +897,20 @@ export default function MapComponentGL({
     return () => {
       dejarDeEsperar()
       montado.desengancharEstilo?.()
+      // `remove()` borra de la dirección el parámetro de la vista. Al salir de
+      // la página da igual, pero React en desarrollo monta y desmonta el mapa
+      // una vez de prueba antes de montarlo de verdad, y ese desmontaje se
+      // llevaba la vista de un enlace compartido antes de que el mapa bueno la
+      // leyera: el enlace abría en el centro del país. Se guarda y se repone.
+      const direccion = window.location.hash
       montado.mapa?.remove()
+      if (direccion && window.location.hash !== direccion) {
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${window.location.pathname}${window.location.search}${direccion}`,
+        )
+      }
       mapRef.current = null
       // Sin esto los hooks siguen viendo un mapa ya destruido y revientan en la
       // siguiente llamada. Es la misma trampa que documenta el visor Leaflet.
@@ -892,6 +972,32 @@ export default function MapComponentGL({
       {/* bottom-10 y no bottom-4: en esa esquina va la atribución de
           OpenStreetMap, que las condiciones de uso obligan a mostrar, y el
           último botón se le montaba encima. */}
+      {/* La función diferenciadora: dibujar un polígono y salir con los
+          archivos dentro de esa área. Solo aparece cuando hay un área dibujada.
+
+          **Va arriba a la derecha, suelta, y no en la columna de botones**,
+          que es donde estaba. El panel de dibujo nace al costado de esa columna
+          y se queda fijo donde nació; al cerrar el polígono aparecía este botón,
+          la columna se ensanchaba y el botón quedaba debajo del panel —tapado
+          justo en el instante en que se quiere pulsar—. Se vio en una captura,
+          no en ninguna prueba (trampa nº 10). Aquí arriba no comparte sitio con
+          nada que se mueva. */}
+      {hasArea && (
+        <div className="pointer-events-auto absolute right-2 top-3 z-20 md:right-4 md:top-4">
+          <MapButton
+            onClick={downloadArea}
+            disabled={isDownloading}
+            icon={isDownloading ? Loader2 : Download}
+            title="Descargar en un ZIP el relieve (GeoTIFF) y las capas encendidas dentro del área dibujada"
+            className={`!border-transparent !bg-primary !text-white hover:!bg-primary/90 !shadow-[0_6px_16px_-4px_rgba(0,113,227,0.5)] disabled:opacity-60 ${
+              isDownloading ? "[&_svg]:animate-spin" : ""
+            }`}
+          >
+            {isDownloading ? "Preparando…" : "Descargar área"}
+          </MapButton>
+        </div>
+      )}
+
       <div
         // En el teléfono, con la hoja de capas abierta esta columna quedaba
         // encima de ella: los botones del mapa flotando sobre las filas del
@@ -1053,23 +1159,6 @@ export default function MapComponentGL({
           }}
         />
 
-        {/* La función diferenciadora: dibujar un polígono y salir con los
-            archivos de las capas encendidas dentro de esa área. Va en la columna
-            de acciones del mapa y no en el panel de dibujo, para que se vea sin
-            abrirlo; solo aparece cuando hay un área dibujada. */}
-        {hasArea && (
-          <MapButton
-            onClick={downloadArea}
-            disabled={isDownloading}
-            icon={isDownloading ? Loader2 : Download}
-            title="Descargar en un ZIP las capas encendidas dentro del área dibujada"
-            className={`!border-transparent !bg-primary !text-white hover:!bg-primary/90 !shadow-[0_6px_16px_-4px_rgba(0,113,227,0.5)] disabled:opacity-60 ${
-              isDownloading ? "[&_svg]:animate-spin" : ""
-            }`}
-          >
-            {isDownloading ? "Preparando…" : "Descargar área"}
-          </MapButton>
-        )}
 
         {/* Los controles del mapa, en tres grupos como en Apple Maps: las
             herramientas de análisis, el mapa base con la ubicación, y la
@@ -1246,6 +1335,19 @@ export default function MapComponentGL({
             <Crosshair className={`h-[18px] w-[18px] ${isLocating ? "animate-spin" : ""}`} />
           </button>
 
+          {/* Compartir la vista: posición, giro, inclinación y capas en un
+              enlace. Va con el mapa base y la ubicación porque es del mismo
+              asunto —dónde se está mirando—. */}
+          <button
+            type="button"
+            onClick={shareView}
+            title="Copiar un enlace a esta vista, con las capas encendidas"
+            aria-label="Compartir vista"
+            className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-[10px] text-label-2 transition-colors hover:bg-fill-strong hover:text-foreground"
+          >
+            <Share2 className="h-[18px] w-[18px]" />
+          </button>
+
           </div>
 
           {/* MapHUD: Norte, Zoom +, Zoom -, 3D y Popover de opciones 3D */}
@@ -1401,6 +1503,27 @@ export default function MapComponentGL({
           <div className="pointer-events-auto">
             <MapNotice tone="warning" icon={Mountain} onClose={dismissTerrainError}>
               {terrainError}
+            </MapNotice>
+          </div>
+        )}
+
+        {shareNotice && (
+          <div className="pointer-events-auto max-w-full">
+            <MapNotice
+              tone={shareNotice.tone}
+              icon={Share2}
+              onClose={() => setShareNotice(null)}
+            >
+              {shareNotice.tone === "warning" ? (
+                <>
+                  No se pudo copiar. Este es el enlace:{" "}
+                  <span className="select-all break-all font-mono text-[11px] text-foreground">
+                    {shareNotice.text}
+                  </span>
+                </>
+              ) : (
+                shareNotice.text
+              )}
             </MapNotice>
           </div>
         )}
